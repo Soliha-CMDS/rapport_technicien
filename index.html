@@ -90,6 +90,12 @@ label.chip:has(input:checked){background:var(--accent);border-color:var(--accent
 .item .head{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;cursor:pointer}
 .item .head input{width:24px;height:24px;margin:2px 0 0;accent-color:var(--accent);flex:none}
 .item .head .t{flex:1;min-width:0;font-weight:700}
+.item .head .hl{display:flex;gap:12px;align-items:flex-start;flex:1;min-width:0;cursor:pointer}
+.rasl{display:inline-flex;align-items:center;gap:8px;flex:none;font-weight:700;color:var(--ok);border:1px solid var(--line);border-radius:8px;padding:0 12px;min-height:44px;cursor:pointer}
+.rasl input{width:22px;height:22px;accent-color:var(--ok)}
+.item.ras{border-color:var(--ok);box-shadow:inset 4px 0 0 var(--ok)}
+.item.ras .rasl{background:var(--ok-bg);border-color:var(--ok)}
+button:disabled{opacity:.45;cursor:not-allowed}
 .item .meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
 .ref{font-size:.75rem;font-weight:700;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
 .body{display:grid;gap:12px;padding:0 14px 14px 50px}
@@ -792,6 +798,9 @@ function migrate(v){
     if(!v.dfTxt){const add=old.filter(t=>!s.note.includes(t)).map(t=>t+'.');if(add.length)s.note=[...add,s.note].filter(x=>x.trim()).join('\n')}
     s.df=[...new Set(old.map(t=>dfNew(id,t)).filter(i=>i>=0))]}v.dfTxt=1;v.dfV=2}
   for(const d of [ITEMS.chauf,ITEMS.ecs])if(!v.f[d.tf]&&v.it[d.id]?.t.length)v.f[d.tf]=v.it[d.id].t.map(i=>d.ty[i]);
+  if(!isPdl(v))delete v.f.cvPresc;
+  // Ancien bouton « Marquer comme vérifiée » des rubriques à pathologies : les lignes sans défaut passent en RAS.
+  for(const r of RR(v).filter(r=>r.items&&v.done[r.id])){for(const d of r.items){const x=it(d.id,v);if(!x.on)x.ras=true}delete v.done[r.id]}
   return v;
 }
 
@@ -822,7 +831,9 @@ function rstat(r,v=cur){
   if(r.items){const on=r.items.filter(i=>v.it[i.id]?.on);
     const dg=on.some(i=>v.it[i.id].d),miss=on.filter(i=>i.p&&!v.it[i.id].ph.length).length;
     const p=[];
-    if(on.length)p.push([`${on.length} désordre${on.length>1?'s':''}`,'info']);else if(v.done[r.id])p.push(['RAS','ok']);
+    const rest=r.items.filter(i=>!v.it[i.id]?.on&&!v.it[i.id]?.ras).length;
+    if(on.length)p.push([`${on.length} désordre${on.length>1?'s':''}`,'info']);else if(!rest)p.push(['RAS','ok']);
+    if(rest&&rest<r.items.length)p.push([`${rest} ligne${rest>1?'s':''} à contrôler`,'warn']);
     if(dg)p.push(['Danger','danger']);
     if(miss)p.push([`${miss} photo${miss>1?'s':''} manquante${miss>1?'s':''}`,'warn']);
     if(!p.length)p.push(['À faire','']);
@@ -830,6 +841,8 @@ function rstat(r,v=cur){
   const n=r.fields.filter(f=>filled(v.f[f[0]])).length;
   return [[n?(v.done[r.id]?'Terminé':`${n}/${r.fields.length} renseignés`):'À faire',n?(v.done[r.id]?'ok':'info'):'']]
 }
+// Lignes de pathologie ni en défaut ni en RAS, par rubrique : elles bloquent le pré-remplissage des travaux.
+const aControler=(v=cur)=>RR(v).filter(r=>r.items).map(r=>[r,r.items.filter(d=>!v.it[d.id]?.on&&!v.it[d.id]?.ras)]).filter(x=>x[1].length);
 const sumAuto=(k,v=cur)=>Object.values(ITEMS).some(i=>i.s===k&&v.it[i.id]?.on);
 const sumVal=(k,v=cur)=>v.f['sum_'+k]||(sumAuto(k,v)?'Oui':'Non');
 const pills=p=>`<div class="pills">${p.map(([t,c])=>`<span class="pill ${c}">${esc(t)}</span>`).join('')}</div>`;
@@ -855,9 +868,10 @@ function itemHtml(d,nums){
     norm=m?`<div class="hint ${sf&&sf<m?'warn':''}">Norme CAF pour ${n} occupant${n>1?'s':''} : ${m} m² minimum. Logement : ${sf?sf+' m²':'superficie non renseignée (rubrique 1)'}${sf&&sf<m?' → sur-occupation':''}.</div>`
           :`<div class="hint">Renseignez le nombre d'occupants et la superficie en rubrique 1 pour comparer à la norme CAF (9 m² pour 1 personne, 16 m² pour 2, +9 m² par personne, 70 m² dès 8).</div>`}
   const linked=s.df.filter(i=>d.df?.[i]?.[1]);
-  return `<div class="item ${s.on?'on':''} ${s.on&&s.d?'dg':''}" id="it_${d.id}">
-   <label class="head"><input type="checkbox" data-it="${d.id}" data-k="on" ${s.on?'checked':''}>
+  return `<div class="item ${s.on?'on':''} ${s.on&&s.d?'dg':''} ${s.ras?'ras':''}" id="it_${d.id}">
+   <div class="head"><label class="hl"><input type="checkbox" data-it="${d.id}" data-k="on" ${s.on?'checked':''} aria-label="Défaut : ${esc(d.t)}">
     <div class="t">${esc(d.t)}<div class="meta">${d.ref?`<span class="ref">${esc(d.ref)}</span>`:''}${d.rsd?`<span class="ref">${esc(d.rsd)}</span>`:''}${d.p?`<span class="ref">Photo requise</span>`:''}${s.on&&s.ph.length?`<span class="ref">${s.ph.length} photo${s.ph.length>1?'s':''}</span>`:''}</div></div></label>
+    <label class="rasl"><input type="checkbox" data-it="${d.id}" data-k="ras" ${s.ras?'checked':''} aria-label="RAS : ${esc(d.t)}">RAS</label></div>
    ${d.norm&&!s.on?`<div class="body">${norm}</div>`:''}
    ${s.on?`<div class="body">
     ${d.hint?`<div class="hint">${esc(d.hint)}</div>`:''}${norm}
@@ -1029,21 +1043,24 @@ function render(){
     bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="pdf">${svg('pdf')}Générer le rapport PDF</button>`;
     return;
   }
-  const r=RV.find(x=>x.id===view),nums=phNums(r);
+  const r=RV.find(x=>x.id===view),nums=phNums(r),manq=r.gen?aControler():[],nManq=manq.reduce((n,x)=>n+x[1].length,0);
   // Contre-visite : les travaux prescrits reprennent par défaut la liste de travaux de la visite.
-  if(r.id==='r8'&&!filled(cur.f.cvPresc)&&filled(cur.f.trav)){cur.f.cvPresc=cur.f.trav;save()}
+  if(isCv(cur)&&r.id==='r8'&&!filled(cur.f.cvPresc)&&filled(cur.f.trav)){cur.f.cvPresc=cur.f.trav;save()}
   app.innerHTML=`${topbar(r.n+'. '+r.t,who(cur),'dash',logo)}
    ${r.pre?`<div class="form">${r.pre.map(field).join('')}</div>`:''}
-   ${r.items?`<p class="muted">Cochez chaque pathologie constatée. Les autres figureront non cochées dans le rapport.</p><div class="items">${r.items.map(d=>itemHtml(d,nums)).join('')}</div>`:''}
-   ${r.gen?`<div class="row" style="margin-bottom:10px"><button class="btn-primary" data-act="gentrav">${svg('sync')}${filled(cur.f.trav)?'Mettre à jour depuis les désordres':'Pré-remplir depuis les désordres'}</button></div>
+   ${r.items?`<p class="muted">Pour chaque ligne, cochez le défaut constaté ou « RAS » (rien à signaler).</p><div class="items">${r.items.map(d=>itemHtml(d,nums)).join('')}</div>`:''}
+   ${r.gen?`${manq.length?`<div class="banner">Il reste ${nManq} ligne${nManq>1?'s':''} à contrôler (défaut ou RAS) avant de pré-remplir les travaux :
+      <div class="row">${manq.map(([x,ds])=>`<button data-act="go" data-v="${x.id}">Rubrique ${x.n} : ${ds.length} ligne${ds.length>1?'s':''}</button>`).join('')}</div></div>`:''}
+     <div class="row" style="margin-bottom:10px"><button class="btn-primary" data-act="gentrav" ${manq.length?'disabled':''}>${svg('sync')}${filled(cur.f.trav)?'Mettre à jour depuis les désordres':'Pré-remplir depuis les désordres'}</button></div>
      <p class="muted">La liste est générée par thème à partir des désordres cochés et des défauts types. Modifiez-la librement : la mise à jour ajoute seulement les correctifs manquants.</p>
      <div class="hint">Phrase ajoutée automatiquement au rapport, avant la liste : « ${esc(justifTexte(cur))} »</div>`:''}
-   ${r.id==='r8'?`<div class="row"><button data-act="reptrav">Reprendre la liste de travaux de la visite</button></div>`:''}
+   ${isCv(cur)&&r.id==='r8'?`<div class="row"><button data-act="reptrav">Reprendre la liste de travaux de la visite</button></div>`:''}
    ${r.fields?`<div class="form" style="margin-top:14px">${r.fields.map(field).join('')}</div>`:''}
    ${r.phId?phBlock(r.phId,it(r.phId),nums,false):''}`;
   bar.hidden=false;
-  const ri=RV.indexOf(r),next=RV[ri+1],ras=pdl&&r.items&&!r.items.some(d=>cur.it[d.id]?.on);
-  bi.innerHTML=`<button data-act="markdone" data-r="${r.id}">${ras?(cur.done[r.id]?'✓ Pas de désordres constatés':'Pas de désordres constatés'):cur.done[r.id]?'✓ Rubrique vérifiée':'Marquer comme vérifiée'}</button>
+  const ri=RV.indexOf(r),next=RV[ri+1];
+  // Rubriques à pathologies : les cases RAS remplacent « Marquer comme vérifiée ».
+  bi.innerHTML=`${r.items?'':`<button data-act="markdone" data-r="${r.id}">${cur.done[r.id]?'✓ Rubrique vérifiée':'Marquer comme vérifiée'}</button>`}
    <button class="btn-primary" data-act="go" data-v="${next?next.id:'synth'}">${next?'Rubrique '+next.n+' →':'Synthèse →'}</button>`;
 }
 
@@ -1098,7 +1115,7 @@ document.addEventListener('change',async e=>{
   if(el.dataset.ft==='c'){const a=cur.f[el.dataset.f]=(cur.f[el.dataset.f]||[]).filter(x=>x!==el.value);if(el.checked)a.push(el.value);save();return}
   if(el.dataset.it&&el.dataset.k){
     const s=it(el.dataset.it),k=el.dataset.k;
-    if(k==='on'||k==='d'){s[k]=el.checked;save();return keep()}
+    if(k==='on'||k==='d'||k==='ras'){s[k]=el.checked;if(el.checked&&k!=='d')s[k==='on'?'ras':'on']=false;save();return keep()}
     if(k==='df'){const v=el.value;el.value='';if(v==='')return;const ta=$('#note_'+el.dataset.it);
       if(v!=='autre'){const i=+v,t=itemOf(el.dataset.it).df[i][0];if(!s.df.includes(i))s.df.push(i);
         s.note=(s.note.trim()?s.note.replace(/\s+$/,'')+'\n':'')+t+(/[.!?]$/.test(t)?'':'.');ta.value=s.note;save()}
@@ -1494,7 +1511,7 @@ async function exportPdf(v){
   for(const r of RR(v).filter(r=>r.items)){
     need(40);const nums=phNums(r,v);
     row([HD(`${r.n} · ${r.pt}`,{ic:ICP[r.ic]}),{items:r.nod&&!pdl?[]:[tx('Danger',{b:1,al:'center',sz:8,c:WHITE})],fill:ACC,va:'middle'}],[170,16]);
-    if(pdl)row([LB('Pas de désordres constatés'),[cb(!!v.done[r.id]&&!r.items.some(d=>v.it[d.id]?.on),'',{cc:OK})]],[170,16]);
+    if(pdl)row([LB('Pas de désordres constatés'),[cb(r.items.every(d=>v.it[d.id]?.ras),'',{cc:OK})]],[170,16]);
     for(const d of r.items){
       const s=v.it[d.id]||{on:false,o:[],t:[],df:[],note:'',d:false,ph:[]};
       const c1=[cb(s.on,d.t,{b:1,c:s.on?INK:MUT,cc:RED})],c3=[];
