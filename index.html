@@ -1256,10 +1256,6 @@ function degTravCtrl(v,g,txt){txt=String(txt||'');const E=GRILLES[g.k].els,h=e=>
   const manque=E.filter(e=>h(e)===3&&!txt.includes(travDeg(g.k,e.id)));
   const zero=[...new Set(E.map(e=>travDeg(g.k,e.id)))].filter(l=>txt.includes(l)&&E.filter(e=>travDeg(g.k,e.id)===l).every(e=>h(e)===0));
   return{manque,zero}}
-// Intitulés intermédiaires du rapport (modèle Word), par numéro de rubrique.
-const SOUS_DEG={mi:{1:'Fondations',2:'Structure',3:'Couverture',4:'Étanchéité des murs',5:'Isolation thermique des parois, finitions et menuiseries',6:'Ventilation (statique ou mécanique)',18:'Organisation spatiale',19:'Caractéristiques techniques',20:'Finitions'},
- bc:{1:'Fondations',2:'Structure',3:'Couverture',4:'Étanchéité des murs',5:'Isolation thermique des parois et menuiseries',6:'Finitions en parties communes'},
- lc:{1:'Organisation spatiale',2:'Caractéristiques techniques',3:'Finitions',4:'Menuiseries',5:'Ventilation (statique ou mécanique)'}};
 // Le rapport définitif exige toutes les grilles notées, recevables, avec leurs niveaux et pièces.
 const degFinal=v=>v.g.length>0&&v.g.every(g=>{const T=degTot(v,g);return !T.rest&&!T.irr&&GRILLES[g.k].els.every(e=>!e.m||degK(v,g,e))});
 (()=>{const g={id:'g0',k:'mi',n:{'6.1':{h:3},'6.2':{h:1},'7':{h:0},'5.3':{h:3},'2.1':{h:0}}},v={f:{nbNiv:1,nbPP:1},it:{}};
@@ -1276,6 +1272,18 @@ const ICO_CLE={fond:'fondations',murs:'murs',planch:'planchers',charp:'charpente
  chaufcol:'chauffage',ecscol:'ecs',incendiecol:'incendie',ascenseur:'escalier',cour:'exterieurs',wccom:'wc',loccom:'locaux',caves:'locaux',dechets:'locaux'};
 const icoDeg=(k,id)=>ICO_DEG[ICO_CLE[CLE_DEG[k][id]]];
 console.assert(Object.keys(PRE_DEG).every(c=>ICO_DEG[ICO_CLE[c]])&&Object.entries(GRILLES).every(([k,G])=>G.els.every(e=>icoDeg(k,e.id))),'ICO_CLE');
+// Lexique imprimé dans le rapport (page de synthèse).
+const LEXIQUE_DEG=(()=>{const c=x=>x.toFixed(2).replace('.',','),[a,b]=SEUILS_ID;return[
+ ['DM','Note de dégradation des éléments majeurs : moyenne des notes d’état (0 à 3) des éléments majeurs, c’est-à-dire les ouvrages et équipements principaux qui pèsent le plus sur l’état du bien, rapportée à 3. Valeur comprise entre 0 (bon état) et 1 (tout à remplacer).'],
+ ['DG','Note de dégradation générale : somme des notes de dégradation de tous les éléments, divisée par la somme de leurs valeurs maximales. Valeur comprise entre 0 et 1.'],
+ ['ID',`Indicateur de dégradation : il combine DM et DG selon la formule ID = 1 - racine carrée de [((1 - DM)² + (1 - DG)²) / 2]. Moins de ${c(a[0])} : ${a[1].toLowerCase()} ; de ${c(a[0])} à ${c(b[0])} : ${b[1].toLowerCase()} ; ${c(b[0])} et plus : ${SEUILS_ID[2][1].toLowerCase()}.`],
+ ['Note d’état','0 : bon état, aucune intervention ; 1 : intervention sans remplacement ; 2 : intervention mixte (reprise d’une partie, remplacement de l’autre) ; 3 : remplacement à neuf, ou création d’un élément absent indispensable.'],
+ ['Ampleur','Étendue des désordres sur l’élément : 25 % ponctuels, 50 % importants, 100 % généralisés.'],
+ ['Prorata','Part des éléments concernés, par exemple 4 fenêtres sur 5 = 0,80.'],
+ ['Note de dégradation','Note d’état × ampleur × prorata × nombre de niveaux ou de pièces concernés. Sa valeur maximale est 3 × le nombre de niveaux ou de pièces (3 pour les autres éléments).'],
+ ['SO','Sans objet : élément absent dont la création n’est pas nécessaire. Il n’entre pas dans le calcul.'],
+ ['NV',`Non vérifiable : élément qui n’a pas pu être vu. Il compte 0 mais garde sa valeur maximale ; la grille est irrecevable à partir de ${NV_MAX} NV.`]]})();
+console.assert(LEXIQUE_DEG.length===9&&LEXIQUE_DEG[2][1].includes('Moins de 0,35 : dégradation inexistante ou faible ; de 0,35 à 0,55 : dégradation moyenne ; 0,55 et plus : dégradation très importante.'),'LEXIQUE_DEG');
 
 
 const IC={
@@ -2271,96 +2279,149 @@ function texteRelectureDeg(v,g){
     'Corrige l’orthographe et la grammaire des commentaires et de la synthèse des travaux, améliore la clarté sans changer le sens technique, et signale les incohérences : élément dégradé sans travaux correspondant, travaux sans désordre, commentaire qui ne justifie pas la note. N’ajoute pas d’exigence réglementaire non justifiée.',
     'Rends d’abord les commentaires et la liste corrigés, dans la même structure, puis la liste de tes remarques.','',
     'NOTES ET COMMENTAIRES :',...(L.length?L:['- Aucun']),'','SYNTHÈSE DES TRAVAUX :',v.f[g.id+'_trav']||''].join('\n')}
-// Rapport PDF : page de garde, descriptif, chapitres (modèle Word), synthèse, signature, puis une grille par annexe en paysage.
+// Rapport PDF, mise en page « fiche diagnostic » : page de garde avec jauge de l'ID, synthèse des résultats et des travaux, lexique,
+// constats par chapitre (une carte par élément), signature, puis une grille par annexe en paysage.
 async function degPdf(v){
   const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',format:'a4'}),T=PDFT,f=v.f,fin=degFinal(v),imm=v.bien==='imm';
-  const INK=[33,43,54],MUT=[96,110,122],ACC=[27,109,150],TINT=[233,242,247],LINE=[196,208,217],WHITE=[255,255,255],RED=[180,35,24];
-  let W=210,H=297,y=15;const M=15,CW=()=>W-2*M,BOT=()=>H-16;
+  const INK=[20,33,43],MUT=[68,83,95],ACC=[27,109,150],TINT=[241,246,249],LINE=[214,224,231],WHITE=[255,255,255],RED=[180,35,24];
+  const NC={0:[46,139,87],1:ACC,2:[232,163,61],3:[192,57,43],SO:[150,160,170],NV:[138,83,0]};
+  const LV={ok:[[46,139,87],[227,243,233]],warn:[[138,83,0],[253,241,220]],danger:[[180,35,24],[251,233,231]]};
+  const barC=r=>r<.35?NC[0]:r<.55?NC[2]:NC[3];
+  let W=210,H=297,y=15;const ML=19,MR=15,CW=()=>W-ML-MR,BOT=()=>H-16;
   const font=(sz,st='normal',c=INK)=>{doc.setFont('helvetica',st);doc.setFontSize(sz);doc.setTextColor(...c)};
   const LH=sz=>sz*.3528*1.3,fmt=src=>src.startsWith('data:image/png')?'PNG':'JPEG';
   const page=(o='portrait')=>{doc.addPage('a4',o);[W,H]=o==='portrait'?[210,297]:[297,210];y=15};
   const need=h=>{if(y+h>BOT())page(W>H?'landscape':'portrait')};
   const lines=(s,w,sz,st='normal')=>{font(sz,st);return T(s).split('\n').flatMap(p=>p.trim()?doc.splitTextToSize(p,w):[''])};
-  const para=(s,o={})=>{const sz=o.sz||10,ind=o.ind||0;for(const l of lines(s,CW()-ind,sz,o.st)){need(LH(sz));font(sz,o.st||'normal',o.c||INK);doc.text(l,M+ind,y+LH(sz)*.75);y+=LH(sz)}};
-  const band=(s,sz=11)=>{need(16);doc.setFillColor(...ACC);doc.roundedRect(M,y,CW(),8,1.5,1.5,'F');font(sz,'bold',WHITE);doc.text(T(s),M+3,y+5.6);y+=11};
-  const titre=(s,sz=10.5,c=ACC)=>{const L=lines(s,CW(),sz,'bold');need(L.length*LH(sz)+12);font(sz,'bold',c);L.forEach(l=>{doc.text(l,M,y+LH(sz)*.75);y+=LH(sz)});y+=1};
+  const para=(s,o={})=>{const sz=o.sz||10,ind=o.ind||0;for(const l of lines(s,CW()-ind,sz,o.st)){need(LH(sz));font(sz,o.st||'normal',o.c||INK);doc.text(l,ML+ind,y+LH(sz)*.75);y+=LH(sz)}};
+  const titre=(s,sz=10.5,c=ACC)=>{const L=lines(s,CW(),sz,'bold');need(L.length*LH(sz)+12);font(sz,'bold',c);L.forEach(l=>{doc.text(l,ML,y+LH(sz)*.75);y+=LH(sz)});y+=1};
+  const pill=(s,x,yy,fg,bg,sz=9)=>{font(sz,'bold',fg);const w=doc.getTextWidth(T(s))+6;doc.setFillColor(...bg);doc.roundedRect(x,yy,w,6.2,1.6,1.6,'F');doc.text(T(s),x+3,yy+4.3);return w};
+  // En-tête de section : pastille (chiffre romain, symbole ou icône), titre et sous-titre.
+  const sec=(n,t,sub)=>{need(24);if(String(n).startsWith('data:'))doc.addImage(n,'PNG',ML,y,10,10);else{doc.setFillColor(...ACC);doc.circle(ML+5,y+5,5,'F');font(n.length>2?8:10,'bold',WHITE);doc.text(T(n),ML+5,y+6.4,{align:'center'})}
+    const L=lines(t,CW()-14,13,'bold');font(13,'bold',INK);L.forEach((l,k)=>doc.text(l,ML+13,y+4.6+k*LH(13)));let hh=Math.max(10,L.length*LH(13)+1);
+    if(sub){font(8.5,'normal',MUT);doc.text(T(sub),ML+13,y+hh+2);hh+=5}y+=hh+4};
   // Tableau libellé / valeur.
-  const kv=rows=>{for(const [l,val] of rows){const a=lines(l,54,9,'bold'),b=lines(val==null||val===''?'—':String(val),CW()-62,9.5,'bold'),h=Math.max(a.length,b.length)*LH(9.5)+3;need(h);
-    doc.setFillColor(...TINT);doc.rect(M,y,58,h,'F');doc.setDrawColor(...LINE);doc.setLineWidth(.2);doc.rect(M,y,58,h);doc.rect(M+58,y,CW()-58,h);
-    font(9,'bold',ACC);a.forEach((x,i)=>doc.text(x,M+2,y+1.5+LH(9.5)*(i+.75)));font(9.5,'bold');b.forEach((x,i)=>doc.text(x,M+60,y+1.5+LH(9.5)*(i+.75)));y+=h}};
+  const kv=(rows,lw=50)=>{for(const [l,val] of rows){const a=lines(l,lw-4,9,'bold'),b=lines(val==null||val===''?'—':String(val),CW()-lw-4,9.5),h=Math.max(a.length,b.length)*LH(9.5)+3;need(h);
+    doc.setDrawColor(...LINE);doc.setLineWidth(.25);doc.line(ML,y+h,ML+CW(),y+h);
+    font(9,'bold',MUT);a.forEach((x,i)=>doc.text(x,ML+1,y+1.5+LH(9.5)*(i+.75)));font(9.5,'normal',INK);b.forEach((x,i)=>doc.text(x,ML+lw,y+1.5+LH(9.5)*(i+.75)));y+=h}};
   // Photos deux par ligne, légendées.
-  const photos=list=>{const cw=(CW()-6)/2;for(let i=0;i<list.length;i+=2){const row=list.slice(i,i+2),hs=row.map(p=>Math.min(68,cw*p.h/p.w));need(Math.max(...hs)+8);
-    row.forEach((p,k)=>{const ih=hs[k],iw=ih*p.w/p.h,x0=M+k*(cw+6);doc.addImage(p.src,fmt(p.src),x0+(cw-iw)/2,y,iw,ih);font(8,'italic',MUT);doc.text(lines(`Photo ${p.n}${p.cap?' – '+p.cap:''}`,cw,8,'italic')[0],x0,y+ih+4)});
-    y+=Math.max(...hs)+8}};
-  const coef=g=>{const t=degTot(v,g);return t.irr?'grille irrecevable ('+t.nv+' éléments non vérifiables)':f3(t.ID,2)+' – '+t.niv[1]+(t.rest?' (grille incomplète)':'')};
-  const ptxt=x=>+x>=1?String(Math.floor(+x)):'—';
+  const phH=(p,cw)=>Math.min(48,cw*p.h/p.w);
+  const photos=(list,x0,w)=>{const cw=(w-4)/2;for(let i=0;i<list.length;i+=2){const row=list.slice(i,i+2),hs=row.map(p=>phH(p,cw));need(Math.max(...hs)+7);
+    row.forEach((p,k)=>{const ih=hs[k],iw=ih*p.w/p.h,xx=x0+k*(cw+4);doc.addImage(p.src,fmt(p.src),xx+(cw-iw)/2,y,iw,ih);font(7.5,'italic',MUT);doc.text(lines(`Photo ${p.n}${p.cap?' – '+p.cap:''}`,cw,7.5,'italic')[0],xx,y+ih+3.8)});
+    y+=Math.max(...hs)+7}};
+  const ptxt=x=>+x>=1?String(Math.floor(+x)):'—',pl=(n,s,p)=>`${n} ${+n>=2?p:s}`;
+  const dateFr=d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'')?new Date(d+'T12:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):frDate(d);
+  const chap=(g,p)=>{let sn=0,sm=0,n=0;for(const e of GRILLES[g.k].els.filter(e=>e.part===p)){n++;const r=degNote(v,g,e);if(r.max!=null){sn+=r.n;sm+=r.max}}return{sn,sm,n}};
 
   /* --- page de garde --- */
-  try{const lg=await loadImg(LOGO);doc.addImage(LOGO,'PNG',M,y,44,44*lg.naturalHeight/lg.naturalWidth)}catch(e){}
-  y=48;if(f.op){band(f.op.toUpperCase(),12)}
-  y+=4;for(const l of lines(imm?'RAPPORT D’ANALYSE DE LA DÉGRADATION D’UN IMMEUBLE':'RAPPORT D’ANALYSE DE LA DÉGRADATION D’UNE MAISON INDIVIDUELLE',CW(),15,'bold')){font(15,'bold',ACC);doc.text(l,W/2,y+6,{align:'center'});y+=7.5}
-  font(11,'bold',ACC);doc.text(T(imm?'Parties communes et parties privatives':'Logement – partie privative'),W/2,y+5,{align:'center'});y+=12;
-  const fa=v.it.facade?.ph?.[0];if(fa){const h=Math.min(80,CW()*fa.h/fa.w),w=h*fa.w/fa.h;doc.addImage(fa.src,fmt(fa.src),(W-w)/2,y,w,h);y+=h+6}
-  kv([['Date de visite',frDate(f.dateVis)],['Rapport établi par',[P.nom,P.qual].filter(Boolean).join(' – ')],['Propriétaire',f.pNom],['Adresse',[f.adresse,cpv(v)].filter(Boolean).join(', ')]]);
-  y+=6;
-  if(imm){titre('Coefficient de dégradation (ID) de chaque grille');kv(v.g.map(g=>[gNom(v,g),coef(g)]))}
-  else{need(16);doc.setDrawColor(...ACC);doc.setLineWidth(.6);doc.roundedRect(M,y,CW(),14,2,2);font(12.5,'bold',ACC);doc.text(T('Coefficient de dégradation : '+coef(v.g[0])),W/2,y+9,{align:'center',maxWidth:CW()-6});y+=18}
+  try{const lg=await loadImg(LOGO);doc.addImage(LOGO,'PNG',ML,y,44,44*lg.naturalHeight/lg.naturalWidth)}catch(e){}
+  if(f.op){font(9,'bold');const w=doc.getTextWidth(T(f.op))+9;doc.setFillColor(...ACC);doc.roundedRect(W-MR-w,y+4,w,8,4,4,'F');font(9,'bold',WHITE);doc.text(T(f.op),W-MR-w/2,y+9.4,{align:'center'})}
+  y=56;font(9,'bold',ACC);doc.text(T('DIAGNOSTIC DE DÉGRADATION · GRILLE ANAH'),ML,y);y+=4;
+  for(const l of [...lines(imm?'Immeuble collectif':'Maison individuelle',CW(),22,'bold'),...lines([f.adresse,f.ville].filter(Boolean).join(', '),CW(),22,'bold')]){font(22,'bold',INK);doc.text(l,ML,y+LH(22)*.8);y+=LH(22)}
+  font(11,'normal',MUT);doc.text(T(`${imm?'Parties communes et parties privatives':'Logement, partie privative'} · visite du ${dateFr(f.dateVis)}`),ML,y+5);y+=13;
+  // Photo de façade et encadré de l'indicateur (parties communes pour un immeuble).
+  const g0=v.g[0],t0=degTot(v,g0),fa=v.it.facade?.ph?.[0],hy=y,hh=74,bw=fa?CW()*.47:CW(),bx=ML+CW()-bw;
+  if(fa){const aw=CW()-bw-5,s=Math.min(aw/fa.w,hh/fa.h),iw=fa.w*s,ih=fa.h*s;doc.addImage(fa.src,fmt(fa.src),ML+(aw-iw)/2,hy+(hh-ih)/2,iw,ih)}
+  doc.setFillColor(...TINT);doc.roundedRect(bx,hy,bw,hh,3,3,'F');const px=bx+6,pw=bw-12;
+  font(8,'bold',MUT);doc.text(T(imm?'INDICATEUR DE DÉGRADATION · PARTIES COMMUNES':'INDICATEUR DE DÉGRADATION'),px,hy+8);
+  const [fg,bg]=t0.irr?LV.danger:LV[t0.niv[2]];font(34,'bold',fg);doc.text(t0.irr?'–':f3(t0.ID,2),px,hy+24);
+  pill(t0.irr?'Grille irrecevable':t0.niv[1]+(t0.rest?' (provisoire)':''),px,hy+28,fg,bg);
+  const gy=hy+42;[[0,.35,NC[0]],[.35,.55,NC[2]],[.55,1,NC[3]]].forEach(([a,b,c])=>{doc.setFillColor(...c);doc.rect(px+a*pw,gy,(b-a)*pw,3.4,'F')});
+  if(!t0.irr){const mx=px+Math.min(1,t0.ID)*pw;doc.setFillColor(...INK);doc.roundedRect(mx-.7,gy-1.8,1.4,7,.5,.5,'F')}
+  font(7,'normal',MUT);[[0,'0'],[.35,'0,35'],[.55,'0,55'],[1,'1']].forEach(([a,s])=>doc.text(s,px+a*pw,gy+8.5,{align:a===0?'left':a===1?'right':'center'}));
+  font(9,'normal',MUT);doc.text('DM',px,hy+62);doc.text('DG',px+30,hy+62);font(12,'bold',INK);doc.text(f3(t0.DM),px+7,hy+62);doc.text(f3(t0.DG),px+37,hy+62);
+  y=hy+hh+8;
+  const so=v.g.reduce((n,g)=>n+GRILLES[g.k].els.filter(e=>g.n[e.id]?.h==='SO').length,0);
+  const meta=[['Propriétaire',f.pNom||'—'],['Technicien',[P.nom,P.qual].filter(Boolean).join(', ')||'—'],
+    ['Bien',imm?[pl(ptxt(f.nbNiv),'niveau','niveaux'),pl(v.g.length-1,'logement','logements'),f.annee].filter(Boolean).join(' · '):[pl(ptxt(f.nbNiv),'niveau','niveaux'),pl(ptxt(f.nbPP),'pièce','pièces'),f.surf&&f.surf+' m²',f.annee].filter(Boolean).join(' · ')],
+    ['Grille',imm?`Parties communes (32 éléments) et ${pl(v.g.length-1,'logement','logements')} (24 éléments)`:`35 éléments, 24 majeurs, ${so} sans objet`]];
+  meta.forEach(([l,val],i)=>{const x=ML+(i%2)*(CW()/2+3),yy=y+Math.floor(i/2)*14;font(7.5,'bold',MUT);doc.text(T(l.toUpperCase()),x,yy);font(10,'normal',INK);doc.text(lines(val,CW()/2-4,10)[0]||'',x,yy+5)});
+  y+=30;
+  if(imm){titre('Logements',10,INK);kv(v.g.slice(1).map(g=>{const t=degTot(v,g);return[lgtNom(v,g),t.irr?'Grille irrecevable':`ID ${f3(t.ID,2)} · ${t.niv[1]}${t.rest?' (provisoire)':''}`]}),70)}
   if(!fin){y+=2;para('Projet : '+(v.g.some(g=>degTot(v,g).irr)?'grille irrecevable (3 éléments non vérifiables ou plus).':'grille incomplète (éléments non notés, ou niveaux / pièces non renseignés).'),{st:'bold',c:RED,sz:9.5})}
-  font(8.5,'normal',MUT);doc.text(T(SOLIHA_ADR),W/2,BOT()-2,{align:'center'});
+  font(8,'normal',MUT);doc.text(T(SOLIHA_ADR),ML,BOT()-2);
 
-  /* --- descriptif, chapitres et synthèse d'une grille --- */
-  const descriptif=g=>{titre('DESCRIPTIF GÉNÉRAL',11);
+  /* --- synthèse des résultats, synthèse des travaux, lexique --- */
+  page();sec(ICO_DEG.deg,'Synthèse des résultats','Notes de dégradation par chapitre');
+  const cw=[CW()*.46,CW()*.2,CW()*.34];
+  for(const g of v.g){if(imm)titre(gNom(v,g),10,INK);
+    need(10);font(7.5,'bold',MUT);['CHAPITRE','NOTES','PART DE LA NOTE MAXIMALE'].forEach((s,i)=>doc.text(s,ML+cw.slice(0,i).reduce((a,b)=>a+b,0),y+4));y+=6;
+    const rowL=()=>{doc.setDrawColor(...LINE);doc.setLineWidth(.25);doc.line(ML,y,ML+CW(),y)};rowL();
+    for(const [p,[t]] of Object.entries(GRILLES[g.k].parts)){const c=chap(g,p),L=lines(`${p}. ${t}`,cw[0]-3,9.5),h=Math.max(7.5,L.length*LH(9.5)+3);need(h);
+      font(9.5,'normal',INK);L.forEach((l,k)=>doc.text(l,ML,y+5+k*LH(9.5)));
+      if(c.sm){doc.text(`${f3(c.sn,1)} / ${c.sm}`,ML+cw[0],y+5);const r=c.sn/c.sm,bx0=ML+cw[0]+cw[1];doc.setFillColor(...LINE);doc.roundedRect(bx0,y+2.6,34,2.6,1.3,1.3,'F');
+        if(r>0){doc.setFillColor(...barC(r));doc.roundedRect(bx0,y+2.6,Math.max(2.6,34*r),2.6,1.3,1.3,'F')}doc.text(`${Math.round(r*100)} %`,bx0+37,y+5)}
+      else{font(9.5,'italic',MUT);doc.text('Sans objet',ML+cw[0],y+5)}y+=h;rowL()}
+    const t=degTot(v,g);need(8);font(9.5,'bold',INK);doc.text('Total',ML,y+5);doc.text(`${f3(t.sn,1)} / ${t.sm}`,ML+cw[0],y+5);doc.text(T(`DG ${f3(t.DG)} · ID ${t.irr?'–':f3(t.ID,2)}`),ML+cw[0]+cw[1],y+5);y+=12}
+  sec(ICO_DEG.synthese,'Synthèse des travaux préconisés');
+  for(const g of v.g){if(imm)titre(gNom(v,g),10,INK);const t=String(f[g.id+'_trav']||'').trim();
+    if(t){para('Il est à prévoir pour les travaux :');t.split('\n').forEach(l=>l.trim()&&para(l.trim().replace(/^[•\-–]\s*/,'• '),{ind:4}))}else para('Aucuns travaux renseignés.',{c:MUT});
+    if((f[g.id+'_ar']||[]).length){y+=1.5;para(f[g.id+'_arT']||AUTOREH,{st:'italic'})}y+=5}
+  need(120);sec('?','Lexique');kv(LEXIQUE_DEG,40);
+
+  /* --- constats : descriptif puis une carte par élément --- */
+  const card=(g,e,nums)=>{const s=g.n[e.id]||{},x=degIt(v,g,e),r=degNote(v,g,e),k=degK(v,g,e),iw=CW()-6,tw=iw-24;
+    const TL=lines(`${e.id} ${e.t}`,tw,10.5,'bold'),th=Math.max(9,TL.length*LH(10.5));
+    const amp=s.h==='SO'?'Sans objet':s.h==='NV'?'Non vérifiable'+(String(s.motif||'').trim()?' : '+s.motif.trim():''):s.h==null?'Non noté':
+      [e.a&&s.a!=null?`Ampleur ${s.a*100} %`:'',e.p&&prorata(s.pt)!=null&&!Number.isNaN(prorata(s.pt))?`prorata ${f3(prorata(s.pt),2)}`:'',k?(e.m==='N'?pl(k,'niveau','niveaux'):pl(k,'pièce','pièces')):'',`note ${f3(r.n,2)} / ${r.max}`].filter(Boolean).join(' · ');
+    const crep=CLE_DEG[g.k][e.id]==='depose'&&+f.annee>0&&+f.annee<1949?'Construction antérieure à 1949 : un constat de risque d’exposition au plomb (CREP) doit être réalisé avant travaux.':'';
+    const CL=[...(x.note.trim()?lines(x.note.trim(),iw,9.5):[]),...(crep?lines(crep,iw,9,'italic'):[])];
+    const ph=x.ph.map((p,i)=>({...p,n:nums[g.id+':'+e.id+':'+i]})),pc=(iw-4)/2,rows=[];for(let i=0;i<ph.length;i+=2)rows.push(Math.max(...ph.slice(i,i+2).map(p=>phH(p,pc)))+7);
+    // Carte entière si elle tient ; sinon nouvelle page quand il reste peu de place, ou texte ici et photos à la suite.
+    const hText=3+th+2+LH(8.5)+1.5+CL.length*LH(9.5)+3,hAll=hText+rows.reduce((a,b)=>a+b,0)+(rows.length?1:0),full=BOT()-15,rem=BOT()-y;
+    let inCard=hAll+3<=rem;if(!inCard&&hAll+3<=full&&rem<full*.45){page();inCard=true}
+    if(!inCard)need(hText+3+(rows[0]||0));const y0=y;
+    doc.addImage(icoDeg(g.k,e.id),'PNG',ML+3,y+3,9,9);font(10.5,'bold',INK);TL.forEach((l,i)=>doc.text(l,ML+15,y+3+(th-TL.length*LH(10.5))/2+LH(10.5)*(i+.75)));
+    const nk=typeof s.h==='number'?s.h:s.h||null,nc=NC[nk]||LINE;doc.setFillColor(...nc);doc.roundedRect(ML+CW()-12,y+3,9,9,2,2,'F');font(nk==='SO'||nk==='NV'?8:13,'bold',nk==null?MUT:WHITE);doc.text(nk==null?'–':String(nk),ML+CW()-7.5,y+9.2,{align:'center'});
+    y+=3+th+2;font(8.5,'normal',MUT);let ax=ML+3;
+    if(typeof s.h==='number'&&e.a&&s.a!=null){const a0=`Ampleur ${s.a*100} %`;doc.text(T(a0),ax,y+LH(8.5)*.75);ax+=doc.getTextWidth(T(a0))+2.5;doc.setFillColor(...LINE);doc.roundedRect(ax,y+.8,26,2,1,1,'F');
+      if(s.a>0){doc.setFillColor(...(nc));doc.roundedRect(ax,y+.8,26*s.a,2,1,1,'F')}ax+=29;font(8.5,'normal',MUT);doc.text(T(amp.replace(a0,'').replace(/^ · /,'· ')),ax,y+LH(8.5)*.75)}
+    else doc.text(T(amp),ax,y+LH(8.5)*.75);
+    y+=LH(8.5)+1.5;CL.forEach((l,i)=>{const it=crep&&i>=CL.length-lines(crep,iw,9,'italic').length;font(it?9:9.5,it?'italic':'normal',INK);doc.text(l,ML+3,y+LH(9.5)*.75);y+=LH(9.5)});y+=1.5;
+    if(inCard){if(ph.length){photos(ph,ML+3,iw);y-=2}doc.setDrawColor(...LINE);doc.setLineWidth(.35);doc.roundedRect(ML,y0,CW(),y-y0+1.5,2.5,2.5);y+=5}
+    else{doc.setDrawColor(...LINE);doc.setLineWidth(.35);doc.roundedRect(ML,y0,CW(),y-y0+1,2.5,2.5);y+=3;photos(ph,ML+3,iw);y+=3}};
+  for(const g of v.g){page();if(imm){font(15,'bold',ACC);doc.text(T(g.k==='bc'?'Parties communes'+(f.nomBat?' – '+f.nomBat:''):lgtNom(v,g)),ML,y+6);y+=12}
+    sec(ICO_DEG.descriptif,'Descriptif général');
     if(g.k==='mi')kv([['Année de construction',f.annee],['Surface habitable',f.surf&&f.surf+' m²'],['Nombre de niveaux',ptxt(f.nbNiv)],['Pièces principales',ptxt(f.nbPP)],['Consommation avant travaux',f.conso&&f.conso+' kWhep/m².an'],['Type de ventilation',f.vent]]);
     else if(g.k==='bc')kv([['Année de construction',f.annee],['Bâtiments de l’ensemble',f.nbBat],['Bâtiment évalué',f.nomBat],['Nombre de niveaux',ptxt(f.nbNiv)],['Consommation avant travaux',f.conso&&f.conso+' kWhep/m².an']]);
     else kv([['Logement',lgtNom(v,g)],['Pièces principales',ptxt(f[g.id+'_nbPP'])],['Surface habitable',f[g.id+'_surf']&&f[g.id+'_surf']+' m²'],['Consommation avant travaux',f[g.id+'_conso']&&f[g.id+'_conso']+' kWhep/m².an']]);
     const d=[g.k==='lc'?f[g.id+'_desc']:f.desc,degSoNv(v,g)].filter(x=>String(x||'').trim()).join('\n');
-    if(d){y+=3;titre('Descriptif technique, éléments manquants et spécificités',9.5,INK);para(d)}y+=4};
-  const chapitres=g=>{const G=GRILLES[g.k],nums=degPhNums(v,g);let part='',sous='';
-    for(const e of G.els){const s=g.n[e.id]||{},x=degIt(v,g,e),pre=e.id.includes('.')?e.id.split('.')[0]:'';
-      // Place de l'élément (titre, notes, première photo) réservée avec ses intitulés, pour ne pas les laisser seuls en bas de page.
-      const eh=24+(x.ph[0]?Math.min(68,(CW()-6)/2*x.ph[0].h/x.ph[0].w)+8:0),ns=pre&&pre!==sous&&SOUS_DEG[g.k][pre];
-      if(e.part!==part){need(eh+(ns?32:24));part=e.part;sous='';y+=2;band(`${part}. ${G.parts[part][0].toUpperCase()}`)}
-      if(ns){need(eh+10);sous=pre;titre(`${pre} ${SOUS_DEG[g.k][pre].toUpperCase()}`)}
-      need(eh);
-      {const sz=pre?10:10.5,L=lines(pre?`${e.id.replace('.','-')} ${e.t}`:`${e.id} ${e.t.toUpperCase()}`,CW()-9,sz,'bold'),th=Math.max(7,L.length*LH(sz));
-        doc.addImage(icoDeg(g.k,e.id),'PNG',M,y,7,7);font(sz,'bold',pre?INK:ACC);L.forEach((l,k)=>doc.text(l,M+9,y+(th-L.length*LH(sz))/2+LH(sz)*(k+.75)));y+=th+1.5}
-      para(degEtat(s,e).replace(/^./,c=>c.toUpperCase()),{sz:8.5,c:MUT});
-      if(x.note.trim())para(x.note.trim());
-      if(CLE_DEG[g.k][e.id]==='depose'&&+f.annee>0&&+f.annee<1949)para('Construction antérieure à 1949 : un constat de risque d’exposition au plomb (CREP) doit être réalisé avant travaux.',{st:'italic'});
-      photos(x.ph.map((p,i)=>({...p,n:nums[g.id+':'+e.id+':'+i]})));y+=3}};
-  const synthese=g=>{const t=String(f[g.id+'_trav']||'').trim();y+=2;band('SYNTHÈSE DES TRAVAUX');
-    if(t){para('Il est à prévoir pour les travaux :');t.split('\n').forEach(l=>l.trim()&&para(l.trim().replace(/^[•\-–]\s*/,'• '),{ind:4}))}else para('Aucuns travaux renseignés.',{c:MUT});
-    if((f[g.id+'_ar']||[]).length){y+=2;para(f[g.id+'_arT']||AUTOREH)}y+=4};
-  for(const g of v.g){page();if(imm)band(g.k==='bc'?'PARTIES COMMUNES – '+(f.nomBat||'bâtiment').toUpperCase():(/^logement/i.test(lgtNom(v,g))?'':'LOGEMENT – ')+lgtNom(v,g).toUpperCase(),12);descriptif(g);chapitres(g);synthese(g)}
+    if(d){y+=3;titre('Descriptif technique, éléments manquants et spécificités',9.5,INK);para(d)}y+=6;
+    const G=GRILLES[g.k],nums=degPhNums(v,g);
+    for(const [p,[t]] of Object.entries(G.parts)){const c=chap(g,p);need(85);
+      sec(p,t,`${pl(c.n,'élément','éléments')} · ${c.sm?`note du chapitre ${f3(c.sn,1)} / ${c.sm} (${Math.round(c.sn/c.sm*100)} %)`:'sans objet'}`);
+      for(const e of G.els.filter(e=>e.part===p))card(g,e,nums);y+=3}}
 
   /* --- date et signature --- */
-  need(48);y+=4;titre('Date et signature du technicien',10.5);para(`Fait le ${frDate(today())}`);para([P.nom,P.qual].filter(Boolean).join(' – '),{st:'bold'});
-  if(P.sig){const h=Math.min(26,60*P.sig.r);doc.addImage(P.sig.src,fmt(P.sig.src),M,y+2,h/P.sig.r,h);y+=h+4}
+  need(50);y+=4;titre('Date et signature du technicien',10.5);para(`Fait le ${frDate(today())}`);para([P.nom,P.qual].filter(Boolean).join(', '),{st:'bold'});
+  if(P.sig){const h=Math.min(26,60*P.sig.r);doc.addImage(P.sig.src,fmt(P.sig.src),ML,y+2,h/P.sig.r,h);y+=h+4}
 
   /* --- annexes : une grille par page en paysage --- */
   const COLS=[['Élément',112],['Majeur',16],['Note d’état',20],['Ampleur',20],['Prorata',20],['Niv./pièces',22],['Note de dégradation',28],['Valeur max.',29]];
-  const trow=(cells,o={})=>{const C=o.span?[lines(cells[0],CW()-3,8,'bold')]:COLS.map(([,w],i)=>lines(String(cells[i]??''),w-3,8,o.b?'bold':'normal')),L=C[0],h=Math.max(...C.map(c=>c.length))*LH(8)+2;
+  const cols=()=>COLS.map(([l,w])=>[l,w*CW()/267]);
+  const trow=(cells,o={})=>{const CO=cols(),C=o.span?[lines(cells[0],CW()-3,8,'bold')]:CO.map(([,w],i)=>lines(String(cells[i]??''),w-3,8,o.b?'bold':'normal')),h=Math.max(...C.map(c=>c.length))*LH(8)+2;
     if(y+h*(o.span?2.6:1)>BOT()){page('landscape');if(!o.head)trow(COLS.map(c=>c[0]),{head:1,b:1,fill:ACC,c:WHITE})}
-    let x=M;doc.setDrawColor(...LINE);doc.setLineWidth(.2);
-    if(o.span){doc.setFillColor(...o.fill);doc.rect(M,y,CW(),h,'FD');font(8,'bold',o.c||INK);doc.text(L[0],M+1.5,y+1+LH(8)*.75);y+=h;return}
-    COLS.forEach(([,w],i)=>{if(o.fill){doc.setFillColor(...o.fill);doc.rect(x,y,w,h,'FD')}else doc.rect(x,y,w,h);font(8,o.b?'bold':'normal',o.c||INK);
+    let x=ML;doc.setDrawColor(...LINE);doc.setLineWidth(.2);
+    if(o.span){doc.setFillColor(...o.fill);doc.rect(ML,y,CW(),h,'FD');font(8,'bold',o.c||INK);doc.text(C[0][0],ML+1.5,y+1+LH(8)*.75);y+=h;return}
+    CO.forEach(([,w],i)=>{if(o.fill){doc.setFillColor(...o.fill);doc.rect(x,y,w,h,'FD')}else doc.rect(x,y,w,h);font(8,o.b?'bold':'normal',o.c||INK);
       C[i].forEach((l,k)=>doc.text(l,i?x+w/2:x+1.5,y+1+LH(8)*(k+.75),{align:i?'center':'left'}));x+=w});y+=h};
-  for(const g of v.g){const G=GRILLES[g.k],t=degTot(v,g);page('landscape');band(`ANNEXE – GRILLE D’ÉVALUATION DE LA DÉGRADATION – ${G.nom.toUpperCase()}`);
-    para([gNom(v,g),g.k!=='lc'?'niveaux : '+ptxt(f.nbNiv):'',g.k==='mi'?'pièces principales : '+ptxt(f.nbPP):g.k==='lc'?'pièces principales : '+ptxt(f[g.id+'_nbPP']):'',f.annee?'année de construction : '+f.annee:''].filter(Boolean).join(' · '),{sz:9});y+=2;
+  for(const g of v.g){const G=GRILLES[g.k],t=degTot(v,g);page('landscape');sec(ICO_DEG.deg,`Annexe – Grille d’évaluation de la dégradation – ${G.nom}`,
+    [gNom(v,g),g.k!=='lc'?'niveaux : '+ptxt(f.nbNiv):'',g.k==='mi'?'pièces principales : '+ptxt(f.nbPP):g.k==='lc'?'pièces principales : '+ptxt(f[g.id+'_nbPP']):'',f.annee?'année de construction : '+f.annee:''].filter(Boolean).join(' · '));
     trow(COLS.map(c=>c[0]),{head:1,b:1,fill:ACC,c:WHITE});let part='';
     for(const e of G.els){if(e.part!==part){part=e.part;trow([`${part}. ${G.parts[part][0]}`],{span:1,fill:TINT,c:ACC})}
       const s=g.n[e.id]||{},r=degNote(v,g,e),pr=prorata(s.pt);
       trow([`${e.id} ${e.t}`,e.maj?'X':'',s.h??'',e.a&&s.a!=null?s.a*100+' %':'',e.p&&pr!=null&&!Number.isNaN(pr)?f3(pr,2):'',degK(v,g,e)??'',r.max==null?'–':f3(r.n,2),r.max??'–'])}
     trow(['TOTAL',t.nmaj,'','','','',f3(t.sn,2),t.sm],{b:1,fill:TINT});
-    y+=4;need(12);const R=[['DM',f3(t.DM)],['DG',f3(t.DG)],['ID',t.irr?'–':f3(t.ID)],['Niveau',t.irr?'Grille irrecevable':t.niv[1]+(t.rest?' (grille incomplète)':'')]],bw=[40,40,40,CW()-120];let x=M;
-    R.forEach(([k,val],i)=>{doc.setDrawColor(...ACC);doc.setLineWidth(.4);doc.roundedRect(x,y,bw[i]-3,11,1.5,1.5);font(7.5,'bold',MUT);doc.text(k,x+2,y+4);font(10,'bold',ACC);doc.text(T(val),x+2,y+9,{maxWidth:bw[i]-6});x+=bw[i]});y+=14}
+    y+=4;need(12);const R=[['DM',f3(t.DM)],['DG',f3(t.DG)],['ID',t.irr?'–':f3(t.ID)],['Niveau',t.irr?'Grille irrecevable':t.niv[1]+(t.rest?' (grille incomplète)':'')]],bw2=[40,40,40,CW()-120];let x=ML;
+    R.forEach(([k,val],i)=>{doc.setFillColor(...TINT);doc.roundedRect(x,y,bw2[i]-3,11,1.5,1.5,'F');font(7.5,'bold',MUT);doc.text(k,x+2,y+4);font(10,'bold',ACC);doc.text(T(val),x+2,y+9,{maxWidth:bw2[i]-6});x+=bw2[i]});y+=14}
 
-  /* --- filigrane et pied de page --- */
+  /* --- bandeau latéral, filigrane et pied de page --- */
   const n=doc.getNumberOfPages();
   for(let i=1;i<=n;i++){doc.setPage(i);const w=doc.internal.pageSize.getWidth(),h=doc.internal.pageSize.getHeight();
+    doc.setFillColor(...ACC);doc.rect(0,0,6.3,h,'F');
     if(!fin){doc.saveGraphicsState();doc.setGState(new doc.GState({opacity:.12}));font(70,'bold',RED);doc.text('PROJET',w/2,h/2,{align:'center',angle:30});doc.restoreGraphicsState()}
-    doc.setDrawColor(...ACC);doc.setLineWidth(.4);doc.line(M,h-10,w-M,h-10);font(7.5,'normal',MUT);doc.text(T(`Rapport de dégradation – ${who(v)} – imprimé le ${frDate(today())} – SOLiHA Charente-Maritime Deux-Sèvres`),M,h-6.5);
-    font(7.5,'bold',ACC);doc.text(`Page ${i} / ${n}`,w-M,h-6.5,{align:'right'})}
+    doc.setDrawColor(...LINE);doc.setLineWidth(.3);doc.line(ML,h-10,w-MR,h-10);font(7.5,'normal',MUT);doc.text(T(`Diagnostic de dégradation · ${who(v)} · imprimé le ${frDate(today())}`),ML,h-6.5);
+    font(7.5,'bold',ACC);doc.text(`Page ${i} / ${n}`,w-MR,h-6.5,{align:'right'})}
   await offer(`${fin?'':'PROJET_'}Rapport_degradation_${slug(who(v))||'logement'}_${f.dateVis||today()}.pdf`,doc.output('blob'));
   if(!fin)toast('Projet généré (filigrane) : le dossier reste en cours tant que la grille n’est pas complète');
 }
