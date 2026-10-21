@@ -283,10 +283,10 @@ const R=[
    o:['Absence','Insuffisance (débit / pression)'],
    ow:['Mise à disposition d’une alimentation intérieure en eau potable','Rétablissement d’un débit et d’une pression suffisants'],
    df:[['Source privée non contrôlée','Contrôle de la potabilité de l’eau (analyse)']]},
-  {id:'ecs',t:"Moyen de production d'eau chaude sanitaire",ref:'Décence-2.5, 3.4, 3.5',p:1,s:'sanit',th:'sanit',tl:'Type',tf:'ecsType',ty:['Cumulus','Chauffe-eau','Chaudière mixte'],
+  {id:'ecs',t:"Moyen de production d'eau chaude sanitaire",ref:'Décence-2.5, 3.4, 3.5',p:1,s:'sanit',th:'sanit',tl:'Type',tf:'ecsType',ty:['Cumulus','Chauffe-eau','Chaudière mixte','Aucune'],
    o:['Absent','Présent mais insuffisant : dispositif absent dans cuisine ou salle de bain','Présent mais insuffisant : installation partiellement fonctionnelle voire non fonctionnelle'],
    ow:['Mise à disposition d’un moyen de production d’eau chaude sanitaire suffisant et sécurisé','Alimentation en eau chaude de la cuisine et de la salle de bains','Remise en état de fonctionnement de la production d’eau chaude sanitaire']},
-  {id:'chauf',t:'Moyen de chauffage',ref:'Décence-3.1, 2.5, 2.2',p:1,d:1,s:'equip',th:'chauf',tl:'Type',tf:'chaufType',ty:['Gaz / fioul','Électrique','Charbon / bois'],
+  {id:'chauf',t:'Moyen de chauffage',ref:'Décence-3.1, 2.5, 2.2',p:1,d:1,s:'equip',th:'chauf',tl:'Type',tf:'chaufType',ty:['Gaz / fioul','Électrique','Charbon / bois','Aucun'],
    o:['Absent','Présent mais insuffisant : dispositif absent dans certaines pièces de vie','Présent mais insuffisant : installation partiellement fonctionnelle voire non fonctionnelle',"Utilisation de chauffages d'appoint / mobiles"],
    ow:['Mise à disposition d’un moyen de chauffage suffisant, sécurisé et adapté aux caractéristiques du logement','Installation d’un équipement de chauffage fixe dans chacune des pièces de vie, permettant un chauffage normal','Remise en état de fonctionnement de l’installation de chauffage',null],
    df:[['Utilisation de chauffages d’appoint en continu (gaz / pétrole)'],['Utilisation de chauffages d’appoint en continu (électriques)']]},
@@ -316,7 +316,7 @@ const R=[
    ow:['Suppression des fuites et des causes d’infiltration','Traitement des remontées d’humidité en pied de murs',null],
    wx:['Remise en état des revêtements de murs, sols et plafonds détériorés par l’humidité, après assèchement des supports'],
    df:[['Suintements'],['Auréoles'],['Moisissures','Décontamination fongique des supports colonisés par des moisissures'],['Champignons','Traitement des champignons et remplacement des éléments atteints'],['Condensation','Amélioration de la ventilation et du chauffage pour supprimer la condensation'],['Origine suspectée : tellurisme (bas des murs)','Traitement des remontées capillaires']]},
-  {id:'vent',t:'Ventilation insuffisante',ref:'Décence-2.6',p:1,s:'hum',th:'vent',grp:1,tl:'Type de ventilation',ty:['Pièce par pièce (5)','Balayage (6)','VMC'],ol:'Insuffisante dans',
+  {id:'vent',t:'Ventilation insuffisante',ref:'Décence-2.6',p:1,s:'hum',th:'vent',grp:1,tl:'Type de ventilation',tf:'ventType',ty:['Pièce par pièce (5)','Balayage (6)','VMC','Aucune'],ol:'Insuffisante dans',
    w:'Mise en place d’une ventilation permanente du logement',
    o:['Cuisine',"Salle d'eau",'WC'],
    ow:['Extraction d’air dans la cuisine','Extraction d’air dans la salle d’eau','Extraction d’air dans les WC'],
@@ -348,7 +348,9 @@ const R=[
 ];
 const ITEMS={};R.forEach(r=>(r.items||[]).forEach(i=>ITEMS[i.id]=i));
 // Type de chauffage et d'eau chaude : renseigné à chaque visite, en tête de la rubrique 4, sans photo.
-R[3].pre=[['ecsType','Production d’eau chaude sanitaire : type (si présente)','c',ITEMS.ecs.ty],['chaufType','Chauffage : type (si présent)','c',ITEMS.chauf.ty]];
+// Types d'équipement : saisie obligatoire (bloque le pré-remplissage des travaux), « Aucun(e) » exclut les autres choix.
+R[3].pre=[['ecsType','Production d’eau chaude sanitaire : type','c',ITEMS.ecs.ty,'Obligatoire'],['chaufType','Chauffage : type','c',ITEMS.chauf.ty,'Obligatoire']];
+R[4].pre=[['ventType','Ventilation : type','c',ITEMS.vent.ty,'Obligatoire']];
 // Articles du Règlement Sanitaire Départemental des Deux-Sèvres (RSD 79), repris de la fiche DDT.
 const RSD={stab:'RSD art. 33',degr:'RSD art. 33, 35',surf:'RSD art. 27-1, 40-3, 40-4',ecl:'RSD art. 27-2 b, 40-2',pc:'RSD art. 23.2, 32, 57, 60, 75',
  elec:'RSD art. 51',gaz:'RSD art. 52',eau:'RSD art. 14, 15, 40',chauf:'RSD art. 40',co:'RSD art. 31, 53',cuis:'RSD art. 40, 45, 46',wc:'RSD art. 45, 46',
@@ -531,7 +533,7 @@ const on=(v,id)=>!!v.it[id]?.on, has=(v,id,k,i)=>on(v,id)&&v.it[id][k].includes(
 const RAP=[
  ['L’utilisation de chauffages d’appoint à combustion (type poêle à pétrole) doit être limitée (2 h maximum en continu) et dans une pièce correctement ventilée.',v=>has(v,'chauf','o',3)||hasDf(v,'chauf',/appoint/)||has(v,'prec','o',1)],
  ['Le remplacement du tuyau de raccordement au gaz doit être effectué.',v=>hasDf(v,'gaz',/^Tuyau/)],
- ['L’entretien annuel des appareils à combustion ainsi que le ramonage annuel des conduits de fumée sont à la charge des occupants (sauf mention contraire dans le bail).',v=>on(v,'co')||(v.f.chaufType||[]).some(x=>x!=='Électrique')],
+ ['L’entretien annuel des appareils à combustion ainsi que le ramonage annuel des conduits de fumée sont à la charge des occupants (sauf mention contraire dans le bail).',v=>on(v,'co')||(v.f.chaufType||[]).some(x=>x!=='Électrique'&&x!=='Aucun')],
  ['Les bouches d’aération et conduits d’aération doivent être nettoyés et maintenus opérants.',v=>on(v,'vent')||has(v,'co','o',2)||has(v,'prec','o',0)],
  ['Le mode de vie des occupants ne doit pas être la cause d’une dégradation du logement.',()=>false]
 ];
@@ -707,7 +709,7 @@ function justifTexte(v){
   const pr='des documents probants : factures détaillées des entreprises (nature des travaux, matériel posé, localisation), attestations ou diagnostics lorsqu’ils sont requis, et photographies';
   const soi='Pour les travaux réalisés par le propriétaire lui-même : factures d’achat du matériel et photographies.';
   return isPdl(v)?`Leur bonne exécution devra être justifiée, lors de la contre-visite ou par transmission préalable au service instructeur, par ${pr} avant et après travaux. ${soi}`
-    :`La réalisation des travaux devra être justifiée auprès de ${COM[v.f.dem]?.lettre||'l’organisme à l’origine de la demande'} par ${pr} des travaux réalisés. ${soi}`;
+    :`La réalisation des travaux devra être justifiée par ${pr} des travaux réalisés. ${soi}`;
 }
 function travauxTexte(v,blocks){
   const themes=blocks.map(b=>b.title.toLowerCase()).join(', ');
@@ -797,7 +799,7 @@ function migrate(v){
   if(v.dfV!==2){for(const [id,s] of Object.entries(v.it)){if(!OLD_DF[id]||!s.df.length)continue;const old=s.df.map(i=>OLD_DF[id][i]).filter(Boolean);
     if(!v.dfTxt){const add=old.filter(t=>!s.note.includes(t)).map(t=>t+'.');if(add.length)s.note=[...add,s.note].filter(x=>x.trim()).join('\n')}
     s.df=[...new Set(old.map(t=>dfNew(id,t)).filter(i=>i>=0))]}v.dfTxt=1;v.dfV=2}
-  for(const d of [ITEMS.chauf,ITEMS.ecs])if(!v.f[d.tf]&&v.it[d.id]?.t.length)v.f[d.tf]=v.it[d.id].t.map(i=>d.ty[i]);
+  for(const d of [ITEMS.chauf,ITEMS.ecs,ITEMS.vent])if(!v.f[d.tf]&&v.it[d.id]?.t.length)v.f[d.tf]=v.it[d.id].t.map(i=>d.ty[i]);
   if(!isPdl(v))delete v.f.cvPresc;
   // Ancien bouton « Marquer comme vérifiée » des rubriques à pathologies : les lignes sans défaut passent en RAS.
   for(const r of RR(v).filter(r=>r.items&&v.done[r.id])){for(const d of r.items){const x=it(d.id,v);if(!x.on)x.ras=true}delete v.done[r.id]}
@@ -834,6 +836,7 @@ function rstat(r,v=cur){
     const rest=r.items.filter(i=>!v.it[i.id]?.on&&!v.it[i.id]?.ras).length;
     if(on.length)p.push([`${on.length} désordre${on.length>1?'s':''}`,'info']);else if(!rest)p.push(['RAS','ok']);
     if(rest&&rest<r.items.length)p.push([`${rest} ligne${rest>1?'s':''} à contrôler`,'warn']);
+    const pm=preManq(r,v).length;if(pm)p.push([pm>1?'Types à renseigner':'Type à renseigner','warn']);
     if(dg)p.push(['Danger','danger']);
     if(miss)p.push([`${miss} photo${miss>1?'s':''} manquante${miss>1?'s':''}`,'warn']);
     if(!p.length)p.push(['À faire','']);
@@ -842,7 +845,8 @@ function rstat(r,v=cur){
   return [[n?(v.done[r.id]?'Terminé':`${n}/${r.fields.length} renseignés`):'À faire',n?(v.done[r.id]?'ok':'info'):'']]
 }
 // Lignes de pathologie ni en défaut ni en RAS, par rubrique : elles bloquent le pré-remplissage des travaux.
-const aControler=(v=cur)=>RR(v).filter(r=>r.items).map(r=>[r,r.items.filter(d=>!v.it[d.id]?.on&&!v.it[d.id]?.ras)]).filter(x=>x[1].length);
+const preManq=(r,v=cur)=>(r.pre||[]).filter(f=>!filled(v.f[f[0]]));
+const aControler=(v=cur)=>RR(v).filter(r=>r.items).map(r=>[r,[...r.items.filter(d=>!v.it[d.id]?.on&&!v.it[d.id]?.ras),...preManq(r,v)]]).filter(x=>x[1].length);
 const sumAuto=(k,v=cur)=>Object.values(ITEMS).some(i=>i.s===k&&v.it[i.id]?.on);
 const sumVal=(k,v=cur)=>v.f['sum_'+k]||(sumAuto(k,v)?'Oui':'Non');
 const pills=p=>`<div class="pills">${p.map(([t,c])=>`<span class="pill ${c}">${esc(t)}</span>`).join('')}</div>`;
@@ -1049,11 +1053,13 @@ function render(){
   app.innerHTML=`${topbar(r.n+'. '+r.t,who(cur),'dash',logo)}
    ${r.pre?`<div class="form">${r.pre.map(field).join('')}</div>`:''}
    ${r.items?`<p class="muted">Pour chaque ligne, cochez le défaut constaté ou « RAS » (rien à signaler).</p><div class="items">${r.items.map(d=>itemHtml(d,nums)).join('')}</div>`:''}
-   ${r.gen?`${manq.length?`<div class="banner">Il reste ${nManq} ligne${nManq>1?'s':''} à contrôler (défaut ou RAS) avant de pré-remplir les travaux :
-      <div class="row">${manq.map(([x,ds])=>`<button data-act="go" data-v="${x.id}">Rubrique ${x.n} : ${ds.length} ligne${ds.length>1?'s':''}</button>`).join('')}</div></div>`:''}
+   ${r.gen?`${manq.length?`<div class="banner">Il reste ${nManq} point${nManq>1?'s':''} à renseigner (défaut ou RAS, type de chauffage, d’eau chaude ou de ventilation) avant de pré-remplir les travaux :
+      <div class="row">${manq.map(([x,ds])=>`<button data-act="go" data-v="${x.id}">Rubrique ${x.n} : ${ds.length} point${ds.length>1?'s':''}</button>`).join('')}</div></div>`:''}
      <div class="row" style="margin-bottom:10px"><button class="btn-primary" data-act="gentrav" ${manq.length?'disabled':''}>${svg('sync')}${filled(cur.f.trav)?'Mettre à jour depuis les désordres':'Pré-remplir depuis les désordres'}</button></div>
      <p class="muted">La liste est générée par thème à partir des désordres cochés et des défauts types. Modifiez-la librement : la mise à jour ajoute seulement les correctifs manquants.</p>
-     <div class="hint">Phrase ajoutée automatiquement au rapport, avant la liste : « ${esc(justifTexte(cur))} »</div>`:''}
+     <div class="hint">Phrase ajoutée automatiquement au rapport, avant la liste : « ${esc(justifTexte(cur))} »</div>
+     <div class="row"><button data-act="ia" ${filled(cur.f.trav)?'':'disabled'}>Relecture IA (Copilot)</button></div>
+     <p class="muted">Copie une consigne de relecture, les désordres et la liste de travaux (sans nom ni adresse), puis ouvre Copilot : collez le texte et reprenez ici les corrections retenues.</p>`:''}
    ${isCv(cur)&&r.id==='r8'?`<div class="row"><button data-act="reptrav">Reprendre la liste de travaux de la visite</button></div>`:''}
    ${r.fields?`<div class="form" style="margin-top:14px">${r.fields.map(field).join('')}</div>`:''}
    ${r.phId?phBlock(r.phId,it(r.phId),nums,false):''}`;
@@ -1112,7 +1118,8 @@ document.addEventListener('change',async e=>{
   if(el.dataset.ft==='r'){cur.f[el.dataset.f]=el.value;if(el.dataset.f==='mrCiv')memoMairie(cur);
     if(el.dataset.f==='commune'&&(!cur.f.cp||Object.values(COMMUNES).some(c=>c.cp===cur.f.cp))){cur.f.cp=COMMUNES[el.value].cp;cur.f.ville=COMMUNES[el.value].ville}
     save();keep();return}
-  if(el.dataset.ft==='c'){const a=cur.f[el.dataset.f]=(cur.f[el.dataset.f]||[]).filter(x=>x!==el.value);if(el.checked)a.push(el.value);save();return}
+  if(el.dataset.ft==='c'){const k=el.dataset.f,no=x=>/^Aucune?$/.test(x);let a=(cur.f[k]||[]).filter(x=>x!==el.value);
+    if(el.checked){a=no(el.value)?[]:a.filter(x=>!no(x));a.push(el.value)}cur.f[k]=a;save();return keep()}
   if(el.dataset.it&&el.dataset.k){
     const s=it(el.dataset.it),k=el.dataset.k;
     if(k==='on'||k==='d'||k==='ras'){s[k]=el.checked;if(el.checked&&k!=='d')s[k==='on'?'ras':'on']=false;save();return keep()}
@@ -1156,6 +1163,8 @@ document.addEventListener('click',async e=>{
   if(a==='reptrav'){if(!filled(cur.f.trav)){toast('La liste de travaux préconisés (rubrique 7) est vide');return}
     if(filled(cur.f.cvPresc)&&cur.f.cvPresc!==cur.f.trav&&!armed(b,'Confirmer le remplacement'))return;
     cur.f.cvPresc=cur.f.trav;save();keep();toast('Liste de travaux reprise');return}
+  if(a==='ia'){try{await navigator.clipboard.writeText(texteRelecture(cur));toast('Texte copié : collez-le dans Copilot')}catch(err){toast('Copie impossible : '+err.message);return}
+    open('https://copilot.microsoft.com/','_blank','noopener');return}
   if(a==='install'){const ev=instEv;instEv=null;render();if(ev){ev.prompt();await ev.userChoice.catch(()=>{})}return}
   if(a==='pdf'){await save(true);if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur le rapport');view='profil';return go()}const v=cur;return exportPdf(v).then(()=>{if(window.jspdf){v.pdfAt=Date.now();store.put(v).catch(()=>{})}}).catch(err=>toast('PDF impossible : '+err.message))}
   if(a==='export')return exportJson();
@@ -1170,6 +1179,15 @@ document.addEventListener('click',async e=>{
 // Suppression en deux temps : le premier appui arme le bouton, le second confirme.
 function armed(b,label){if(b.classList.contains('armed'))return true;b.classList.add('armed');const old=b.textContent;b.textContent=label;setTimeout(()=>{b.classList.remove('armed');b.textContent=old},3000);return false}
 function go(){render();scrollTo(0,0)}
+// Relecture IA : consigne + désordres + travaux, sans donnée personnelle (ni nom, ni adresse).
+function texteRelecture(v){
+  const des=RR(v).filter(r=>r.items).flatMap(r=>r.items.filter(d=>v.it[d.id]?.on).map(d=>{const s=v.it[d.id];
+    return `- Rubrique ${r.n}, ${d.t}${s.o.length?' : '+s.o.map(i=>d.o[i]).join(' ; '):''}${s.loc?' (localisation : '+s.loc+')':''}${s.note.trim()?'. Précisions : '+s.note.trim().replace(/\s*\n\s*/g,' '):''}`}));
+  return ['Tu relis la liste de travaux préconisés d’un rapport de visite de logement ('+(isPdl(v)?'permis de louer, autorisation préalable de mise en location':'contrôle de décence, décret n° 2002-120')+').',
+    'Corrige l’orthographe et la grammaire, améliore la clarté sans changer le sens technique, et signale les incohérences avec les désordres constatés : désordre sans travaux correspondant, ou travaux sans désordre. N’ajoute pas d’exigence réglementaire non justifiée.',
+    'Rends d’abord la liste corrigée, dans la même structure, puis la liste de tes remarques.','',
+    'DÉSORDRES CONSTATÉS :',...(des.length?des:['- Aucun']),'','LISTE DE TRAVAUX PRÉCONISÉS :',v.f.trav||''].join('\n');
+}
 // Installation : bouton si le navigateur la propose (Chrome, Edge) ; sur iPhone et iPad, seulement une aide.
 let instEv=null;
 const iosNonInst=(/iP(hone|ad|od)/.test(navigator.userAgent)||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)&&!navigator.standalone;
