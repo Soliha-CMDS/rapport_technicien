@@ -156,6 +156,43 @@ button.armed{background:var(--danger);color:#fff;border-color:var(--danger)}
 .tag.pdl{background:var(--warn-bg);color:var(--warn)}
 button:active{transform:scale(.98)}
 @media (prefers-reduced-motion:reduce){button:active{transform:none}}
+/* Rapport de dégradation */
+.tag.deg{background:var(--ok-bg);color:var(--ok)}
+.degtop{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-bottom:8px;margin-bottom:6px;border-bottom:1px solid var(--line)}
+.degtop .top{position:static;margin-bottom:6px;padding-block:6px}
+.degtop h1{font-size:1.1rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.score{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:6px 10px;display:grid;grid-template-columns:repeat(3,auto) 1fr;gap:4px 14px;align-items:center}
+.score>div{display:flex;align-items:baseline;gap:5px}
+.score .k{font-size:.75rem;color:var(--muted);font-weight:700;letter-spacing:.05em}
+.score .v{font-size:1.1rem;font-weight:700;font-variant-numeric:tabular-nums}
+.score .lvl{background:var(--chip);color:var(--muted);border-radius:8px;padding:4px 8px;font-weight:700;font-size:.85rem;line-height:1.2;justify-self:start}
+.lvl.ok{background:var(--ok-bg);color:var(--ok)}.lvl.warn{background:var(--warn-bg);color:var(--warn)}.lvl.danger{background:var(--danger-bg);color:var(--danger)}
+.score .rest{grid-column:1/-1;font-size:.82rem;color:var(--muted)}
+.parts{display:flex;gap:6px;margin-top:8px;overflow-x:auto}
+.parts button{min-width:52px;padding:6px 10px;gap:4px}
+.parts button[aria-current]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.parts .pill{font-size:.7rem;padding:0 6px}
+.el{padding:12px 14px;display:grid;gap:10px}
+.el .h{display:flex;gap:8px;align-items:flex-start}
+.el .h .t{flex:1;min-width:0;font-weight:700}
+.el .res{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap;color:var(--accent-strong)}
+.el .lab{font-size:.85rem;font-weight:700;color:var(--muted);margin-bottom:4px}
+.el .info{font-size:.85rem;margin-top:4px}
+.el .ln{display:flex;gap:14px;flex-wrap:wrap;align-items:end}
+.el .ln .field{flex:1 1 150px}
+.el .kval{font-weight:700;min-height:44px;display:flex;align-items:center}
+.seg{display:flex;gap:6px}
+.seg label.chip{flex:1;min-width:0;padding:8px 2px;justify-content:center;border-radius:10px;white-space:nowrap;min-height:44px}
+.item.st0{border-color:var(--ok);box-shadow:inset 4px 0 0 var(--ok)}
+.item.st1{border-color:var(--accent);box-shadow:inset 4px 0 0 var(--accent)}
+.item.st2,.item.st3{border-color:var(--danger);box-shadow:inset 4px 0 0 var(--danger)}
+.item.stSO{box-shadow:inset 4px 0 0 var(--muted)}
+.item.stNV{border-color:var(--warn);box-shadow:inset 4px 0 0 var(--warn)}
+.gcard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;display:grid;gap:10px}
+.gcard .name{font-weight:700;font-size:1.05rem}
+.gcard .score{border:0;padding:0}
+h2.sec{margin:20px 0 8px}
+@media (max-width:480px){.score{grid-template-columns:repeat(3,auto)}.score .lvl{grid-column:1/-1}}
 
 </style>
 
@@ -179,6 +216,9 @@ ICO.rappel="data:image/webp;base64,UklGRpwTAABXRUJQVlA4WAoAAAAQAAAAbwAAbwAAQUxQS
 const L_THO="data:image/png;base64,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";
 
 ICO.courrier="data:image/webp;base64,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";
+
+// Tuile « Rapport de dégradation ».
+ICO.degradation="data:image/webp;base64,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";
 
 const ADIL="ADIL au 05.49.28.08.08";
 const COM={
@@ -549,6 +589,7 @@ const COMMUNES={
  'Saint-Maixent-l’École':{cp:'79400',ville:'Saint-Maixent-l’École',logo:L_SME,foot:'Permis de louer de SAINT-MAIXENT-L’ÉCOLE',arr:'du maire de Saint-Maixent-l’École'}
 };
 const isPdl=v=>v.type==='pdl';
+const isDeg=v=>v.type==='deg';
 const ADMIN_PDL=[
  ['h','Demande'],
  ['commune','Commune','r',Object.keys(COMMUNES)],
@@ -611,8 +652,8 @@ const R_PDL=[
 ];
 const isCv=v=>isPdl(v)&&v.f.typeVis==='Contre-visite';
 // Visite de contrôle : la rubrique 8 « Contre-visite » est masquée.
-const RR=v=>isPdl(v)?(isCv(v)?R_PDL:R_PDL.slice(0,7)):R;
-const ADM=v=>isPdl(v)?ADMIN_PDL:ADMIN;
+const RR=v=>isDeg(v)?[]:isPdl(v)?(isCv(v)?R_PDL:R_PDL.slice(0,7)):R;
+const ADM=v=>isDeg(v)?ADMIN_DEG:isPdl(v)?ADMIN_PDL:ADMIN;
 
 // Correctifs avec leurs règles techniques, utilisés pour le permis de louer (clé = correctif court de la fiche décence).
 const TECH={
@@ -746,6 +787,166 @@ const dfi=(id,re)=>ITEMS[id].df.findIndex(x=>re.test(x[0]));
   console.assert(q.includes('• escalier vers l’étage – Installation d’une main courante dans l’escalier')&&q.some(l=>l.startsWith('• chambre 1 – Mise en sécurité'))&&q.includes('   ◦ Création de prises de courant en nombre suffisant et suppression des surcharges'),'travaux localisation');
   console.assert(pt.includes('90 à 95 cm')&&pt.includes('NF P01-012')&&pt.includes('Certibiocide')===false&&!pt.includes('diagnostic technique'),'travaux pdl');})();
 
+/* ---------- Rapport de dégradation (grilles Anah) ---------- */
+// Relevé des 3 grilles Excel (sources/ref-degradation). L'Excel prime sur le guide pour les règles de calcul.
+const OPERATIONS=['OPAH Agglo 2B','Pacte Mellois'];
+// Seuils de l'indicateur de dégradation (ID) de l'Excel : [borne haute exclue, libellé, couleur].
+const SEUILS_ID=[[.35,'Dégradation inexistante ou faible','ok'],[.55,'Dégradation moyenne','warn'],[Infinity,'Dégradation très importante','danger']];
+// Grille irrecevable dès NV_MAX éléments non vérifiables : l'Excel bloque à 3, le guide au-delà de 3.
+const NV_MAX=3;
+const NOTE_INFO={0:'Bon état, aucune intervention',1:'Intervention sans remplacement (reprise)',2:'Intervention mixte : reprise d’une partie, remplacement de l’autre (à justifier)',3:'Remplacement à neuf, ou création d’un élément absent indispensable',SO:'Sans objet : élément absent dont la création n’est pas nécessaire',NV:'Non vérifiable : indiquez le motif'};
+const AMPLEURS=[[0,'0 %'],[.25,'25 %'],[.5,'50 %'],[1,'100 %']];
+// Élément : [partie, id, intitulé, majeur, ampleur proposée, prorata proposé, multiplicateur N (niveaux) ou P (pièces), SO autorisé].
+const mkG=a=>a.map(([part,id,t,maj,am,p,m,so])=>({part,id,t,maj:!!maj,a:!!am,p:!!p,m,so:!!so}));
+const GRILLES={
+ mi:{nom:'Maison individuelle',parts:{I:['Gros œuvre','bati'],II:['Étanchéité, isolation, ventilation','interieur'],III:['Réseaux','equip'],IV:['Équipements','logement'],V:['Organisation fonctionnelle, spécificités techniques','amenag'],VI:['Autres','risques']},els:mkG([
+  ['I','1.1','En sous-œuvre (fondations)',1,1,0,'',0],
+  ['I','2.1','Murs périphériques et tout élément porteur (dont refends, linteaux, poutres, poteaux)',1,1,0,'N',0],
+  ['I','2.2','Planchers',1,1,1,'',0],
+  ['I','2.3','Charpente (dont chevrons)',1,1,0,'',0],
+  ['I','2.4','Escalier, garde-corps et rampes',1,1,1,'',1],
+  ['I','3.1','Couverture et accessoires (dont tuiles, zinc, ardoises…)',1,1,0,'',0],
+  ['I','3.2','Gouttières et descentes',1,1,1,'',0],
+  ['I','3.3','Autres éléments (dont souches, lucarnes, corniches)',0,0,1,'',0],
+  ['II','4.1','Étanchéité des murs extérieurs (enduits, revêtements)',1,1,0,'N',0],
+  ['II','4.2','Humidité tellurique des murs',0,1,0,'N',0],
+  ['II','5.1','Isolation des parois par l’extérieur et/ou l’intérieur (verticales, horizontales, dont combles)',1,1,1,'N',0],
+  ['II','5.2','Autres éléments en façade (dont modénatures, garde-corps, bandeaux, encadrements, auvents, volets)',0,1,1,'',1],
+  ['II','5.3','Fenêtres',0,0,1,'',0],
+  ['II','5.4','Portes',0,0,1,'',0],
+  ['II','6.1','Ventilation des pièces principales',0,1,1,'',0],
+  ['II','6.2','Ventilation des pièces humides',1,1,1,'',0],
+  ['III','7','Installation électrique (dont tableau et raccordement à la terre)',1,1,0,'N',0],
+  ['III','8','Installation gaz (dont ventilation)',1,1,0,'N',1],
+  ['III','9','Conduits (VMC, autres)',1,1,1,'N',1],
+  ['III','10','Alimentation d’eau',1,1,0,'N',0],
+  ['III','11','Évacuation des eaux usées (dont raccordements)',1,1,0,'N',0],
+  ['IV','12','Chauffage',1,1,1,'P',1],
+  ['IV','13','Production d’eau chaude',1,1,0,'N',1],
+  ['IV','14','Installation sécurité incendie (dont détecteurs, ventilations)',1,1,0,'P',0],
+  ['IV','15','Cuisine ou coin cuisine',1,1,0,'',0],
+  ['IV','16','Salle d’eau',1,1,1,'',0],
+  ['IV','17','Cabinet d’aisance',1,1,1,'',0],
+  ['V','18.1','Taille et volume des pièces, commandement',1,1,0,'P',0],
+  ['V','18.2','Éclairage naturel',0,0,0,'P',0],
+  ['V','19.1','Protection phonique',1,1,0,'P',0],
+  ['V','20.1','Revêtements murs et plafonds',1,1,0,'P',0],
+  ['V','20.2','Revêtements de sol',0,1,1,'P',0],
+  ['VI','21','Autres espaces spécifiques (clôture, terrasses, véranda…)',0,0,1,'',1],
+  ['VI','22','Locaux techniques (garage, caves…)',0,0,1,'',1],
+  ['VI','23','Dépose des matériaux et traitements spécifiques (dont amiante, plomb, termites, champignons…)',0,1,1,'',1]])},
+ bc:{nom:'Bâtiment collectif (parties communes)',parts:{I:['Gros œuvre','bati'],II:['Étanchéité, isolation, finitions','interieur'],III:['Réseaux','equip'],IV:['Équipements','logement'],V:['Autres','risques']},els:mkG([
+  ['I','1.1','En sous-œuvre (fondations)',1,1,0,'',0],
+  ['I','2.1','Murs périphériques et tout élément porteur (dont refends, linteaux, poutres, poteaux)',1,1,0,'N',0],
+  ['I','2.2','Planchers',1,1,1,'',0],
+  ['I','2.3','Charpente (dont chevrons)',1,1,0,'',0],
+  ['I','2.4','Escaliers',1,0,1,'N',1],
+  ['I','2.5','Garde-corps et rampes (parties communes)',1,0,1,'',1],
+  ['I','3.1','État de la couverture (dont tuiles, zinc, ardoises…)',1,1,0,'',0],
+  ['I','3.2','Gouttières et descentes',1,1,1,'',0],
+  ['I','3.3','Autres éléments (dont souches, lucarnes, corniches…)',0,0,1,'',0],
+  ['II','4.1','Étanchéité des murs extérieurs (enduits, revêtements)',1,1,0,'N',0],
+  ['II','4.2','Humidité tellurique des murs',0,1,0,'N',0],
+  ['II','5.1','Isolation des parois verticales, horizontales (dont combles)',1,1,1,'N',0],
+  ['II','5.2','Fenêtres (parties communes)',0,0,1,'',0],
+  ['II','5.3','Porte d’entrée, porche et sas',0,0,1,'',0],
+  ['II','6.1','Revêtements intérieurs murs et plafonds',1,1,0,'N',0],
+  ['II','6.2','Revêtements de sol',0,1,1,'N',0],
+  ['II','6.3','Autres éléments en façade (dont modénatures, garde-corps, bandeaux, encadrements, auvents, volets)',0,1,1,'N',0],
+  ['III','7','Installation électrique (dont tableau et raccordement à la terre)',1,1,0,'N',0],
+  ['III','8','Installation gaz (dont ventilation)',1,1,0,'N',1],
+  ['III','9','Conduit de ventilation (VMC ou autres)',1,1,0,'N',1],
+  ['III','10','Alimentation d’eau potable',1,1,0,'N',0],
+  ['III','11','Évacuation des eaux usées (dont raccordements)',1,1,0,'N',0],
+  ['IV','12','Chauffage collectif',1,1,0,'N',1],
+  ['IV','13','Production d’eau chaude collective',1,1,0,'N',1],
+  ['IV','14','Installation sécurité incendie (dont détecteurs, ventilation et signalétique)',1,1,0,'N',0],
+  ['IV','15','Ascenseur',1,0,1,'',1],
+  ['V','16','Sols cour collective',0,1,1,'',1],
+  ['V','17','WC communs',0,0,1,'',1],
+  ['V','18','Locaux communs techniques, vélos, poussettes',0,0,1,'',1],
+  ['V','19','Caves (cloisonnement)',0,0,1,'',1],
+  ['V','20','Conduits d’évacuation déchets / local poubelles',0,0,1,'',1],
+  ['V','21','Dépose des matériaux et traitements spécifiques (dont amiante, plomb, termites, champignons…)',0,1,1,'',1]])},
+ lc:{nom:'Logement en collectif (parties privatives)',parts:{I:['Organisation fonctionnelle, spécificités techniques du logement','amenag'],II:['Menuiseries, ventilation','interieur'],III:['Réseaux','equip'],IV:['Équipements','logement'],V:['Autres','risques']},els:mkG([
+  ['I','1.1','Taille et volume des pièces, commandement',1,1,0,'P',0],
+  ['I','1.2','Éclairage naturel',0,0,0,'P',0],
+  ['I','2.1','Protection phonique',1,1,0,'P',0],
+  ['I','2.2','Isolation thermique – doublage périphérique des parois',1,1,1,'',0],
+  ['I','3.1','Revêtements murs et plafonds',1,1,0,'P',0],
+  ['I','3.2','Revêtements de sol',0,1,1,'P',0],
+  ['II','4.1','Fenêtres (parties privatives)',0,0,1,'',0],
+  ['II','4.2','Portes (parties privatives)',0,0,1,'',0],
+  ['II','4.3','Garde-corps et rampes',1,0,1,'',1],
+  ['II','5.1','Ventilation des pièces principales',0,1,0,'P',0],
+  ['II','5.2','Ventilation de la cuisine et des pièces de service (salle d’eau…)',1,1,0,'P',0],
+  ['III','6','Installation électrique (dont tableau et raccordement à la terre)',1,1,0,'P',0],
+  ['III','7','Installation gaz (dont ventilation)',1,1,0,'P',1],
+  ['III','8','Alimentation d’eau',1,1,0,'P',0],
+  ['III','9','Évacuation des eaux usées (dont raccordements)',1,1,0,'P',0],
+  ['IV','10','Cuisine ou coin cuisine',1,1,0,'',0],
+  ['IV','11','Cabinet d’aisance',1,1,0,'',0],
+  ['IV','12','Salle d’eau',1,1,0,'',0],
+  ['IV','13','Chauffage',1,1,1,'P',1],
+  ['IV','14','Production d’eau chaude',1,1,0,'P',1],
+  ['IV','15','Installation sécurité incendie (dont détecteurs, ventilation)',1,1,0,'P',0],
+  ['V','16','Conduits d’évacuation (VMC, autres)',0,1,1,'',1],
+  ['V','17','Autres espaces spécifiques (balcons, loggia…)',0,1,1,'',1],
+  ['V','18','Dépose des matériaux et traitements spécifiques (dont amiante, plomb, termites, champignons…)',0,1,1,'',1]])}};
+// Descriptif : la maison ou l'immeuble dans v.f ; chaque logement dans v.f, sous des clés préfixées par l'id de sa grille.
+const DESC_DEG=[['desc','Descriptif technique, éléments manquants et spécificités','ta',0,'Les éléments sans objet et non vérifiables y seront ajoutés automatiquement dans le rapport.']];
+const ADMIN_DEG=[
+  ['h','Opération et visite'],
+  ['op','Opération (imprimée sur la page de garde)','dl',OPERATIONS],
+  ['dateVis','Date de visite *','d'],
+  ['pNom','Propriétaire (nom, société ou indivision)','t'],
+  ['adresse','Adresse','t'],['cp','Code postal','t'],['ville','Ville','t'],
+  ['h','Descriptif général'],
+  ['annee','Année de construction','n',0,'Avant 1949 : un rappel du constat de risque d’exposition au plomb (CREP) sera ajouté au rapport.'],
+  ['nbBat','Nombre de bâtiments de l’ensemble immobilier','n',0,0,v=>v.bien==='imm'],
+  ['nomBat','Nom du bâtiment évalué','t',0,0,v=>v.bien==='imm'],
+  ['surf','Surface habitable (m²)','n',0,0,v=>v.bien==='mi'],
+  ['nbNiv','Nombre de niveaux * (hors sous-sol et combles non aménagés)','n'],
+  ['nbPP','Nombre de pièces principales * (plus de 9 m²)','n',0,0,v=>v.bien==='mi'],
+  ['conso','Consommation avant travaux (kWhep/m².an)','n'],
+  ['vent','Type de ventilation','r',['Naturelle','VMC','Aucune'],0,v=>v.bien==='mi'],
+  ...DESC_DEG];
+const LGT_FIELDS=id=>[[id+'_nom','Nom ou étage du logement','t'],[id+'_nbPP','Nombre de pièces principales * (plus de 9 m²)','n'],[id+'_surf','Surface habitable (m²)','n'],[id+'_conso','Consommation avant travaux (kWhep/m².an)','n'],...DESC_DEG.map(([k,...r])=>[id+'_'+k,...r])];
+const lgtNom=(v,g)=>v.f[g.id+'_nom']||'Logement sans nom';
+// Multiplicateur K : niveaux de la maison ou de l'immeuble (N), pièces principales de la maison ou du logement (P). Vide, comme dans l'Excel, tant qu'il n'est pas renseigné.
+function degK(v,g,e){if(!e.m)return null;const k=+(e.m==='N'?v.f.nbNiv:g.k==='lc'?v.f[g.id+'_nbPP']:v.f.nbPP);return k>=1?Math.floor(k):null}
+// Multiplicateurs obligatoires non renseignés pour une grille.
+const degKManq=(v,g)=>[...new Set(GRILLES[g.k].els.filter(e=>e.m&&!degK(v,g,e)).map(e=>e.m==='N'?'nombre de niveaux':'nombre de pièces principales'))];
+// Prorata « 4/5 », « 4 sur 5 » ou décimal entre 0 et 1 ; NaN si illisible, null si vide.
+function prorata(s){s=String(s??'').trim();if(!s)return null;const m=/^(\d+(?:[.,]\d+)?)\s*(?:\/|sur)\s*(\d+(?:[.,]\d+)?)$/i.exec(s);
+  const x=m?+m[1].replace(',','.')/+m[2].replace(',','.'):+s.replace(',','.');return x>=0&&x<=1?x:NaN}
+// Formules de l'Excel : note = H × I × J × K, chaque facteur pris seulement s'il est renseigné ; max = 3 × K (3 sans K) ; SO exclu ; NV = 0 avec max conservé.
+function degNote(v,g,e){const s=g.n[e.id]||{},k=degK(v,g,e);if(s.h==='SO')return{n:null,max:null};const max=k?3*k:3;
+  if(typeof s.h!=='number')return{n:0,max};const p=e.p?prorata(s.pt):null;
+  return{n:s.h*(e.a&&s.a!=null?s.a:1)*(p!=null&&p>=0?p:1)*(k||1),max}}
+const degNiveau=id=>SEUILS_ID.find(([b])=>id<b);
+// DM : notes d'état des éléments majeurs (SO et NV comptés 0) / nombre de majeurs / 3, comme l'Excel.
+function degTot(v,g){let sn=0,sm=0,smaj=0,nmaj=0,nv=0,rest=0;
+  for(const e of GRILLES[g.k].els){const s=g.n[e.id]||{},r=degNote(v,g,e);if(s.h==null)rest++;if(s.h==='NV')nv++;
+    if(r.max!=null){sn+=r.n;sm+=r.max}if(e.maj){nmaj++;smaj+=typeof s.h==='number'?s.h:0}}
+  const DM=smaj/nmaj/3,DG=sm?sn/sm:0,ID=1-Math.sqrt(((1-DM)**2+(1-DG)**2)/2);
+  return{sn,sm,DM,DG,ID,nv,rest,nmaj,irr:nv>=NV_MAX,niv:degNiveau(ID)}}
+// Auto-tests : cas des 3 fichiers Excel, majeur en SO, seuil NV, logement sans désordre.
+(()=>{const mk=(k,S,f)=>{const g={id:'g0',k,n:{}};for(const [id,[h,a,pt]] of Object.entries(S))g.n[id]={h,a,pt};return[{f},g]};
+  const ok=(k,S,f,sn,sm,id)=>{const T=degTot(...mk(k,S,f));console.assert(Math.abs(T.sn-sn)<1e-9&&T.sm===sm&&T.ID.toFixed(3)===id,'degradation '+k,T);return T};
+  const mi={'1.1':[0,1],'2.1':[1,1],'2.2':[3,.5],'2.3':[0,1],'2.4':[1,1],'3.1':[3,.5],'3.2':[1,1,'1'],'3.3':[1,null,'1'],'4.1':[1,1],'4.2':[1,1],'5.1':[3,.5],'5.2':[1,1],'5.3':[3],'5.4':[3],'6.1':[3,1],'6.2':[3,1],'7':[3,.25],'8':['SO'],'9':[3,1],'10':[0,1],'11':[0,1],'12':[3,1],'13':[1,1],'14':[3,1],'15':[1,1],'16':[1,1],'17':[1,1],'18.1':[0,1],'18.2':[0],'19.1':[1],'20.1':[3,.5],'20.2':[3,.5],'21':['SO'],'22':['SO'],'23':['SO']};
+  const T=ok('mi',mi,{nbNiv:2,nbPP:2},60.5,141,'0.463');console.assert(T.DM===.5&&T.niv[1]==='Dégradation moyenne'&&!T.irr&&!T.rest,'degradation mi DM');
+  ok('bc',{'1.1':[0,0],'2.1':[1,.5],'2.2':[1,1,'1'],'2.3':[1,.25],'2.4':[1,null,'1'],'2.5':[1,null,'1'],'3.1':[1,.25],'3.2':[1,.25,'1'],'3.3':[0,null,'1'],'4.1':[3,.25],'4.2':[0,0],'5.1':[3,1,'1'],'5.2':[3,null,'1'],'5.3':[3,null,'1'],'6.1':[3,1],'6.2':[1,1,'1'],'6.3':[1,1,'1'],'7':[3,1],'8':[3,1],'9':['SO'],'10':[3,.5],'11':[3,1],'12':['SO'],'13':['SO'],'14':[3,1],'15':['SO'],'16':[1,1,'1'],'17':[3,null,'1'],'18':[0,null,'1'],'19':[0,null,'1'],'20':[1,null,'1'],'21':[3,1,'1']},{nbNiv:4},111.75,201,'0.536');
+  ok('lc',{'1.1':[1,.5],'1.2':[0],'2.1':[3,1],'2.2':[3,.5,'0,4'],'3.1':[3,1],'3.2':[1,1,'1'],'4.1':[3,null,'1'],'4.2':[3,null,'1'],'4.3':[1,null,'1'],'5.1':[3,.25],'5.2':[3,1],'6':[3,1],'7':[3,1],'8':[3,1],'9':[3,1],'10':[3,1],'11':[3,1],'12':[3,1],'13':[3,1,'1'],'14':[3,1],'15':[3,1],'16':['SO'],'17':['SO'],'18':[3,.25,'1']},{g0_nbPP:3},114.1,150,'0.821');
+  const all=(k,h)=>Object.fromEntries(GRILLES[k].els.map(e=>[e.id,[h,1]]));
+  const z=ok('mi',all('mi',0),{nbNiv:1,nbPP:1},0,105,'0.000');console.assert(z.niv[1]==='Dégradation inexistante ou faible','degradation zéro');
+  const so=degTot(...mk('mi',{...all('mi',3),'2.4':['SO']},{nbNiv:1,nbPP:1}));console.assert(Math.abs(so.DM-23/24)<1e-9,'degradation majeur SO');
+  const nv=n=>degTot(...mk('mi',{...all('mi',1),'1.1':n>0?['NV']:[1,1],'2.1':n>1?['NV']:[1,1],'2.2':n>2?['NV']:[1,1]},{nbNiv:1,nbPP:1}));
+  console.assert(!nv(2).irr&&nv(3).irr&&nv(3).sm===105,'degradation NV');
+  console.assert(prorata('4/5')===.8&&prorata('2 sur 4')===.5&&prorata('0,4')===.4&&isNaN(prorata('6/5'))&&prorata('')===null,'prorata');
+  console.assert(degKManq({f:{nbNiv:2}},{id:'g0',k:'mi',n:{}}).join()==='nombre de pièces principales','degKManq');
+  console.assert(GRILLES.mi.els.length===35&&GRILLES.bc.els.length===32&&GRILLES.lc.els.length===24&&['mi','bc','lc'].map(k=>GRILLES[k].els.filter(e=>e.maj).length).join()==='24,20,16','grilles');})();
+
 
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
@@ -788,6 +989,7 @@ const store={db:null,mem:new Map(),
 // Remet à niveau les visites créées par une version précédente.
 function migrate(v){
   v.f=v.f||{};v.it=v.it||{};v.done=v.done||{};
+  if(isDeg(v)){v.g=v.g||[];return v}
   if(isPdl(v)){if(!COMMUNES[v.f.commune])v.f.commune='Thouars';if(!v.f.typeVis)v.f.typeVis=v.f.cvDateVis?'Contre-visite':'Visite de contrôle'}else if(!COM[v.f.dem])v.f.dem='CAF';
   // Code postal et ville séparés ; bât., entrée, étage et courée regroupés dans l'adresse.
   const f=v.f;if(f.cpville!==undefined){if(!f.cp&&!f.ville){const m=/^\s*(\d{5})\s*(.*)$/.exec(f.cpville);if(m){f.cp=m[1];f.ville=m[2].trim()}else f.ville=f.cpville.trim()}delete f.cpville}
@@ -815,9 +1017,9 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today=()=>new Date().toISOString().slice(0,10);
 const frDate=d=>d&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d.split('-').reverse().join('/'):(d||'');
-const newVisit=t=>({dfTxt:1,dfV:2,id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),created:Date.now(),updated:Date.now(),
-  ...(t==='pdl'?{type:'pdl',f:{commune:'Thouars',cp:COMMUNES.Thouars.cp,ville:COMMUNES.Thouars.ville,typeVis:'Visite de contrôle',dateVis:today()}}:{f:{dem:'CAF',typeVis:'Visite initiale',dateVis:today(),mrCiv:'Madame, Monsieur'}}),it:{},done:{},sig:''});
-function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(t._t);t._t=setTimeout(()=>t.hidden=true,2600)}
+const newVisit=(t,b)=>({dfTxt:1,dfV:2,id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),created:Date.now(),updated:Date.now(),
+  ...(t==='deg'?{type:'deg',bien:b,f:{op:P.lastOp||'',dateVis:today(),...(b==='imm'?{g1_nom:'Logement 1'}:{})},g:b==='imm'?[{id:'g0',k:'bc',n:{}},{id:'g1',k:'lc',n:{}}]:[{id:'g0',k:'mi',n:{}}]}:t==='pdl'?{type:'pdl',f:{commune:'Thouars',cp:COMMUNES.Thouars.cp,ville:COMMUNES.Thouars.ville,typeVis:'Visite de contrôle',dateVis:today()}}:{f:{dem:'CAF',typeVis:'Visite initiale',dateVis:today(),mrCiv:'Madame, Monsieur'}}),it:{},done:{},sig:''});
+function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(t._t);t._t=setTimeout(()=>t.hidden=true,Math.max(2600,msg.length*60))}
 function save(now){if(!cur)return;cur.updated=Date.now();clearTimeout(saveT);const go=()=>store.put(cur).catch(e=>toast('Enregistrement impossible : '+e.message));if(now)return go();saveT=setTimeout(go,350)}
 const itemOf=id=>RR(cur).flatMap(r=>r.items||[]).find(d=>d.id===id);
 const it=(id,v=cur)=>v.it[id]||(v.it[id]={on:false,o:[],t:[],df:[],note:'',loc:'',d:false,ph:[]});
@@ -860,7 +1062,8 @@ function field([k,label,type,opts,hint,cond]){
   if(type==='r'||type==='c'){
     ctl=`<div class="chips" role="group" aria-label="${esc(label)}">${opts.map(o=>{const ch=type==='r'?v===o:(v||[]).includes(o);
       return `<label class="chip"><input type="${type==='r'?'radio':'checkbox'}" name="${k}" data-f="${k}" data-ft="${type}" value="${esc(o)}" ${ch?'checked':''}>${esc(k==='dem'?COM[o].label:o)}</label>`}).join('')}</div>`;
-  }else if(type==='ta')ctl=`<textarea id="f_${k}" data-f="${k}" ${k==='trav'?'class="big"':''}>${esc(v)}</textarea>`;
+  }else if(type==='dl')ctl=`<input id="f_${k}" type="text" list="dl_${k}" data-f="${k}" value="${esc(v)}"><datalist id="dl_${k}">${[...new Set([...opts,...(P.ops||[])])].map(o=>`<option value="${esc(o)}">`).join('')}</datalist>`;
+  else if(type==='ta')ctl=`<textarea id="f_${k}" data-f="${k}" ${k==='trav'?'class="big"':''}>${esc(v)}</textarea>`;
   else{const t={t:'text',n:'number',d:'date',tm:'time',tel:'tel',email:'email'}[type];
     ctl=`<input id="f_${k}" type="${t}" data-f="${k}" value="${esc(v)}" ${type==='n'?'inputmode="decimal" step="any"':''}>`}
   return `<div class="field ${full?'full':''}"><span>${esc(label)}</span>${ctl}${hint?`<div class="hint">${esc(hint)}</div>`:''}</div>`;
@@ -900,20 +1103,20 @@ function phBlock(id,s,nums,need){return `<div class="grp"><span>Photos${need?' <
       <label class="btn cam">${svg('plus')}Depuis la galerie<input type="file" accept="image/*" multiple data-photo="${id}"></label></div></div></div>`}
 function topbar(title,sub,back,logo){return `<div class="top">${back?`<button class="btn-icon" data-act="${back}" aria-label="Retour">${svg('back')}</button>`:''}<div class="grow"><h1>${esc(title)}</h1>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>${logo?`<img class="com" src="${logo}" alt="${esc(isPdl(cur)?cur.f.commune:cur.f.dem)}">`:''}</div>`}
 const cpv=v=>[v.f.cp,v.f.ville].filter(Boolean).join(' ');
-const who=v=>isPdl(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Logement non renseigné':[v.f.nom,v.f.prenom].filter(Boolean).join(' ')||'Occupant non renseigné';
-const where=v=>isPdl(v)?(v.f.pNom||v.f.pSoc?'Propriétaire : '+(v.f.pSoc||[v.f.pNom,v.f.pPrenom].filter(Boolean).join(' ')):''):[v.f.adresse,cpv(v)].filter(Boolean).join(', ');
+const who=v=>isDeg(v)?v.f.pNom||[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Propriétaire non renseigné':isPdl(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Logement non renseigné':[v.f.nom,v.f.prenom].filter(Boolean).join(' ')||'Occupant non renseigné';
+const where=v=>isDeg(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', '):isPdl(v)?(v.f.pNom||v.f.pSoc?'Propriétaire : '+(v.f.pSoc||[v.f.pNom,v.f.pPrenom].filter(Boolean).join(' ')):''):[v.f.adresse,cpv(v)].filter(Boolean).join(', ');
 const logoOf=v=>isPdl(v)?COMMUNES[v.f.commune]?.logo:COM[v.f.dem]?.logo;
-const kind=v=>isPdl(v)?'Permis de louer · '+v.f.commune+' · '+(v.f.typeVis||''):(COM[v.f.dem]?.label||'')+' · '+(v.f.typeVis||'');
+const kind=v=>isDeg(v)?['Dégradation',v.bien==='imm'?`Immeuble · ${v.g.length-1} logement${v.g.length>2?'s':''}`:'Maison individuelle',v.f.op].filter(Boolean).join(' · '):isPdl(v)?'Permis de louer · '+v.f.commune+' · '+(v.f.typeVis||''):(COM[v.f.dem]?.label||'')+' · '+(v.f.typeVis||'');
 
 // Carte d'un dossier : type, occupant ou logement, avancement, actions.
 function caseHtml(v){
-  const rs=RR(v),fait=rs.filter(r=>rstat(r,v)[0][0]!=='À faire').length,manq=rs.reduce((n,r)=>n+(r.items||[]).filter(d=>d.p&&v.it[d.id]?.on&&!v.it[d.id].ph.length).length,0);
-  return `<div class="case"><span class="tag ${isPdl(v)?'pdl':''}">${esc(kind(v))}</span>
+  const deg=isDeg(v),dr=deg?v.g.reduce((n,g)=>n+degTot(v,g).rest,0):0,rs=RR(v),fait=rs.filter(r=>rstat(r,v)[0][0]!=='À faire').length,manq=rs.reduce((n,r)=>n+(r.items||[]).filter(d=>d.p&&v.it[d.id]?.on&&!v.it[d.id].ph.length).length,0);
+  return `<div class="case"><span class="tag ${isPdl(v)?'pdl':deg?'deg':''}">${esc(kind(v))}</span>
    <div><div class="name">${esc(who(v))}</div><div class="muted">${esc(where(v)||'Adresse non renseignée')}</div></div>
-   <div class="meta"><span>${v.f.dateVis?'Visite le '+esc(frDate(v.f.dateVis))+' · ':''}${v.pdfAt?'Rapport du '+new Date(v.pdfAt).toLocaleDateString('fr-FR'):fait+'/'+rs.length+' rubriques'}${manq?` · <b style="color:var(--danger)">${manq} photo${manq>1?'s':''} manquante${manq>1?'s':''}</b>`:''}</span></div>
+   <div class="meta"><span>${v.f.dateVis?'Visite le '+esc(frDate(v.f.dateVis))+' · ':''}${v.pdfAt?'Rapport du '+new Date(v.pdfAt).toLocaleDateString('fr-FR'):deg?(dr?`${dr} élément${dr>1?'s':''} à noter`:'Grille complète'):fait+'/'+rs.length+' rubriques'}${manq?` · <b style="color:var(--danger)">${manq} photo${manq>1?'s':''} manquante${manq>1?'s':''}</b>`:''}</span></div>
    <div class="row"><button class="btn-primary" data-act="open" data-id="${v.id}">${v.pdfAt?'Ouvrir':'Reprendre'}</button>
     ${v.pdfAt?`<button data-act="reopen" data-id="${v.id}">Remettre en cours</button>`:''}
-    ${isPdl(v)?'':`<button data-act="ctrl" data-id="${v.id}">Créer la visite de contrôle</button>`}
+    ${isPdl(v)||deg?'':`<button data-act="ctrl" data-id="${v.id}">Créer la visite de contrôle</button>`}
     <button class="btn-danger" data-act="delv" data-id="${v.id}">Supprimer</button></div></div>`;
 }
 function render(){
@@ -949,10 +1152,11 @@ function render(){
     const L=[...visits].sort((a,b)=>b.updated-a.updated),n=L.filter(v=>exSel.has(v.id)).length;
     app.innerHTML=`${topbar('Sauvegarde et import','Visites et carnet des mairies','list')}
      <p class="muted">Cochez les dossiers à exporter. La sauvegarde (.json) sert à transférer des dossiers vers un PC ou à les partager avec un collègue.</p>
+     <div class="hint">Pour transférer une sauvegarde vers un téléphone, utilisez Quick Share, le Bluetooth ou un câble USB, pas Outlook, Teams ni OneDrive professionnel : ces applications chiffrent le fichier, qui devient impossible à importer.</div>
      <div class="row" style="margin-bottom:12px"><button data-act="sel" data-k="all">Tout cocher</button><button data-act="sel" data-k="encours">Dossiers en cours</button><button data-act="sel" data-k="none">Tout décocher</button></div>
      <div class="items">${L.length?L.map(v=>`<label class="item ${exSel.has(v.id)?'on':''}" style="display:flex;gap:12px;align-items:flex-start;padding:12px 14px;cursor:pointer">
        <input type="checkbox" data-sel="${v.id}" ${exSel.has(v.id)?'checked':''} style="width:24px;height:24px;margin:2px 0 0;accent-color:var(--accent);flex:none">
-       <span style="min-width:0"><span class="tag ${isPdl(v)?'pdl':''}">${esc(kind(v))}</span><span style="display:block;font-weight:700;margin-top:4px">${esc(who(v))}</span>
+       <span style="min-width:0"><span class="tag ${isPdl(v)?'pdl':isDeg(v)?'deg':''}">${esc(kind(v))}</span><span style="display:block;font-weight:700;margin-top:4px">${esc(who(v))}</span>
        <span class="muted" style="display:block;font-size:.9rem">${esc(where(v)||'Adresse non renseignée')}${v.f.dateVis?' · visite le '+esc(frDate(v.f.dateVis)):''}${v.pdfAt?' · terminé':''}</span></span></label>`).join('')
       :'<div class="empty">Aucun dossier sur cet appareil.</div>'}</div>
      <label class="chip" style="margin-top:14px"><input type="checkbox" data-selmr ${exMairies?'checked':''}>Inclure le carnet des mairies (${Object.keys(MAIRIES.l).length})</label>
@@ -963,7 +1167,15 @@ function render(){
   if(view==='choose'){
     const t=(k,ic,l,d)=>`<button class="tile" data-act="newt" data-t="${k}"><img class="ic" src="${ICO[ic]}" alt=""><span class="lbl">${l}</span><span class="muted">${d}</span></button>`;
     app.innerHTML=`${topbar('Nouvelle visite','Choisissez le type de visite','list')}
-     <div class="tiles">${t('dec','logement','Contrôle décence','Constat de décence : CAF, DDT 79, mairie, collectivité')}${t('pdl','admin','Permis de louer','Autorisation préalable à la mise en location : Thouars, Saint-Maixent-l’École')}</div>`;
+     <div class="tiles">${t('dec','logement','Contrôle décence','Constat de décence : CAF, DDT 79, mairie, collectivité')}${t('pdl','admin','Permis de louer','Autorisation préalable à la mise en location : Thouars, Saint-Maixent-l’École')}
+      <button class="tile" data-act="go" data-v="degbien"><img class="ic" src="${ICO.degradation}" alt=""><span class="lbl">Rapport de dégradation</span><span class="muted">Grilles Anah : maison individuelle ou immeuble collectif</span></button></div>`;
+    return;
+  }
+  if(view==='degbien'){
+    const t=(b,l,d)=>`<button class="tile" data-act="newt" data-t="deg" data-b="${b}"><img class="ic" src="${ICO.degradation}" alt=""><span class="lbl">${l}</span><span class="muted">${d}</span></button>`;
+    app.innerHTML=`${topbar('Rapport de dégradation','Quel bien évaluez-vous ?','new')}
+     <div class="tiles">${t('mi','Maison individuelle','1 grille de 35 éléments')}${t('imm','Immeuble collectif','1 grille pour les parties communes (32 éléments) et 1 grille par logement visité (24 éléments)')}</div>
+     <p class="muted">Le type de bien ne peut plus être changé ensuite.</p>`;
     return;
   }
   if(view==='mairies'){
@@ -995,6 +1207,7 @@ function render(){
     app.innerHTML=`${topbar('Mon profil','Enregistré sur cet appareil, repris sur chaque rapport',cur?'dash':'list')}
      <div class="form">
       <div class="field"><span>Nom et prénom (rapport établi par)</span><input id="p_nom" type="text" data-p="nom" value="${esc(P.nom)}"></div>
+      <div class="field"><span>Qualité (ex. : technicien habitat)</span><input id="p_qual" type="text" data-p="qual" value="${esc(P.qual)}"></div>
       <div class="field"><span>Téléphone</span><input id="p_tel" type="tel" data-p="tel" value="${esc(P.tel)}"></div>
       <div class="field"><span>E-mail</span><input id="p_mail" type="email" data-p="mail" value="${esc(P.mail)}"></div>
       <div class="field full"><span>Signature : signez au doigt ou importez une image scannée</span><canvas class="pad" id="pad" aria-label="Zone de signature de l'enquêteur"></canvas>
@@ -1004,6 +1217,7 @@ function render(){
     bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="${cur?'dash':'list'}">Terminé</button>`;
     return;
   }
+  if(isDeg(cur)&&degView(app,bar,bi))return;
   const logo=logoOf(cur),RV=RR(cur),pdl=isPdl(cur);
   if(view==='dash'){
     const tile=(id,n,t,ic,st)=>`<button class="tile" data-act="go" data-v="${id}"><img class="ic" src="${ICO[ic]}" alt=""><span class="num">${n}</span><span class="lbl">${esc(t)}</span>${pills(st)}</button>`;
@@ -1021,7 +1235,7 @@ function render(){
   }
   if(view==='admin'){
     app.innerHTML=`${topbar('Informations administratives',who(cur),'dash',logo)}<div class="form">${ADM(cur).map(field).join('')}</div>`;
-    bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="dash">Continuer vers les rubriques</button>`;
+    bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="dash">${isDeg(cur)?'Continuer vers la grille':'Continuer vers les rubriques'}</button>`;
     return;
   }
   if(view==='synth'){
@@ -1070,6 +1284,66 @@ function render(){
    <button class="btn-primary" data-act="go" data-v="${next?next.id:'synth'}">${next?'Rubrique '+next.n+' →':'Synthèse →'}</button>`;
 }
 
+/* ---------- rapport de dégradation ---------- */
+let gId=null,gPart='I';
+const gOf=(id,v=cur)=>v.g.find(g=>g.id===id);
+const newGid=()=>'g'+(Math.max(0,...cur.g.map(g=>+g.id.slice(1)))+1);
+const degS=el=>{const g=gOf(el.dataset.g);return g.n[el.dataset.e]||(g.n[el.dataset.e]={})};
+const gNom=(v,g)=>g.k==='lc'?lgtNom(v,g):g.k==='bc'?'Parties communes'+(v.f.nomBat?' – '+v.f.nomBat:''):'Maison individuelle';
+const f3=(x,d=3)=>x.toFixed(d).replace('.',',');
+// Barre DM / DG / ID d'une grille, recalculée à chaque saisie.
+function degScore(v,g){const T=degTot(v,g),km=degKManq(v,g),vide=T.rest===GRILLES[g.k].els.length;
+  return `<div class="score" role="status">
+   <div><span class="k">DM</span><span class="v">${f3(T.DM)}</span></div><div><span class="k">DG</span><span class="v">${f3(T.DG)}</span></div><div><span class="k">ID</span><span class="v">${T.irr?'–':f3(T.ID)}</span></div>
+   <span class="lvl ${T.irr?'danger':vide?'':T.niv[2]}">${T.irr?`Grille irrecevable : ${T.nv} éléments non vérifiables`:vide?'Grille à remplir':esc(T.niv[1])+(T.rest?' (provisoire)':'')}</span>
+   <span class="rest">${T.rest?`${T.rest} élément${T.rest>1?'s':''} à noter`:'Tous les éléments sont notés'}${T.nv&&!T.irr?` · ${T.nv} NV (irrecevable à ${NV_MAX})`:''}${km.length?` · <b>À renseigner : ${km.join(', ')}</b>`:''}</span></div>`}
+// Carte d'un élément : note d'état, ampleur, prorata, multiplicateur, note calculée.
+function elHtml(v,g,e){
+  const s=g.n[e.id]||{},k=degK(v,g,e),r=degNote(v,g,e),p=prorata(s.pt),d=`data-g="${g.id}" data-e="${e.id}"`;
+  const seg=(key,list,val)=>`<div class="seg">${list.map(([x,l,t])=>`<label class="chip"${t?` title="${esc(t)}"`:''}><input type="radio" name="${key}_${g.id}_${e.id}" data-gn="${key}" ${d} value="${x??''}" ${(val??null)===x?'checked':''}>${l}</label>`).join('')}</div>`;
+  return `<div class="item ${s.h==null?'':'st'+s.h}"><div class="el">
+   <div class="h"><span class="ref">${e.id}</span><span class="t">${esc(e.t)}${e.maj?' <span class="pill info">Majeur</span>':''}</span><span class="res" title="Note de dégradation / valeur maximale">${r.max==null?'SO':f3(r.n,2)+' / '+r.max}</span></div>
+   <div role="radiogroup" aria-label="Note d’état : ${esc(e.t)}"><div class="lab">Note d’état</div>${seg('h',[0,1,2,3,...(e.so?['SO']:[]),'NV'].map(n=>[n,n,NOTE_INFO[n]]),s.h)}${s.h!=null?`<div class="muted info">${esc(NOTE_INFO[s.h])}</div>`:''}</div>
+   ${s.h==='NV'?`<label class="field"><span>Motif du NV *</span><input type="text" data-gn="motif" ${d} value="${esc(s.motif)}" placeholder="Accès impossible, encombrement…"></label>`:''}
+   ${e.a&&s.h!=='SO'&&s.h!=='NV'?`<div role="radiogroup" aria-label="Ampleur des désordres : ${esc(e.t)}"><div class="lab">Ampleur des désordres</div>${seg('a',[[null,'—','Critère non utilisé'],...AMPLEURS],s.a)}</div>`:''}
+   ${(e.p||e.m)&&s.h!=='SO'&&s.h!=='NV'?`<div class="ln">${e.p?`<label class="field"><span>Prorata d’éléments concernés</span><input type="text" inputmode="decimal" data-gn="pt" ${d} value="${esc(s.pt)}" placeholder="ex. 4/5 ou 0,8">${Number.isNaN(p)?'<span class="need">Saisie illisible : « 4/5 », « 4 sur 5 » ou un nombre entre 0 et 1</span>':''}</label>`:''}
+    ${e.m?`<div class="field"><span>${e.m==='N'?'Niveaux':'Pièces principales'} concernés</span><div class="kval">${k??'<span class="need">à renseigner dans le descriptif</span>'}</div></div>`:''}</div>`:''}
+   <div class="row"><button data-act="ras" ${d}>RAS</button></div>
+  </div></div>`}
+// Tableau de bord, grille par chapitre et descriptif d'un logement. Renvoie false pour les écrans communs (informations, profil…).
+function degView(app,bar,bi){
+  const chap=g=>Object.entries(GRILLES[g.k].parts).map(([p,[t,ic]])=>{const r=GRILLES[g.k].els.filter(e=>e.part===p&&g.n[e.id]?.h==null).length;
+    return `<button class="tile" data-act="grille" data-g="${g.id}" data-p="${p}"><img class="ic" src="${ICO[ic]}" alt=""><span class="num">CHAPITRE ${p}</span><span class="lbl">${esc(t)}</span>${pills([[r?r+' à noter':'Noté',r?'warn':'ok']])}</button>`}).join('');
+  if(view==='dash'){
+    const aN=ADM(cur).filter(f=>f[0]!=='h'&&(!f[5]||f[5](cur))&&filled(cur.f[f[0]])).length;
+    const adm=`<button class="tile" data-act="go" data-v="admin"><img class="ic" src="${ICO.admin}" alt=""><span class="num">ÉTAPE 1</span><span class="lbl">Données administratives et descriptif</span>${pills([[aN?`${aN} champs`:'À faire',aN?'info':'']])}</button>`;
+    if(cur.bien!=='imm'){const g=cur.g[0];app.innerHTML=`<div class="degtop">${topbar(who(cur),kind(cur),'list')}${degScore(cur,g)}</div><div class="tiles">${adm}${chap(g)}</div>`;return true}
+    const [bc,...L]=cur.g;
+    app.innerHTML=`${topbar(who(cur),kind(cur),'list')}<div class="tiles">${adm}</div>
+     <h2 class="sec">Parties communes</h2>
+     <div class="gcard"><div class="name">${esc(gNom(cur,bc))}</div>${degScore(cur,bc)}<div class="tiles">${chap(bc)}</div></div>
+     <h2 class="sec">Logements (parties privatives)</h2>
+     <div class="visits">${L.map(g=>`<div class="gcard"><div class="name">${esc(lgtNom(cur,g))}</div>
+       <div class="muted">${[cur.f[g.id+'_nbPP']&&cur.f[g.id+'_nbPP']+' pièce(s) principale(s)',cur.f[g.id+'_surf']&&cur.f[g.id+'_surf']+' m²'].filter(Boolean).join(' · ')}</div>${degScore(cur,g)}
+       <div class="row"><button class="btn-primary" data-act="grille" data-g="${g.id}" data-p="I">Ouvrir la grille</button><button data-act="go" data-v="lgt" data-g="${g.id}">Descriptif</button><button data-act="duplgt" data-g="${g.id}">Dupliquer</button><button class="btn-danger" data-act="dellgt" data-g="${g.id}">Supprimer</button></div></div>`).join('')||'<div class="empty">Aucun logement : ajoutez-en un par logement visité.</div>'}</div>
+     <button class="big secondary" data-act="addlgt">${svg('plus')}<span><span class="t">Ajouter un logement</span><span class="d">Une grille « logement en collectif » par logement visité</span></span></button>`;
+    return true}
+  if(view==='grille'){
+    const g=gOf(gId),G=GRILLES[g.k],parts=Object.keys(G.parts),i=parts.indexOf(gPart);
+    app.innerHTML=`<div class="degtop">${topbar(gPart+'. '+G.parts[gPart][0],gNom(cur,g)+' · '+G.nom,'dash')}${degScore(cur,g)}
+      <nav class="parts" aria-label="Chapitres">${parts.map(p=>{const r=G.els.filter(e=>e.part===p&&g.n[e.id]?.h==null).length;
+        return `<button data-act="grille" data-g="${g.id}" data-p="${p}" ${p===gPart?'aria-current="true"':''} aria-label="Chapitre ${p}${r?', '+r+' à noter':''}">${p}${r?`<span class="pill warn">${r}</span>`:''}</button>`}).join('')}</nav></div>
+     <div class="items">${G.els.filter(e=>e.part===gPart).map(e=>elHtml(cur,g,e)).join('')}</div>`;
+    bar.hidden=false;const nx=parts[i+1];
+    bi.innerHTML=`${i>0?`<button data-act="grille" data-g="${g.id}" data-p="${parts[i-1]}">← Chapitre ${parts[i-1]}</button>`:''}<button class="btn-primary" data-act="${nx?'grille':'dash'}" data-g="${g.id}" data-p="${nx||''}">${nx?'Chapitre '+nx+' →':'Retour au dossier'}</button>`;
+    return true}
+  if(view==='lgt'){const g=gOf(gId);
+    app.innerHTML=`${topbar('Descriptif du logement',lgtNom(cur,g),'dash')}<div class="form">${LGT_FIELDS(g.id).map(field).join('')}</div>`;
+    bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="grille" data-g="${g.id}" data-p="I">Ouvrir la grille du logement</button>`;
+    return true}
+  return false;
+}
+
 /* ---------- signature ---------- */
 function initPad(src,done){
   const c=$('#pad');if(!c)return;const dpr=devicePixelRatio||1;c.width=c.clientWidth*dpr;c.height=c.clientHeight*dpr;
@@ -1098,6 +1372,7 @@ document.addEventListener('input',e=>{
   if(el.dataset.p){P[el.dataset.p]=el.value.trim();saveP();return}
   if(el.dataset.mr){const m=MAIRIES.l[el.dataset.mr];if(m){m[el.dataset.mk]=el.value;m.maj=today();saveMairies()}return}
   if(!cur)return;
+  if(el.dataset.gn==='pt'||el.dataset.gn==='motif'){const s=degS(el);s[el.dataset.gn]=el.value;save();return}
   if(el.dataset.f&&!el.dataset.ft){cur.f[el.dataset.f]=el.value;save();if(/^mr/.test(el.dataset.f))memoMairie(cur);return}
   if(el.dataset.it&&(el.dataset.k==='note'||el.dataset.k==='loc')){it(el.dataset.it)[el.dataset.k]=el.value;save()}
   if(el.dataset.it&&el.dataset.k==='cap'){it(el.dataset.it).ph[+el.dataset.i].cap=el.value;save()}
@@ -1109,8 +1384,12 @@ document.addEventListener('change',async e=>{
   if(el.dataset.selmr!==undefined){exMairies=el.checked;return}
   if(el.dataset.psig!==undefined){const f=el.files[0];el.value='';if(!f)return;try{const p=await shrink(f);P.sig={src:p.src,r:p.h/p.w};await saveP();render()}catch(err){toast('Image non importée : '+err.message)}return}
   if(!cur)return;
+  if(el.dataset.gn==='h'||el.dataset.gn==='a'){const s=degS(el),x=el.value;if(el.dataset.gn==='h')s.h=x==='SO'||x==='NV'?x:+x;else s.a=x===''?null:+x;save();return keep()}
+  if(el.dataset.gn==='pt')return keep();
+  // Opération : la dernière saisie est proposée par défaut et ajoutée à la liste.
+  if(el.dataset.f==='op'){const o=el.value.trim();P.lastOp=o;if(o&&!OPERATIONS.includes(o))P.ops=[...new Set([...(P.ops||[]),o])];saveP();return}
   // Ville du logement : la mairie destinataire suit, et ses coordonnées sont reprises du carnet.
-  if(!isPdl(cur)&&!el.dataset.ft&&['ville','cp','mrVille'].includes(el.dataset.f)){const f=cur.f,avant=f.mrVille+'|'+f.mrCp;
+  if(!isPdl(cur)&&!isDeg(cur)&&!el.dataset.ft&&['ville','cp','mrVille'].includes(el.dataset.f)){const f=cur.f,avant=f.mrVille+'|'+f.mrCp;
     if(el.dataset.f!=='mrVille'&&!f.mrAdr&&!f.mrMail){f.mrVille=f.ville||'';f.mrCp=f.cp||''}
     const rep=repriseMairie(cur);save();
     // Réaffiche sans perdre le champ en cours de saisie.
@@ -1138,14 +1417,22 @@ document.addEventListener('change',async e=>{
 document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
   if(a==='new'){view='choose';return go()}
-  if(a==='newt'){cur=newVisit(b.dataset.t);visits.push(cur);await save(true);view='admin';return go()}
+  if(a==='newt'){cur=newVisit(b.dataset.t,b.dataset.b);visits.push(cur);await save(true);view='admin';return go()}
   if(a==='open'){cur=visits.find(v=>v.id===b.dataset.id);view='dash';return go()}
   if(a==='ctrl'){const src=visits.find(v=>v.id===b.dataset.id);cur=structuredClone(src);Object.assign(cur,{id:newVisit().id,created:Date.now(),done:{},sig:''});cur.f.typeVis='Visite de contrôle';cur.f.dateVis=today();visits.push(cur);await save(true);view='dash';toast('Visite de contrôle créée à partir de la visite initiale');return go()}
   if(a==='delv'){if(!armed(b,'Confirmer la suppression'))return;await store.del(b.dataset.id);visits=visits.filter(v=>v.id!==b.dataset.id);return render()}
   if(a==='list'){await save(true);cur=null;view='list';return go()}
   if(a==='reopen'){const v=visits.find(x=>x.id===b.dataset.id);delete v.pdfAt;await store.put(v);toast('Dossier remis en cours');return render()}
   if(a==='dash'){view='dash';return go()}
-  if(a==='go'){view=b.dataset.v;return go()}
+  if(a==='go'){view=b.dataset.v;if(b.dataset.g)gId=b.dataset.g;return go()}
+  if(a==='grille'){gId=b.dataset.g;gPart=b.dataset.p||'I';view='grille';return go()}
+  if(a==='ras'){const s=degS(b),e=GRILLES[gOf(b.dataset.g).k].els.find(x=>x.id===b.dataset.e);s.h=0;if(e.a)s.a=0;save();return keep()}
+  if(a==='addlgt'){const id=newGid();cur.g.push({id,k:'lc',n:{}});cur.f[id+'_nom']='Logement '+(cur.g.length-1);gId=id;view='lgt';save();return go()}
+  if(a==='duplgt'){const src=gOf(b.dataset.g),id=newGid();cur.g.push({...structuredClone(src),id});
+    for(const [k,x] of Object.entries(cur.f))if(k.startsWith(src.id+'_'))cur.f[id+k.slice(src.id.length)]=x;
+    cur.f[id+'_nom']=lgtNom(cur,src)+' (copie)';save();toast('Logement dupliqué : ajustez son nom et ses notes');return keep()}
+  if(a==='dellgt'){if(!armed(b,'Confirmer la suppression'))return;const id=b.dataset.g;cur.g=cur.g.filter(g=>g.id!==id);
+    for(const k of Object.keys(cur.f))if(k.startsWith(id+'_'))delete cur.f[k];for(const k of Object.keys(cur.it))if(k.startsWith(id+':'))delete cur.it[k];save();return keep()}
   if(a==='markdone'){cur.done[b.dataset.r]=!cur.done[b.dataset.r];save();return render()}
   if(a==='delph'){if(!armed(b,'Confirmer'))return;it(b.dataset.it).ph.splice(+b.dataset.i,1);save();return keep()}
   if(a==='deldf'){const s=it(b.dataset.it);s.df=s.df.filter(i=>i!==+b.dataset.i);save();return keep()}
@@ -1237,7 +1524,10 @@ function exportJson(){
 }
 async function importJson(el){
   const f=el.files[0];el.value='';if(!f)return;
-  try{const d=JSON.parse(await f.text());if(d.app!=='constat-decence'||!Array.isArray(d.visits))throw new Error('ce fichier n’est pas une sauvegarde de cette application');
+  try{const txt=await f.text();
+    // Fichier enregistré depuis Outlook, Teams ou OneDrive professionnel : chiffré par Microsoft Intune, illisible ici.
+    if(txt.slice(0,200).includes('MSMAMARPC'))throw new Error('ce fichier a été chiffré par la protection Microsoft (Outlook, Teams ou OneDrive professionnel). Transférez la sauvegarde par Quick Share, Bluetooth ou câble USB, puis importez-la à nouveau.');
+    const d=JSON.parse(txt);if(d.app!=='constat-decence'||!Array.isArray(d.visits))throw new Error('ce fichier n’est pas une sauvegarde de cette application');
     let n=0;for(const v of d.visits){if(!v||typeof v.id!=='string'||typeof v.f!=='object'||typeof v.it!=='object')continue;await store.put(migrate(v));n++}
     let nm=0;if(d.mairies&&typeof d.mairies==='object')for(const [k,m] of Object.entries(d.mairies))if(m&&typeof m.ville==='string'&&!MAIRIES.l[k]){MAIRIES.l[k]=m;nm++}
     if(nm)saveMairies();
