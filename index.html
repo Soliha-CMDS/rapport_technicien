@@ -169,7 +169,7 @@ button:active{transform:scale(.98)}
 .lvl.ok{background:var(--ok-bg);color:var(--ok)}.lvl.warn{background:var(--warn-bg);color:var(--warn)}.lvl.danger{background:var(--danger-bg);color:var(--danger)}
 .score .rest{grid-column:1/-1;font-size:.82rem;color:var(--muted)}
 .parts{display:flex;gap:6px;margin-top:8px;overflow-x:auto}
-.parts button{min-width:52px;padding:6px 10px;gap:4px}
+.parts button{min-width:44px;padding:6px 8px;gap:3px;flex:none}
 .parts button[aria-current]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .parts .pill{font-size:.7rem;padding:0 6px}
 .el{padding:12px 14px;display:grid;gap:10px}
@@ -192,6 +192,12 @@ button:active{transform:scale(.98)}
 .gcard .name{font-weight:700;font-size:1.05rem}
 .gcard .score{border:0;padding:0}
 h2.sec{margin:20px 0 8px}
+.kline{grid-column:1/-1;font-size:.85rem;display:flex;align-items:center;gap:8px;color:var(--muted)}
+button.lnk{min-height:44px;padding:0 4px;border:0;background:none;font-size:.85rem;color:var(--accent);text-decoration:underline;white-space:nowrap}
+.el details summary{cursor:pointer;font-weight:700;color:var(--accent);min-height:44px;display:flex;align-items:center}
+.el details.aide summary{min-height:36px;font-size:.88rem}
+.dgc{display:grid;gap:10px}
+.wc{font-size:.8rem;text-align:right;margin-top:-6px}
 @media (max-width:480px){.score{grid-template-columns:repeat(3,auto)}.score .lvl{grid-column:1/-1}}
 
 </style>
@@ -915,8 +921,6 @@ const LGT_FIELDS=id=>[[id+'_nom','Nom ou étage du logement','t'],[id+'_nbPP','N
 const lgtNom=(v,g)=>v.f[g.id+'_nom']||'Logement sans nom';
 // Multiplicateur K : niveaux de la maison ou de l'immeuble (N), pièces principales de la maison ou du logement (P). Vide, comme dans l'Excel, tant qu'il n'est pas renseigné.
 function degK(v,g,e){if(!e.m)return null;const k=+(e.m==='N'?v.f.nbNiv:g.k==='lc'?v.f[g.id+'_nbPP']:v.f.nbPP);return k>=1?Math.floor(k):null}
-// Multiplicateurs obligatoires non renseignés pour une grille.
-const degKManq=(v,g)=>[...new Set(GRILLES[g.k].els.filter(e=>e.m&&!degK(v,g,e)).map(e=>e.m==='N'?'nombre de niveaux':'nombre de pièces principales'))];
 // Prorata « 4/5 », « 4 sur 5 » ou décimal entre 0 et 1 ; NaN si illisible, null si vide.
 function prorata(s){s=String(s??'').trim();if(!s)return null;const m=/^(\d+(?:[.,]\d+)?)\s*(?:\/|sur)\s*(\d+(?:[.,]\d+)?)$/i.exec(s);
   const x=m?+m[1].replace(',','.')/+m[2].replace(',','.'):+s.replace(',','.');return x>=0&&x<=1?x:NaN}
@@ -944,8 +948,290 @@ function degTot(v,g){let sn=0,sm=0,smaj=0,nmaj=0,nv=0,rest=0;
   const nv=n=>degTot(...mk('mi',{...all('mi',1),'1.1':n>0?['NV']:[1,1],'2.1':n>1?['NV']:[1,1],'2.2':n>2?['NV']:[1,1]},{nbNiv:1,nbPP:1}));
   console.assert(!nv(2).irr&&nv(3).irr&&nv(3).sm===105,'degradation NV');
   console.assert(prorata('4/5')===.8&&prorata('2 sur 4')===.5&&prorata('0,4')===.4&&isNaN(prorata('6/5'))&&prorata('')===null,'prorata');
-  console.assert(degKManq({f:{nbNiv:2}},{id:'g0',k:'mi',n:{}}).join()==='nombre de pièces principales','degKManq');
   console.assert(GRILLES.mi.els.length===35&&GRILLES.bc.els.length===32&&GRILLES.lc.els.length===24&&['mi','bc','lc'].map(k=>GRILLES[k].els.filter(e=>e.maj).length).join()==='24,20,16','grilles');})();
+
+// Aide (points d'inspection du guide Anah § 4.2 et § 5.1.2) et commentaires pré-rédigés par thème, classés par note d'état.
+// Un thème est partagé par les éléments identiques des 3 grilles (CLE_DEG). Les [crochets] sont à compléter.
+const PRE_DEG={
+ fond:{aide:'Tassements différentiels, fissures en escalier ou traversantes partant du sol, affouillement des pieds de murs. Des sondages ou une étude de structure peuvent être nécessaires avant intervention.',
+  0:['Aucun signe de tassement ni de fissure liée aux fondations. État satisfaisant.'],
+  1:['Fissures [localisation] pouvant traduire un léger tassement, sans désordre évolutif apparent. Surveillance et reprise ponctuelle à prévoir.'],
+  2:['Tassement localisé [pignon / angle], fissures structurelles sur [localisation]. Reprise en sous-œuvre partielle à prévoir après étude de sol.'],
+  3:['Tassement différentiel marqué : fissures traversantes et déformations sur [localisation]. Reprise en sous-œuvre à prévoir après étude de sol et de structure.']},
+ murs:{aide:'Murs porteurs, refends, poteaux, poutres et linteaux (les linteaux des fenêtres se notent ici). Fissures (sens et profondeur), bombements, ventre de mur, corrosion des éléments métalliques, bois attaqués par les insectes xylophages.',
+  0:['Murs porteurs en maçonnerie de [moellons], sans fissure structurelle, bombement ni désordre sur les linteaux et les poutres. État général satisfaisant.'],
+  1:['Fissures ponctuelles sur [localisation], sans déformation du mur. Ouverture et traitement des fissures à prévoir.','Linteau [bois] dégradé au-dessus de [ouverture]. Reprise ponctuelle à prévoir.'],
+  2:['Fissures traversantes sur [localisation] et linteaux dégradés sur [nombre] ouvertures. Reprise des maçonneries et remplacement des linteaux concernés.'],
+  3:['Mur [pignon] fortement fissuré et déformé (bombement). Reconstruction ou renforcement de la maçonnerie à prévoir après avis d’un bureau d’études structure.']},
+ planch:{aide:'Fissures ou flèches des poutres et planchers, solives attaquées (insectes xylophages, pourriture), souplesse au passage, revêtements décollés révélant une déformation.',
+  0:['Planchers stables, sans flèche ni souplesse anormale. État satisfaisant.'],
+  1:['Légère souplesse du plancher [pièce], sans flèche importante. Renforcement ponctuel à prévoir.'],
+  2:['Plancher [pièce] affaissé, solives attaquées sur une partie de la surface. Remplacement des solives dégradées et reprise du reste.'],
+  3:['Plancher bois de [niveau] fortement dégradé (solives attaquées par des insectes xylophages ou pourries). Remplacement complet du plancher à prévoir.']},
+ charp:{aide:'Déformation de la toiture (indice d’une faiblesse de charpente), bois attaqués (insectes, champignons, humidité), assemblages déboîtés, chevrons cassés.',
+  0:['Charpente en bois sans déformation apparente, bois sains. État satisfaisant.'],
+  1:['Quelques chevrons à renforcer ou à traiter (traces d’insectes xylophages non actives). Traitement préventif et curatif à prévoir.'],
+  2:['Déformation partielle de la toiture côté [versant] : [nombre] chevrons et une panne à remplacer, traitement du reste de la charpente.'],
+  3:['Charpente fortement dégradée (bois attaqués, déformation générale de la toiture). Remplacement de la charpente à prévoir.']},
+ esc:{aide:'Stabilité de la structure, largeur, hauteur et planéité des marches, hauteur et fixation des garde-corps et mains courantes, éclairage. Garde-corps : hauteur minimale de 1 m (NF P01-012).',
+  0:['Escalier stable, marches régulières, main courante et garde-corps solidement fixés. État satisfaisant.'],
+  1:['Main courante absente ou mal fixée. Pose ou refixation d’une main courante à prévoir.','Quelques marches usées ou instables. Reprise ponctuelle à prévoir.'],
+  2:['Escalier stable mais garde-corps non conforme (hauteur insuffisante, barreaudage trop espacé). Remplacement du garde-corps et reprise des marches.'],
+  3:['Escalier en bois très endommagé, maintenu de façon précaire. Remplacement de l’escalier et de ses garde-corps à prévoir.']},
+ gc:{aide:'Hauteur (1 m minimum), solidité de la fixation, espacement des barreaux (risque de passage ou d’escalade pour un enfant), corrosion.',
+  0:['Garde-corps et rampes solidement fixés, de hauteur suffisante. État satisfaisant.'],
+  1:['Garde-corps [localisation] mal fixé ou corrodé. Refixation et traitement à prévoir.'],
+  2:['Garde-corps [localisation] de hauteur insuffisante. Rehausse ou remplacement des parties non conformes.'],
+  3:['Garde-corps absent ou dangereux [localisation]. Pose de garde-corps conformes (hauteur 1 m) à prévoir.']},
+ couv:{aide:'Défauts pouvant causer des infiltrations : tuiles ou ardoises cassées, glissées ou poreuses, percement ou déformation, matériaux inadaptés (tôle ondulée…), mousses et végétation, ventilation des combles. Un versant à remplacer et l’autre à remanier : note 3, ampleur 50 %.',
+  0:['Couverture en [tuiles] en bon état, sans tuile cassée ni trace d’infiltration. État satisfaisant.'],
+  1:['Couverture en [tuiles] à remanier : tuiles glissées ou cassées par endroits, mousses. Remaniement et démoussage à prévoir.'],
+  2:['Couverture vétuste sur [versant] avec traces d’infiltration dans les combles, l’autre versant à remanier. Remplacement partiel à prévoir.'],
+  3:['Couverture en fin de vie (tuiles poreuses, nombreuses infiltrations). Réfection complète de la couverture à prévoir.']},
+ gout:{aide:'Obstruction, percement, déformation ou décrochement des gouttières, chéneaux et descentes ; raccordement au réseau d’eaux pluviales ; infiltrations en pied de façade.',
+  0:['Gouttières et descentes en bon état, correctement raccordées. État satisfaisant.'],
+  1:['Gouttières encombrées ou fuyardes [localisation]. Nettoyage et reprise des joints à prévoir.'],
+  2:['Gouttière [façade] percée et descente décrochée. Remplacement des parties dégradées.'],
+  3:['Gouttières et descentes vétustes ou absentes, écoulement en pied de façade. Remplacement complet de la zinguerie à prévoir.']},
+ toitaut:{aide:'Souches de cheminée (risque de chute de matériaux sur la voie publique, infiltrations), lucarnes, corniches, solins et noues.',
+  0:['Souches, lucarnes et corniches en bon état. État satisfaisant.'],
+  1:['Souche de cheminée à rejointoyer, solin fissuré. Reprise ponctuelle à prévoir.'],
+  2:['Souche dégradée et lucarne à reprendre. Réfection partielle à prévoir.'],
+  3:['Souche de cheminée très dégradée, risque de chute de matériaux. Démolition ou reconstruction à prévoir.']},
+ enduit:{aide:'Enduits faïencés, fissurés, décollés ou inadaptés au support (enduit ciment sur maçonnerie ancienne qui empêche l’évaporation). Piochage complet des enduits : note 3, ampleur 100 % ; quelques fissures à ouvrir et traiter : note 1.',
+  0:['Enduits de façade en bon état, sans fissure ni décollement. État satisfaisant.'],
+  1:['Quelques fissures sur l’enduit [façade]. Ouverture et traitement des fissures à prévoir.'],
+  2:['Enduit décollé sur [façade], l’autre façade à reprendre ponctuellement. Réfection partielle de l’enduit.'],
+  3:['Enduits dégradés et décollés sur l’ensemble des façades [ou enduit ciment inadapté au support]. Piochage complet et réfection à la chaux à prévoir.']},
+ humid:{aide:'Remontées capillaires en pied de mur (salpêtre, enduits dégradés en partie basse, papiers décollés), revêtement extérieur imperméable, sol extérieur plus haut que le sol intérieur.',
+  0:['Aucune trace de remontée capillaire. État satisfaisant.'],
+  1:['Traces ponctuelles d’humidité en pied de mur [pièce]. Suppression de la cause (revêtement imperméable, regard) et assainissement à prévoir.'],
+  2:['Remontées capillaires sur [murs], enduits dégradés en partie basse. Traitement de l’humidité et reprise des enduits concernés.'],
+  3:['Remontées capillaires importantes dans [pièces], le niveau extérieur étant plus élevé que le sol intérieur. Drainage périphérique et traitement des murs à prévoir.']},
+ isol:{aide:'Isolation des murs, des combles ou rampants et du plancher bas : présence, épaisseur, état. Absence d’isolation : note 3 (SO impossible).',
+  0:['Isolation des murs, des combles et du plancher bas présente et en bon état. Performance satisfaisante.'],
+  1:['Isolation des combles insuffisante ou tassée. Complément d’isolation à prévoir.'],
+  2:['Combles isolés mais murs et plancher bas sans isolation. Isolation des parois non traitées à prévoir.'],
+  3:['Aucune isolation dans le logement (murs, combles et plancher bas). Isolation complète des parois à prévoir.']},
+ facade:{aide:'Modénatures, bandeaux, encadrements, balcons, garde-corps, auvents, volets et persiennes : bonne fixation (risque de chute sur la voie publique) et état.',
+  0:['Éléments de façade et volets en bon état. État satisfaisant.'],
+  1:['Volets à repeindre et à réviser (quincaillerie). Entretien à prévoir.'],
+  2:['Volets [nombre] hors d’usage, les autres à reprendre. Remplacement partiel.'],
+  3:['Volets en bois en mauvais état, éléments de façade dégradés. Remplacement des volets à prévoir.']},
+ fen:{aide:'Étanchéité à l’air et à l’eau, vitrage (simple ou double), état des bois et de la quincaillerie, fonctionnement. Prorata : nombre de fenêtres concernées sur le total.',
+  0:['Fenêtres en double vitrage en bon état. État satisfaisant.'],
+  1:['Fenêtres à réviser (joints, quincaillerie, peinture). Entretien à prévoir.'],
+  2:['[nombre] fenêtres en simple vitrage à remplacer, les autres à réviser.'],
+  3:['Menuiseries en simple vitrage vétustes et non étanches. Remplacement des fenêtres à prévoir.']},
+ porte:{aide:'Porte d’entrée et portes extérieures : étanchéité, isolation, fermeture et sécurité.',
+  0:['Porte d’entrée en bon état, étanche et fermant correctement. État satisfaisant.'],
+  1:['Porte d’entrée à réviser (joints, serrure, réglage). Entretien à prévoir.'],
+  3:['Porte d’entrée en bois en mauvais état, non étanche. Remplacement à prévoir.']},
+ porteent:{aide:'Porte d’entrée de l’immeuble, porche et sas : fermeture, sécurité, étanchéité, état.',
+  0:['Porte d’entrée de l’immeuble en bon état, fermeture correcte. État satisfaisant.'],
+  1:['Porte d’entrée de l’immeuble à réviser (ferme-porte, serrure). Entretien à prévoir.'],
+  3:['Porte d’entrée de l’immeuble dégradée, fermeture inopérante. Remplacement à prévoir.']},
+ ventpp:{aide:'Entrées d’air dans les pièces principales (séjour, chambres). Ventilation inexistante : note 3 ; insuffisante, à améliorer : note 1.',
+  0:['Entrées d’air présentes dans les pièces principales. Ventilation satisfaisante.'],
+  1:['Entrées d’air présentes dans une partie des pièces seulement. Compléments à prévoir.'],
+  3:['Absence d’entrées d’air dans les pièces principales. Création à prévoir avec le système de ventilation.']},
+ venth:{aide:'Extraction d’air dans la cuisine, la salle d’eau et le WC (bouches, conduits, VMC). Ventilation inexistante : note 3 ; insuffisante : note 1. Préciser le type de ventilation dans le descriptif.',
+  0:['Extraction d’air présente dans la cuisine, la salle d’eau et le WC. Ventilation satisfaisante.'],
+  1:['Extraction insuffisante dans [pièce] (bouche obstruée, débit faible). Amélioration à prévoir.'],
+  3:['Aucune extraction d’air dans les pièces humides. Le renouvellement d’air repose sur les défauts d’étanchéité des menuiseries et l’ouverture des fenêtres. Risque de condensation et de moisissures, accru après remplacement des menuiseries. VMC à créer (extraction cuisine, salle d’eau, WC).']},
+ elec:{aide:'Tableau, protections (disjoncteur différentiel 30 mA), mise à la terre, fils dénudés ou en tissu, prises et interrupteurs vétustes, nombre de prises, sécurité dans les pièces humides (volumes de la salle d’eau). Référence : NF C 15-100.',
+  0:['Installation électrique récente : tableau avec protections différentielles 30 mA, mise à la terre, appareillages en bon état.'],
+  1:['Installation globalement correcte, quelques points à reprendre : [prises sans terre, cache manquant]. Mise en sécurité ponctuelle à prévoir.'],
+  2:['Tableau à remplacer et circuits partiellement vétustes. Mise en sécurité et reprise partielle de l’installation.'],
+  3:['L’installation électrique ne répond pas aux normes de sécurité : [absence de protection différentielle, fils dénudés, pas de mise à la terre]. Réfection complète à prévoir.']},
+ gaz:{aide:'Âge et état des appareils, type et état des canalisations (certains matériaux interdits), robinets de coupure, aération des locaux et évacuation des produits de combustion.',
+  0:['Installation gaz en bon état, appareils entretenus, aération et évacuation conformes.'],
+  1:['Flexible de raccordement périmé ou aération obstruée. Mise en conformité ponctuelle à prévoir.'],
+  3:['Installation gaz vétuste et dangereuse [canalisations, absence d’aération]. Mise en conformité complète ou neutralisation à prévoir.']},
+ conduit:{aide:'Conduits de ventilation (VMC, conduits shunt ou individuels) : présence, état, obstruction, fonctionnement du groupe d’extraction.',
+  0:['Conduits et caisson de VMC en bon état de fonctionnement.'],
+  1:['VMC à entretenir (bouches encrassées, conduits écrasés). Entretien à prévoir.'],
+  3:['Absence de conduits de ventilation. Création d’une VMC à prévoir.']},
+ eau:{aide:'Réseau d’alimentation à partir du compteur : matériaux (plomb interdit), entartrage, corrosion, fuites, pression.',
+  0:['Alimentation en eau en bon état (cuivre ou PER), sans fuite. État satisfaisant.'],
+  1:['Fuite ponctuelle ou robinetterie à reprendre [localisation]. Réparation à prévoir.'],
+  2:['Canalisations en partie vétustes (acier corrodé). Remplacement partiel du réseau.'],
+  3:['Canalisations en plomb ou très corrodées [ou alimentation à créer]. Remplacement complet du réseau d’eau à prévoir.']},
+ evac:{aide:'Séparation eaux usées et eaux pluviales, raccordement au réseau public ou à l’assainissement individuel, fuites, odeurs, matériaux, contrepentes.',
+  0:['Évacuations en bon état, raccordées au [tout-à-l’égout]. État satisfaisant.'],
+  1:['Fuite ou siphon à reprendre [localisation]. Réparation ponctuelle à prévoir.'],
+  2:['Évacuations vétustes en partie, raccordement anarchique en façade. Reprise partielle du réseau.'],
+  3:['Réseaux d’évacuation des eaux usées vétustes ou à créer [assainissement non conforme]. Réfection complète et mise aux normes à prévoir.']},
+ chauf:{aide:'Présence d’un chauffage fixe dans chaque pièce principale, âge et état du générateur, émetteurs, sécurité. Absence de chauffage : note 3.',
+  0:['Chauffage [type] récent et en bon état, émetteur dans chaque pièce principale.'],
+  1:['Chauffage fonctionnel à entretenir ou à compléter [pièce sans émetteur]. Intervention ponctuelle à prévoir.'],
+  2:['Générateur vétuste à remplacer, émetteurs à conserver en partie.'],
+  3:['Absence de chauffage fixe [chauffage d’appoint uniquement]. Installation d’un système de chauffage à prévoir.']},
+ ecs:{aide:'Présence d’eau chaude à l’évier et à la salle d’eau, âge et état du ballon ou du générateur, groupe de sécurité. Absence d’eau chaude : note 3.',
+  0:['Production d’eau chaude [ballon électrique] récente et en bon état.'],
+  1:['Ballon à entretenir (groupe de sécurité, détartrage). Entretien à prévoir.'],
+  3:['Absence de production d’eau chaude sanitaire. Installation à prévoir.']},
+ incendie:{aide:'Détecteur avertisseur autonome de fumée (DAAF) : au moins un par logement, obligatoire (loi du 9 mars 2010), certifié NF EN 14604. Absence : note 3.',
+  0:['Détecteur de fumée (DAAF) présent et fonctionnel.'],
+  1:['Détecteur de fumée présent mais hors service (pile) ou mal placé. Remise en service à prévoir.'],
+  3:['Aucun détecteur avertisseur autonome de fumée (DAAF), pourtant obligatoire (loi du 9 mars 2010). Prévoir au moins un DAAF certifié NF EN 14604 dans le dégagement des chambres.']},
+ cuisine:{aide:'Évier avec eau chaude et froide, évacuation, emplacement pour la cuisson, rangements, ventilation. Absence de cuisine ou coin cuisine : note 3.',
+  0:['Cuisine équipée en bon état (évier, eau chaude et froide, emplacement cuisson).'],
+  1:['Cuisine fonctionnelle à rafraîchir (faïence, joints, mobilier). Reprise ponctuelle.'],
+  2:['Évier et robinetterie à remplacer, mobilier en partie conservé.'],
+  3:['Absence de coin cuisine [ou cuisine hors d’usage]. Création ou réfection complète à prévoir.']},
+ sde:{aide:'Douche ou baignoire et lavabo alimentés en eau chaude et froide, étanchéité, revêtements, ventilation, sécurité électrique. Absence de salle d’eau : note 3.',
+  0:['Salle d’eau en bon état (douche, lavabo, eau chaude et froide).'],
+  1:['Salle d’eau fonctionnelle, joints et faïence à reprendre. Reprise ponctuelle.'],
+  2:['Douche à remplacer, lavabo conservé. Réfection partielle.'],
+  3:['Absence de salle d’eau [ou salle d’eau hors d’usage]. Création ou réfection complète à prévoir.']},
+ wc:{aide:'Présence d’un WC séparé de la pièce où l’on prend les repas, chasse d’eau, raccordement, état. Absence : note 3.',
+  0:['WC en bon état, fonctionnel et séparé de la cuisine.'],
+  1:['WC fonctionnel mais en mauvais état (abattant, chasse d’eau). Reprise ponctuelle.'],
+  3:['Absence de WC [ou WC hors d’usage]. Création ou remplacement à prévoir.']},
+ orga:{aide:'Distribution des pièces, surfaces, hauteur sous plafond, pièces commandées. Restructuration complète : note 3 ; réorganisation partielle (séparation cuisine / WC…) : note 2 ; ouvertures ou agrandissements de baies : note 1.',
+  0:['Distribution des pièces satisfaisante, surfaces et hauteurs suffisantes.'],
+  1:['Création ou agrandissement d’ouvertures à prévoir [localisation].'],
+  2:['Réorganisation partielle à prévoir : [séparation cuisine / WC, pièce commandée].'],
+  3:['Distribution inadaptée nécessitant une restructuration complète du logement.']},
+ eclair:{aide:'Éclairement naturel suffisant des pièces principales (surface des baies, orientation, masques).',
+  0:['Éclairage naturel suffisant dans les pièces principales.'],
+  1:['Éclairage naturel insuffisant dans [pièce]. Agrandissement de baie à prévoir.'],
+  3:['Pièce principale [pièce] sans ouverture suffisante sur l’extérieur. Création de baie à prévoir.']},
+ phon:{aide:'Protection contre les bruits extérieurs (menuiseries, façades sur voie bruyante) et entre logements (planchers, cloisons). Absence de protection : note 3 (SO impossible).',
+  0:['Protection phonique satisfaisante.'],
+  1:['Protection phonique à améliorer [menuiseries côté rue]. Intervention ponctuelle.'],
+  3:['Aucune protection phonique [simple vitrage sur rue, plancher sans isolant]. Traitement acoustique à prévoir avec les travaux de menuiseries et d’isolation.']},
+ revmur:{aide:'Revêtements muraux et plafonds : état, humidité, moisissures. Avant 1949 : risque de peintures au plomb (CREP).',
+  0:['Revêtements muraux et plafonds en bon état.'],
+  1:['Revêtements à rafraîchir par endroits [pièces]. Reprise ponctuelle.'],
+  2:['Revêtements dégradés dans [pièces], à reprendre ; le reste à rafraîchir.'],
+  3:['Le revêtement des murs et des plafonds est à reprendre dans l’ensemble du logement.']},
+ revsol:{aide:'Revêtements de sol : état, planéité, étanchéité dans les pièces humides (obligatoire).',
+  0:['Revêtements de sol en bon état.'],
+  1:['Revêtements de sol à reprendre ponctuellement [pièce].'],
+  3:['Les revêtements des sols sont à reprendre dans l’ensemble du logement.']},
+ espaces:{aide:'Clôture, terrasse, véranda, balcons, loggias : état, sécurité, étanchéité. SO si absents et sans nécessité de création.',
+  0:['Rien à signaler.'],
+  1:['[Clôture / terrasse] à reprendre ponctuellement.'],
+  3:['[Terrasse / véranda] très dégradée. Démolition ou réfection à prévoir.']},
+ loctech:{aide:'Garage, cave, chaufferie, local technique : état, humidité, ventilation, accès sécurisé.',
+  0:['Rien à signaler.'],
+  1:['[Garage / cave] : reprise ponctuelle à prévoir (humidité, porte).'],
+  3:['[Local] très dégradé. Réfection à prévoir.']},
+ depose:{aide:'Amiante (repérage avant travaux pour un bâtiment dont le permis est antérieur au 1er juillet 1997), plomb dans les peintures (CREP, avant 1949), termites et champignons (mérule). SO si sans objet.',
+  0:['Rien à signaler.'],
+  1:['Traces d’insectes xylophages [localisation]. Traitement ponctuel à prévoir.'],
+  2:['Matériaux susceptibles de contenir de l’amiante [localisation]. Repérage avant travaux et dépose des éléments concernés.'],
+  3:['Présence de [plomb / amiante / mérule] nécessitant une dépose ou un traitement spécifique avant travaux.']},
+ chaufcol:{aide:'Chaufferie collective : âge et état de la chaudière, distribution, régulation, sécurité. SO s’il n’y a pas de chauffage collectif.',
+  0:['Chaufferie collective en bon état, entretenue.'],
+  1:['Chaufferie à entretenir ou à régler. Intervention ponctuelle.'],
+  3:['Chaudière collective vétuste ou hors d’usage. Remplacement à prévoir.']},
+ ecscol:{aide:'Production d’eau chaude collective : ballon ou chaudière, distribution, bouclage. SO s’il n’y a pas de production collective.',
+  0:['Production d’eau chaude collective en bon état.'],
+  1:['Production collective à entretenir. Intervention ponctuelle.'],
+  3:['Production d’eau chaude collective vétuste ou hors d’usage. Remplacement à prévoir.']},
+ incendiecol:{aide:'Parties communes : éclairage de sécurité, désenfumage de la cage d’escalier, extincteurs, signalétique, portes coupe-feu. SO impossible.',
+  0:['Équipements de sécurité incendie des parties communes présents et en bon état.'],
+  1:['Signalétique ou éclairage de sécurité à compléter.'],
+  3:['Aucun équipement de sécurité incendie en parties communes (désenfumage, éclairage de sécurité, signalétique). Mise en place à prévoir.']},
+ ascenseur:{aide:'Ascenseur : état, mise en conformité, contrat d’entretien. SO s’il n’y a pas d’ascenseur.',
+  0:['Ascenseur en bon état, entretenu.'],
+  1:['Ascenseur à mettre en conformité ponctuellement.'],
+  3:['Ascenseur vétuste ou hors d’usage. Remplacement ou modernisation complète à prévoir.']},
+ cour:{aide:'Sol de la cour : revêtement régulier (risque de chute), évacuation des eaux, encombrants. SO s’il n’y a pas de cour.',
+  0:['Sol de la cour régulier, évacuation des eaux correcte.'],
+  1:['Sol de la cour à reprendre ponctuellement (affaissement, regard).'],
+  3:['Sol de la cour très dégradé, eaux stagnantes. Réfection à prévoir.']},
+ wccom:{aide:'WC communs : état, fonctionnement, ventilation. SO s’il n’y en a pas.',
+  0:['WC communs en bon état.'],
+  1:['WC communs à reprendre ponctuellement.'],
+  3:['WC communs hors d’usage. Remplacement ou suppression à prévoir.']},
+ loccom:{aide:'Locaux communs (techniques, vélos, poussettes) : état, ventilation, éclairage, fermeture.',
+  0:['Rien à signaler.'],
+  1:['Local [vélos] à reprendre ponctuellement.'],
+  3:['Local [technique] très dégradé. Réfection à prévoir.']},
+ caves:{aide:'Caves : ventilation (soupiraux non bouchés), humidité, salpêtre, état des planchers hauts (poutrelles corrodées), cloisonnement, accès sécurisé.',
+  0:['Caves ventilées et saines, cloisonnement en bon état.'],
+  1:['Soupiraux obstrués, traces d’humidité. Remise en ventilation à prévoir.'],
+  2:['Humidité importante et plancher haut corrodé sur une partie. Traitement et reprise partielle.'],
+  3:['Caves très humides, planchers hauts dégradés. Réfection complète à prévoir.']},
+ dechets:{aide:'Local poubelles ou conduit vide-ordures : présence, état, ventilation, nettoyage. SO impossible selon le guide (l’Excel l’autorise).',
+  0:['Local poubelles en bon état, ventilé.'],
+  1:['Local poubelles à nettoyer et à remettre en état ponctuellement.'],
+  3:['Absence de local poubelles [ou vide-ordures hors d’usage]. Création ou condamnation à prévoir.']}};
+// Thème de chaque élément, par grille.
+const CLE_DEG={
+ mi:{'1.1':'fond','2.1':'murs','2.2':'planch','2.3':'charp','2.4':'esc','3.1':'couv','3.2':'gout','3.3':'toitaut','4.1':'enduit','4.2':'humid','5.1':'isol','5.2':'facade','5.3':'fen','5.4':'porte','6.1':'ventpp','6.2':'venth','7':'elec','8':'gaz','9':'conduit','10':'eau','11':'evac','12':'chauf','13':'ecs','14':'incendie','15':'cuisine','16':'sde','17':'wc','18.1':'orga','18.2':'eclair','19.1':'phon','20.1':'revmur','20.2':'revsol','21':'espaces','22':'loctech','23':'depose'},
+ bc:{'1.1':'fond','2.1':'murs','2.2':'planch','2.3':'charp','2.4':'esc','2.5':'gc','3.1':'couv','3.2':'gout','3.3':'toitaut','4.1':'enduit','4.2':'humid','5.1':'isol','5.2':'fen','5.3':'porteent','6.1':'revmur','6.2':'revsol','6.3':'facade','7':'elec','8':'gaz','9':'conduit','10':'eau','11':'evac','12':'chaufcol','13':'ecscol','14':'incendiecol','15':'ascenseur','16':'cour','17':'wccom','18':'loccom','19':'caves','20':'dechets','21':'depose'},
+ lc:{'1.1':'orga','1.2':'eclair','2.1':'phon','2.2':'isol','3.1':'revmur','3.2':'revsol','4.1':'fen','4.2':'porte','4.3':'gc','5.1':'ventpp','5.2':'venth','6':'elec','7':'gaz','8':'eau','9':'evac','10':'cuisine','11':'wc','12':'sde','13':'chauf','14':'ecs','15':'incendie','16':'conduit','17':'espaces','18':'depose'}};
+const preDeg=(k,id)=>PRE_DEG[CLE_DEG[k][id]];
+console.assert(Object.entries(GRILLES).every(([k,G])=>G.els.every(e=>preDeg(k,e.id)?.aide))&&Object.keys(PRE_DEG).every(c=>Object.values(CLE_DEG).some(m=>Object.values(m).includes(c))),'PRE_DEG / CLE_DEG');
+// Commentaire et photos d'un élément : v.it['idGrille:idÉlément'] (même structure que les pathologies).
+const degIt=(v,g,e)=>v.it[g.id+':'+e.id]||{note:'',ph:[]};
+const mots=s=>(String(s||'').trim().match(/\S+/g)||[]).length;
+// Points à vérifier sur un élément, exigés par le guide (§ 5.1.2 et 5.1.4).
+function degAlertes(v,g,e){const s=g.n[e.id]||{},x=degIt(v,g,e),a=[];
+  if((s.h===2||s.h===3)&&!x.ph.length)a.push(`Note ${s.h} : reportage photo exigé par le guide.`);
+  if(s.h===2&&!x.note.trim())a.push('Note 2 : justifiez-la dans le commentaire.');
+  if(typeof s.h==='number'&&s.h>=1&&e.a&&s.a==null)a.push('Indiquez l’ampleur des désordres.');
+  if(s.h==='NV'&&!String(s.motif||'').trim())a.push('Indiquez le motif du NV.');
+  if(e.p&&Number.isNaN(prorata(s.pt)))a.push('Prorata illisible.');
+  return a}
+// Phrase ajoutée au descriptif technique : éléments sans objet et non vérifiables (guide § 5.1.4).
+const degLib=e=>{const t=e.t.replace(/\s*\([^)]*\)\s*$/,'');return t[0].toLowerCase()+t.slice(1)};
+function degSoNv(v,g){const E=GRILLES[g.k].els,so=E.filter(e=>g.n[e.id]?.h==='SO'),nv=E.filter(e=>g.n[e.id]?.h==='NV');
+  return [so.length?'Éléments sans objet : '+so.map(degLib).join(', ')+'.':'',
+    nv.length?'Éléments non vérifiables : '+nv.map(e=>degLib(e)+(String(g.n[e.id].motif||'').trim()?' ('+g.n[e.id].motif.trim()+')':'')).join(', ')+'.':''].filter(Boolean).join(' ')}
+(()=>{const g={id:'g0',k:'mi',n:{'8':{h:'SO'},'21':{h:'SO'},'2.2':{h:'NV',motif:'encombrement'},'5.3':{h:3},'2.1':{h:2},'7':{h:1}}},v={f:{},it:{'g0:2.1':{note:'',ph:[{}]}}};
+  console.assert(degSoNv(v,g)==='Éléments sans objet : installation gaz, autres espaces spécifiques. Éléments non vérifiables : planchers (encombrement).','degSoNv',degSoNv(v,g));
+  const el=id=>GRILLES.mi.els.find(e=>e.id===id);
+  console.assert(degAlertes(v,g,el('5.3')).join()==='Note 3 : reportage photo exigé par le guide.'&&degAlertes(v,g,el('2.1')).join('|')==='Note 2 : justifiez-la dans le commentaire.|Indiquez l’ampleur des désordres.'&&degAlertes(v,g,el('2.2')).length===0&&degAlertes(v,g,el('7')).length===1,'degAlertes');})();
+// Synthèse des travaux : ligne proposée par thème, pour tout élément noté 1 à 3 (cahier des charges § 6.2).
+const TRAV_DEG={fond:'La reprise en sous-œuvre des fondations [après étude de sol]',murs:'La reprise des maçonneries porteuses [linteaux, ouvertures]',
+ planch:'La réfection des planchers [et l’isolation du plancher bas]',charp:'La reprise de la charpente [traitement / remplacement d’éléments]',
+ esc:'La sécurisation ou le remplacement de l’escalier et des garde-corps',gc:'La mise en sécurité des garde-corps et rampes',
+ couv:'La réfection de la couverture',gout:'Le remplacement des gouttières et descentes',toitaut:'La réfection des souches et éléments de toiture',
+ enduit:'La reprise des enduits extérieurs',humid:'Le traitement de l’humidité en pied de mur [drainage]',
+ isol:'L’isolation des [murs par l’intérieur / rampants ou plancher des combles / plancher bas]',facade:'Le remplacement des volets et la reprise des éléments de façade',
+ fen:'Le remplacement des menuiseries extérieures',porte:'Le remplacement de la porte d’entrée',porteent:'Le remplacement de la porte d’entrée de l’immeuble',
+ ventpp:'La mise en place d’une VMC',venth:'La mise en place d’une VMC',conduit:'La mise en place d’une VMC',
+ elec:'La mise en sécurité et aux normes de l’installation électrique',gaz:'La mise en conformité de l’installation gaz',
+ eau:'La réfection de la plomberie (alimentation en eau)',evac:'La mise aux normes de l’assainissement et des évacuations',
+ chauf:'L’installation d’un système de chauffage [type]',ecs:'L’installation d’une production d’eau chaude sanitaire',incendie:'La pose de détecteurs de fumée (DAAF)',
+ cuisine:'La réfection de la cuisine',sde:'La réfection de la salle d’eau',wc:'La réfection du WC',
+ orga:'Le réaménagement des pièces',eclair:'La création ou l’agrandissement d’ouvertures',phon:'L’amélioration de l’isolation phonique',
+ revmur:'La réfection des revêtements de murs et plafonds',revsol:'La réfection des revêtements de sols',
+ espaces:'La reprise des espaces extérieurs [clôture, terrasse]',loctech:'La remise en état des locaux techniques',
+ depose:'Le repérage amiante avant travaux et le traitement [termites, champignons]',
+ chaufcol:'Le remplacement de la chaufferie collective',ecscol:'Le remplacement de la production d’eau chaude collective',
+ incendiecol:'La mise en sécurité incendie des parties communes',ascenseur:'La mise en conformité de l’ascenseur',cour:'La réfection du sol de la cour',
+ wccom:'La remise en état des WC communs',loccom:'La remise en état des locaux communs',caves:'Le traitement des caves (ventilation, humidité)',
+ dechets:'La création ou la remise en état du local poubelles'};
+const AUTOREH='Les propriétaires réaliseront en auto-réhabilitation les travaux de revêtements de sols, murs et plafonds.';
+const travDeg=(k,id)=>TRAV_DEG[CLE_DEG[k][id]];
+// Lignes proposées pour une grille, dans l'ordre de la grille et sans doublon.
+const degTravaux=(v,g)=>[...new Set(GRILLES[g.k].els.filter(e=>typeof g.n[e.id]?.h==='number'&&g.n[e.id].h>=1).map(e=>travDeg(g.k,e.id)))];
+// Ajoute à la liste les lignes manquantes (« • ligne »), sans toucher au reste.
+function degFusion(txt,lines){const t=String(txt||'').replace(/\s+$/,''),add=lines.filter(l=>!t.includes(l));return{txt:[t,...add.map(l=>'• '+l)].filter(Boolean).join('\n'),added:add.length}}
+// Cohérence synthèse / notes : élément noté 3 sans sa ligne ; ligne de travaux dont tous les éléments sont notés 0.
+function degTravCtrl(v,g,txt){txt=String(txt||'');const E=GRILLES[g.k].els,h=e=>g.n[e.id]?.h;
+  const manque=E.filter(e=>h(e)===3&&!txt.includes(travDeg(g.k,e.id)));
+  const zero=[...new Set(E.map(e=>travDeg(g.k,e.id)))].filter(l=>txt.includes(l)&&E.filter(e=>travDeg(g.k,e.id)===l).every(e=>h(e)===0));
+  return{manque,zero}}
+// Intitulés intermédiaires du rapport (modèle Word), par numéro de rubrique.
+const SOUS_DEG={mi:{1:'Fondations',2:'Structure',3:'Couverture',4:'Étanchéité des murs',5:'Isolation thermique des parois, finitions et menuiseries',6:'Ventilation (statique ou mécanique)',18:'Organisation spatiale',19:'Caractéristiques techniques',20:'Finitions'},
+ bc:{1:'Fondations',2:'Structure',3:'Couverture',4:'Étanchéité des murs',5:'Isolation thermique des parois et menuiseries',6:'Finitions en parties communes'},
+ lc:{1:'Organisation spatiale',2:'Caractéristiques techniques',3:'Finitions',4:'Menuiseries',5:'Ventilation (statique ou mécanique)'}};
+// Le rapport définitif exige toutes les grilles notées, recevables, avec leurs niveaux et pièces.
+const degFinal=v=>v.g.length>0&&v.g.every(g=>{const T=degTot(v,g);return !T.rest&&!T.irr&&GRILLES[g.k].els.every(e=>!e.m||degK(v,g,e))});
+(()=>{const g={id:'g0',k:'mi',n:{'6.1':{h:3},'6.2':{h:1},'7':{h:0},'5.3':{h:3},'2.1':{h:0}}},v={f:{nbNiv:1,nbPP:1},it:{}};
+  const L=degTravaux(v,g);console.assert(L.join('|')==='Le remplacement des menuiseries extérieures|La mise en place d’une VMC','degTravaux',L);
+  const m=degFusion('Intro\n• Ma ligne',L);console.assert(m.added===2&&m.txt.endsWith('• La mise en place d’une VMC')&&degFusion(m.txt,L).added===0,'degFusion');
+  const c=degTravCtrl(v,g,'• La mise en place d’une VMC\n• La mise en sécurité et aux normes de l’installation électrique');
+  console.assert(c.manque.map(e=>e.id).join()==='5.3'&&c.zero.join()==='La mise en sécurité et aux normes de l’installation électrique','degTravCtrl',c);
+  console.assert(Object.values(CLE_DEG).every(m=>Object.values(m).every(k=>TRAV_DEG[k]))&&!degFinal({...v,g:[g]}),'TRAV_DEG');})();
 
 
 const IC={
@@ -1063,7 +1349,7 @@ function field([k,label,type,opts,hint,cond]){
     ctl=`<div class="chips" role="group" aria-label="${esc(label)}">${opts.map(o=>{const ch=type==='r'?v===o:(v||[]).includes(o);
       return `<label class="chip"><input type="${type==='r'?'radio':'checkbox'}" name="${k}" data-f="${k}" data-ft="${type}" value="${esc(o)}" ${ch?'checked':''}>${esc(k==='dem'?COM[o].label:o)}</label>`}).join('')}</div>`;
   }else if(type==='dl')ctl=`<input id="f_${k}" type="text" list="dl_${k}" data-f="${k}" value="${esc(v)}"><datalist id="dl_${k}">${[...new Set([...opts,...(P.ops||[])])].map(o=>`<option value="${esc(o)}">`).join('')}</datalist>`;
-  else if(type==='ta')ctl=`<textarea id="f_${k}" data-f="${k}" ${k==='trav'?'class="big"':''}>${esc(v)}</textarea>`;
+  else if(type==='ta')ctl=`<textarea id="f_${k}" data-f="${k}" ${k==='trav'||k.endsWith('_trav')?'class="big"':''}>${esc(v)}</textarea>`;
   else{const t={t:'text',n:'number',d:'date',tm:'time',tel:'tel',email:'email'}[type];
     ctl=`<input id="f_${k}" type="${t}" data-f="${k}" value="${esc(v)}" ${type==='n'?'inputmode="decimal" step="any"':''}>`}
   return `<div class="field ${full?'full':''}"><span>${esc(label)}</span>${ctl}${hint?`<div class="hint">${esc(hint)}</div>`:''}</div>`;
@@ -1234,7 +1520,7 @@ function render(){
     return;
   }
   if(view==='admin'){
-    app.innerHTML=`${topbar('Informations administratives',who(cur),'dash',logo)}<div class="form">${ADM(cur).map(field).join('')}</div>`;
+    app.innerHTML=`${topbar('Informations administratives',who(cur),'dash',logo)}<div class="form">${ADM(cur).map(field).join('')}</div>${isDeg(cur)?degSoNvHint(cur,cur.g[0])+'<h3 style="margin:16px 0 8px">Photo de façade (page de garde, facultative)</h3>'+phBlock('facade',it('facade'),{'facade:0':1},false):''}`;
     bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="dash">${isDeg(cur)?'Continuer vers la grille':'Continuer vers les rubriques'}</button>`;
     return;
   }
@@ -1291,54 +1577,91 @@ const newGid=()=>'g'+(Math.max(0,...cur.g.map(g=>+g.id.slice(1)))+1);
 const degS=el=>{const g=gOf(el.dataset.g);return g.n[el.dataset.e]||(g.n[el.dataset.e]={})};
 const gNom=(v,g)=>g.k==='lc'?lgtNom(v,g):g.k==='bc'?'Parties communes'+(v.f.nomBat?' – '+v.f.nomBat:''):'Maison individuelle';
 const f3=(x,d=3)=>x.toFixed(d).replace('.',',');
+// Numéro des photos dans une grille : « idGrille:idÉlément:index » -> 1, 2, 3…
+function degPhNums(v,g){const m={};let n=0;for(const e of GRILLES[g.k].els)degIt(v,g,e).ph.forEach((p,i)=>m[g.id+':'+e.id+':'+i]=++n);return m}
+// Volets « Commentaire et photos » ouverts par le technicien, gardés ouverts d'un affichage à l'autre.
+const degOpen=new Set();
+addEventListener('toggle',e=>{const id=e.target.dataset?.open;if(id)e.target.open?degOpen.add(id):degOpen.delete(id)},true);
+const motsTxt=t=>{const n=mots(t);return `${n} mot${n>1?'s':''}${n>100?' : visez 100 mots au plus':''}`};
+// Niveaux et pièces de la grille, rappelés en tête : ils multiplient une grande partie des notes.
+function degKLine(v,g){const val=(x,l,ls)=>+x>=1?`${Math.floor(+x)} ${+x>=2?ls:l}`:`<span class="need">${ls} à renseigner</span>`,niv=()=>val(v.f.nbNiv,'niveau','niveaux'),pp=x=>val(x,'pièce principale','pièces principales');
+  const L=g.k==='lc'?[pp(v.f[g.id+'_nbPP'])]:g.k==='bc'?[niv()]:[niv(),pp(v.f.nbPP)];
+  return `<div class="kline"><span>${L.join(' · ')}</span><button class="lnk" data-act="go" data-v="${g.k==='lc'?'lgt':'admin'}" data-g="${g.id}">Modifier</button></div>`}
+// Phrase automatique sur les éléments SO et NV, affichée sous le descriptif technique.
+const degSoNvHint=(v,g)=>{const t=degSoNv(v,g);return t?`<div class="hint">Ajouté au descriptif technique du rapport : « ${esc(t)} »</div>`:''};
 // Barre DM / DG / ID d'une grille, recalculée à chaque saisie.
-function degScore(v,g){const T=degTot(v,g),km=degKManq(v,g),vide=T.rest===GRILLES[g.k].els.length;
+function degScore(v,g){const T=degTot(v,g),vide=T.rest===GRILLES[g.k].els.length;
   return `<div class="score" role="status">
    <div><span class="k">DM</span><span class="v">${f3(T.DM)}</span></div><div><span class="k">DG</span><span class="v">${f3(T.DG)}</span></div><div><span class="k">ID</span><span class="v">${T.irr?'–':f3(T.ID)}</span></div>
    <span class="lvl ${T.irr?'danger':vide?'':T.niv[2]}">${T.irr?`Grille irrecevable : ${T.nv} éléments non vérifiables`:vide?'Grille à remplir':esc(T.niv[1])+(T.rest?' (provisoire)':'')}</span>
-   <span class="rest">${T.rest?`${T.rest} élément${T.rest>1?'s':''} à noter`:'Tous les éléments sont notés'}${T.nv&&!T.irr?` · ${T.nv} NV (irrecevable à ${NV_MAX})`:''}${km.length?` · <b>À renseigner : ${km.join(', ')}</b>`:''}</span></div>`}
+   <span class="rest">${T.rest?`${T.rest} élément${T.rest>1?'s':''} à noter`:'Tous les éléments sont notés'}${T.nv&&!T.irr?` · ${T.nv} NV (irrecevable à ${NV_MAX})`:''}</span>${degKLine(v,g)}</div>`}
 // Carte d'un élément : note d'état, ampleur, prorata, multiplicateur, note calculée.
-function elHtml(v,g,e){
+function elHtml(v,g,e,nums){
   const s=g.n[e.id]||{},k=degK(v,g,e),r=degNote(v,g,e),p=prorata(s.pt),d=`data-g="${g.id}" data-e="${e.id}"`;
+  const iid=g.id+':'+e.id,x=degIt(v,g,e),al=degAlertes(v,g,e),pre=preDeg(g.k,e.id);
   const seg=(key,list,val)=>`<div class="seg">${list.map(([x,l,t])=>`<label class="chip"${t?` title="${esc(t)}"`:''}><input type="radio" name="${key}_${g.id}_${e.id}" data-gn="${key}" ${d} value="${x??''}" ${(val??null)===x?'checked':''}>${l}</label>`).join('')}</div>`;
   return `<div class="item ${s.h==null?'':'st'+s.h}"><div class="el">
    <div class="h"><span class="ref">${e.id}</span><span class="t">${esc(e.t)}${e.maj?' <span class="pill info">Majeur</span>':''}</span><span class="res" title="Note de dégradation / valeur maximale">${r.max==null?'SO':f3(r.n,2)+' / '+r.max}</span></div>
+   <details class="aide"><summary>Que regarder ?</summary><div class="hint">${esc(pre.aide)}</div></details>
    <div role="radiogroup" aria-label="Note d’état : ${esc(e.t)}"><div class="lab">Note d’état</div>${seg('h',[0,1,2,3,...(e.so?['SO']:[]),'NV'].map(n=>[n,n,NOTE_INFO[n]]),s.h)}${s.h!=null?`<div class="muted info">${esc(NOTE_INFO[s.h])}</div>`:''}</div>
    ${s.h==='NV'?`<label class="field"><span>Motif du NV *</span><input type="text" data-gn="motif" ${d} value="${esc(s.motif)}" placeholder="Accès impossible, encombrement…"></label>`:''}
    ${e.a&&s.h!=='SO'&&s.h!=='NV'?`<div role="radiogroup" aria-label="Ampleur des désordres : ${esc(e.t)}"><div class="lab">Ampleur des désordres</div>${seg('a',[[null,'—','Critère non utilisé'],...AMPLEURS],s.a)}</div>`:''}
-   ${(e.p||e.m)&&s.h!=='SO'&&s.h!=='NV'?`<div class="ln">${e.p?`<label class="field"><span>Prorata d’éléments concernés</span><input type="text" inputmode="decimal" data-gn="pt" ${d} value="${esc(s.pt)}" placeholder="ex. 4/5 ou 0,8">${Number.isNaN(p)?'<span class="need">Saisie illisible : « 4/5 », « 4 sur 5 » ou un nombre entre 0 et 1</span>':''}</label>`:''}
+   ${(e.p||e.m)&&s.h!=='SO'&&s.h!=='NV'?`<div class="ln">${e.p?`<label class="field"><span>Prorata d’éléments concernés</span><input type="text" inputmode="decimal" data-gn="pt" ${d} value="${esc(s.pt)}" placeholder="ex. 4/5 ou 0,8">${Number.isNaN(p)?'<span class="need">Saisie : « 4/5 », « 4 sur 5 » ou un nombre entre 0 et 1</span>':''}</label>`:''}
     ${e.m?`<div class="field"><span>${e.m==='N'?'Niveaux':'Pièces principales'} concernés</span><div class="kval">${k??'<span class="need">à renseigner dans le descriptif</span>'}</div></div>`:''}</div>`:''}
+   ${al.length?`<div class="hint warn">${al.map(esc).join('<br>')}</div>`:''}
+   <details data-open="${iid}" ${degOpen.has(iid)||x.note.trim()||x.ph.length?'open':''}><summary>Commentaire et photos${x.ph.length?` · ${x.ph.length} photo${x.ph.length>1?'s':''}`:''}</summary>
+    <div class="dgc">
+     <select data-it="${iid}" data-k="pdeg" aria-label="Insérer un commentaire pré-rédigé"><option value="">+ Insérer un commentaire pré-rédigé…</option>${[...new Set([s.h,0,1,2,3])].filter(n=>pre[n]).map(n=>`<optgroup label="Note ${n}">${pre[n].map((t,i)=>`<option value="${n}:${i}">${esc(t)}</option>`).join('')}</optgroup>`).join('')}</select>
+     <textarea data-it="${iid}" data-k="note" aria-label="Commentaire : ${esc(e.t)}" placeholder="Constat, localisation, travaux à prévoir (100 mots environ)">${esc(x.note)}</textarea><div class="wc muted">${motsTxt(x.note)}</div>
+     ${phBlock(iid,x,nums,(s.h===2||s.h===3)&&!x.ph.length)}
+    </div></details>
    <div class="row"><button data-act="ras" ${d}>RAS</button></div>
   </div></div>`}
 // Tableau de bord, grille par chapitre et descriptif d'un logement. Renvoie false pour les écrans communs (informations, profil…).
 function degView(app,bar,bi){
-  const chap=g=>Object.entries(GRILLES[g.k].parts).map(([p,[t,ic]])=>{const r=GRILLES[g.k].els.filter(e=>e.part===p&&g.n[e.id]?.h==null).length;
-    return `<button class="tile" data-act="grille" data-g="${g.id}" data-p="${p}"><img class="ic" src="${ICO[ic]}" alt=""><span class="num">CHAPITRE ${p}</span><span class="lbl">${esc(t)}</span>${pills([[r?r+' à noter':'Noté',r?'warn':'ok']])}</button>`}).join('');
+  const cpt=(g,p)=>{const E=GRILLES[g.k].els.filter(e=>e.part===p);return[E.filter(e=>g.n[e.id]?.h==null).length,E.reduce((n,e)=>n+degAlertes(cur,g,e).length,0)]};
+  const chap=g=>Object.entries(GRILLES[g.k].parts).map(([p,[t,ic]])=>{const [r,a]=cpt(g,p);
+    return `<button class="tile" data-act="grille" data-g="${g.id}" data-p="${p}"><img class="ic" src="${ICO[ic]}" alt=""><span class="num">CHAPITRE ${p}</span><span class="lbl">${esc(t)}</span>${pills([[r?r+' à noter':'Noté',r?'warn':'ok'],...(a?[[a+' à vérifier','danger']]:[])])}</button>`}).join('');
   if(view==='dash'){
     const aN=ADM(cur).filter(f=>f[0]!=='h'&&(!f[5]||f[5](cur))&&filled(cur.f[f[0]])).length;
     const adm=`<button class="tile" data-act="go" data-v="admin"><img class="ic" src="${ICO.admin}" alt=""><span class="num">ÉTAPE 1</span><span class="lbl">Données administratives et descriptif</span>${pills([[aN?`${aN} champs`:'À faire',aN?'info':'']])}</button>`;
-    if(cur.bien!=='imm'){const g=cur.g[0];app.innerHTML=`<div class="degtop">${topbar(who(cur),kind(cur),'list')}${degScore(cur,g)}</div><div class="tiles">${adm}${chap(g)}</div>`;return true}
+    bar.hidden=false;bi.innerHTML=`<button data-act="zipph">${svg('cam')}Photos (.zip)</button><button class="btn-primary" data-act="pdf">${svg('pdf')}${degFinal(cur)?'Générer le rapport PDF':'Générer un projet (PDF)'}</button>`;
+    const trav=g=>{const t=cur.f[g.id+'_trav'],c=degTravCtrl(cur,g,t),n=String(t||'').split('\n').filter(l=>l.trim()).length;
+      return `<button class="tile" data-act="go" data-v="trav" data-g="${g.id}"><img class="ic" src="${ICO.trav}" alt=""><span class="num">SYNTHÈSE</span><span class="lbl">Synthèse des travaux</span>${pills([[n?n+' ligne'+(n>1?'s':''):'À faire',n?'info':''],...(c.manque.length+c.zero.length?[['À vérifier','danger']]:[])])}</button>`};
+    if(cur.bien!=='imm'){const g=cur.g[0];app.innerHTML=`<div class="degtop">${topbar(who(cur),kind(cur),'list')}${degScore(cur,g)}</div><div class="tiles">${adm}${chap(g)}${trav(g)}</div>`;return true}
     const [bc,...L]=cur.g;
     app.innerHTML=`${topbar(who(cur),kind(cur),'list')}<div class="tiles">${adm}</div>
      <h2 class="sec">Parties communes</h2>
-     <div class="gcard"><div class="name">${esc(gNom(cur,bc))}</div>${degScore(cur,bc)}<div class="tiles">${chap(bc)}</div></div>
+     <div class="gcard"><div class="name">${esc(gNom(cur,bc))}</div>${degScore(cur,bc)}<div class="tiles">${chap(bc)}${trav(bc)}</div></div>
      <h2 class="sec">Logements (parties privatives)</h2>
      <div class="visits">${L.map(g=>`<div class="gcard"><div class="name">${esc(lgtNom(cur,g))}</div>
        <div class="muted">${[cur.f[g.id+'_nbPP']&&cur.f[g.id+'_nbPP']+' pièce(s) principale(s)',cur.f[g.id+'_surf']&&cur.f[g.id+'_surf']+' m²'].filter(Boolean).join(' · ')}</div>${degScore(cur,g)}
-       <div class="row"><button class="btn-primary" data-act="grille" data-g="${g.id}" data-p="I">Ouvrir la grille</button><button data-act="go" data-v="lgt" data-g="${g.id}">Descriptif</button><button data-act="duplgt" data-g="${g.id}">Dupliquer</button><button class="btn-danger" data-act="dellgt" data-g="${g.id}">Supprimer</button></div></div>`).join('')||'<div class="empty">Aucun logement : ajoutez-en un par logement visité.</div>'}</div>
+       <div class="row"><button class="btn-primary" data-act="grille" data-g="${g.id}" data-p="I">Ouvrir la grille</button><button data-act="go" data-v="lgt" data-g="${g.id}">Descriptif</button><button data-act="go" data-v="trav" data-g="${g.id}">Travaux</button><button data-act="duplgt" data-g="${g.id}">Dupliquer</button><button class="btn-danger" data-act="dellgt" data-g="${g.id}">Supprimer</button></div></div>`).join('')||'<div class="empty">Aucun logement : ajoutez-en un par logement visité.</div>'}</div>
      <button class="big secondary" data-act="addlgt">${svg('plus')}<span><span class="t">Ajouter un logement</span><span class="d">Une grille « logement en collectif » par logement visité</span></span></button>`;
     return true}
   if(view==='grille'){
-    const g=gOf(gId),G=GRILLES[g.k],parts=Object.keys(G.parts),i=parts.indexOf(gPart);
-    app.innerHTML=`<div class="degtop">${topbar(gPart+'. '+G.parts[gPart][0],gNom(cur,g)+' · '+G.nom,'dash')}${degScore(cur,g)}
-      <nav class="parts" aria-label="Chapitres">${parts.map(p=>{const r=G.els.filter(e=>e.part===p&&g.n[e.id]?.h==null).length;
-        return `<button data-act="grille" data-g="${g.id}" data-p="${p}" ${p===gPart?'aria-current="true"':''} aria-label="Chapitre ${p}${r?', '+r+' à noter':''}">${p}${r?`<span class="pill warn">${r}</span>`:''}</button>`}).join('')}</nav></div>
-     <div class="items">${G.els.filter(e=>e.part===gPart).map(e=>elHtml(cur,g,e)).join('')}</div>`;
+    const g=gOf(gId),G=GRILLES[g.k],parts=Object.keys(G.parts),i=parts.indexOf(gPart),nums=degPhNums(cur,g);
+    app.innerHTML=`<div class="degtop">${topbar(gPart+'. '+G.parts[gPart][0],g.k==='mi'?who(cur):gNom(cur,g),'dash')}${degScore(cur,g)}
+      <nav class="parts" aria-label="Chapitres">${parts.map(p=>{const [r,a]=cpt(g,p);
+        return `<button data-act="grille" data-g="${g.id}" data-p="${p}" ${p===gPart?'aria-current="true"':''} aria-label="Chapitre ${p}${r?', '+r+' à noter':''}${a?', '+a+' à vérifier':''}">${p}${r?`<span class="pill warn">${r}</span>`:''}${a?`<span class="pill danger">!</span>`:''}</button>`}).join('')}</nav></div>
+     <div class="items">${G.els.filter(e=>e.part===gPart).map(e=>elHtml(cur,g,e,nums)).join('')}</div>`;
     bar.hidden=false;const nx=parts[i+1];
     bi.innerHTML=`${i>0?`<button data-act="grille" data-g="${g.id}" data-p="${parts[i-1]}">← Chapitre ${parts[i-1]}</button>`:''}<button class="btn-primary" data-act="${nx?'grille':'dash'}" data-g="${g.id}" data-p="${nx||''}">${nx?'Chapitre '+nx+' →':'Retour au dossier'}</button>`;
     return true}
+  if(view==='trav'){const g=gOf(gId),key=g.id+'_trav',txt=cur.f[key]||'',c=degTravCtrl(cur,g,txt);
+    if((cur.f[g.id+'_ar']||[]).length&&!filled(cur.f[g.id+'_arT'])){cur.f[g.id+'_arT']=AUTOREH;save()}
+    app.innerHTML=`${topbar('Synthèse des travaux',gNom(cur,g),'dash')}
+     <div class="row" style="margin-bottom:10px"><button class="btn-primary" data-act="degtrav" data-g="${g.id}">${svg('sync')}${filled(txt)?'Mettre à jour depuis la grille':'Pré-remplir depuis la grille'}</button></div>
+     <p class="muted">Une ligne par élément noté de 1 à 3. Modifiez librement la liste (ajout, suppression, ordre) : la mise à jour ajoute seulement les lignes manquantes. Complétez les [crochets].</p>
+     ${c.manque.length?`<div class="hint warn">Élément noté 3 sans ligne de travaux : ${c.manque.map(e=>esc(e.id+' '+degLib(e))).join(', ')}.</div>`:''}
+     ${c.zero.length?`<div class="hint warn">Ligne de travaux alors que l’élément est noté 0 : ${c.zero.map(esc).join(' ; ')}.</div>`:''}
+     <div class="form" style="margin-top:12px">${[[key,'Il est à prévoir pour les travaux :','ta'],[g.id+'_ar','Auto-réhabilitation','c',['Finitions réalisées en auto-réhabilitation par les propriétaires']],[g.id+'_arT','Phrase ajoutée au rapport','ta',0,0,v=>(v.f[g.id+'_ar']||[]).length]].map(field).join('')}</div>
+     <div class="row"><button data-act="degia" data-g="${g.id}" ${filled(txt)?'':'disabled'}>Relecture IA (Copilot)</button></div>
+     <p class="muted">Copie une consigne, les notes, les commentaires et la liste de travaux (sans nom ni adresse), puis ouvre Copilot : collez le texte et reprenez ici les corrections retenues.</p>`;
+    bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="dash">Retour au dossier</button>`;
+    return true}
   if(view==='lgt'){const g=gOf(gId);
-    app.innerHTML=`${topbar('Descriptif du logement',lgtNom(cur,g),'dash')}<div class="form">${LGT_FIELDS(g.id).map(field).join('')}</div>`;
+    app.innerHTML=`${topbar('Descriptif du logement',lgtNom(cur,g),'dash')}<div class="form">${LGT_FIELDS(g.id).map(field).join('')}</div>${degSoNvHint(cur,g)}`;
     bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="grille" data-g="${g.id}" data-p="I">Ouvrir la grille du logement</button>`;
     return true}
   return false;
@@ -1374,7 +1697,7 @@ document.addEventListener('input',e=>{
   if(!cur)return;
   if(el.dataset.gn==='pt'||el.dataset.gn==='motif'){const s=degS(el);s[el.dataset.gn]=el.value;save();return}
   if(el.dataset.f&&!el.dataset.ft){cur.f[el.dataset.f]=el.value;save();if(/^mr/.test(el.dataset.f))memoMairie(cur);return}
-  if(el.dataset.it&&(el.dataset.k==='note'||el.dataset.k==='loc')){it(el.dataset.it)[el.dataset.k]=el.value;save()}
+  if(el.dataset.it&&(el.dataset.k==='note'||el.dataset.k==='loc')){it(el.dataset.it)[el.dataset.k]=el.value;save();if(el.nextElementSibling?.classList.contains('wc'))el.nextElementSibling.textContent=motsTxt(el.value)}
   if(el.dataset.it&&el.dataset.k==='cap'){it(el.dataset.it).ph[+el.dataset.i].cap=el.value;save()}
 });
 document.addEventListener('change',async e=>{
@@ -1386,6 +1709,9 @@ document.addEventListener('change',async e=>{
   if(!cur)return;
   if(el.dataset.gn==='h'||el.dataset.gn==='a'){const s=degS(el),x=el.value;if(el.dataset.gn==='h')s.h=x==='SO'||x==='NV'?x:+x;else s.a=x===''?null:+x;save();return keep()}
   if(el.dataset.gn==='pt')return keep();
+  if(el.dataset.k==='pdeg'){const val=el.value;el.value='';if(!val)return;const [n,i]=val.split(':'),[gid,eid]=el.dataset.it.split(':'),t=preDeg(gOf(gid).k,eid)[n][+i];
+    const s=it(el.dataset.it),ta=el.parentElement.querySelector('textarea');s.note=(s.note.trim()?s.note.replace(/\s+$/,'')+'\n':'')+t;ta.value=s.note;ta.nextElementSibling.textContent=motsTxt(s.note);save();
+    ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);return}
   // Opération : la dernière saisie est proposée par défaut et ajoutée à la liste.
   if(el.dataset.f==='op'){const o=el.value.trim();P.lastOp=o;if(o&&!OPERATIONS.includes(o))P.ops=[...new Set([...(P.ops||[]),o])];saveP();return}
   // Ville du logement : la mairie destinataire suit, et ses coordonnées sont reprises du carnet.
@@ -1426,7 +1752,11 @@ document.addEventListener('click',async e=>{
   if(a==='dash'){view='dash';return go()}
   if(a==='go'){view=b.dataset.v;if(b.dataset.g)gId=b.dataset.g;return go()}
   if(a==='grille'){gId=b.dataset.g;gPart=b.dataset.p||'I';view='grille';return go()}
-  if(a==='ras'){const s=degS(b),e=GRILLES[gOf(b.dataset.g).k].els.find(x=>x.id===b.dataset.e);s.h=0;if(e.a)s.a=0;save();return keep()}
+  if(a==='ras'){const s=degS(b),e=GRILLES[gOf(b.dataset.g).k].els.find(x=>x.id===b.dataset.e),x=it(b.dataset.g+':'+e.id);s.h=0;if(e.a)s.a=0;if(!x.note.trim())x.note='RAS';save();return keep()}
+  if(a==='degtrav'){const g=gOf(b.dataset.g),L=degTravaux(cur,g);if(!L.length){toast('Aucun élément noté de 1 à 3 : rien à pré-remplir');return}
+    const m=degFusion(cur.f[g.id+'_trav'],L);cur.f[g.id+'_trav']=m.txt;save();keep();toast(m.added?`${m.added} ligne${m.added>1?'s':''} ajoutée${m.added>1?'s':''}`:'Liste déjà à jour');return}
+  if(a==='degia'){try{await navigator.clipboard.writeText(texteRelectureDeg(cur,gOf(b.dataset.g)));toast('Texte copié : collez-le dans Copilot')}catch(err){toast('Copie impossible : '+err.message);return}
+    open('https://copilot.microsoft.com/','_blank','noopener');return}
   if(a==='addlgt'){const id=newGid();cur.g.push({id,k:'lc',n:{}});cur.f[id+'_nom']='Logement '+(cur.g.length-1);gId=id;view='lgt';save();return go()}
   if(a==='duplgt'){const src=gOf(b.dataset.g),id=newGid();cur.g.push({...structuredClone(src),id});
     for(const [k,x] of Object.entries(cur.f))if(k.startsWith(src.id+'_'))cur.f[id+k.slice(src.id.length)]=x;
@@ -1453,7 +1783,7 @@ document.addEventListener('click',async e=>{
   if(a==='ia'){try{await navigator.clipboard.writeText(texteRelecture(cur));toast('Texte copié : collez-le dans Copilot')}catch(err){toast('Copie impossible : '+err.message);return}
     open('https://copilot.microsoft.com/','_blank','noopener');return}
   if(a==='install'){const ev=instEv;instEv=null;render();if(ev){ev.prompt();await ev.userChoice.catch(()=>{})}return}
-  if(a==='pdf'){await save(true);if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur le rapport');view='profil';return go()}const v=cur;return exportPdf(v).then(()=>{if(window.jspdf){v.pdfAt=Date.now();store.put(v).catch(()=>{})}}).catch(err=>toast('PDF impossible : '+err.message))}
+  if(a==='pdf'){await save(true);if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur le rapport');view='profil';return go()}const v=cur;return exportPdf(v).then(()=>{if(window.jspdf&&(!isDeg(v)||degFinal(v))){v.pdfAt=Date.now();store.put(v).catch(()=>{})}}).catch(err=>toast('PDF impossible : '+err.message))}
   if(a==='export')return exportJson();
   if(a==='sel'){exSel.clear();for(const v of visits)if(b.dataset.k==='all'||b.dataset.k==='encours'&&!v.pdfAt)exSel.add(v.id);return keep()}
   if(a==='delmairie'){if(!armed(b,'Confirmer la suppression'))return;delete MAIRIES.l[b.dataset.k];saveMairies();return render()}
@@ -1507,6 +1837,11 @@ function zip(files){
 }
 const fname=s=>String(s||'').replace(/[\/\\:*?"<>|\n\r\t]+/g,'-').replace(/\s+/g,' ').trim();
 function exportPhotos(v){
+  if(isDeg(v)){const dossier=fname(`Dégradation ${frDate(v.f.dateVis||today()).replaceAll('/','-')} ${who(v)}`),files=[];
+    for(const g of v.g){const nums=degPhNums(v,g),sd=fname(gNom(v,g));for(const e of GRILLES[g.k].els)degIt(v,g,e).ph.forEach((p,i)=>{const cap=fname(p.cap).slice(0,60);
+      files.push({name:`${dossier}/${sd}/${e.id} Photo ${nums[g.id+':'+e.id+':'+i]}${cap?' - '+cap:''}.jpg`,data:Uint8Array.from(atob(p.src.split(',')[1]),c=>c.charCodeAt(0))})})}
+    if(!files.length){toast('Aucune photo dans ce dossier');return}
+    return offer(dossier+'.zip',zip(files))}
   const dossier=fname(`Visite ${isPdl(v)?'permis de louer':'décence'} ${frDate(v.f.dateVis||today()).replaceAll('/','-')} ${(isPdl(v)?v.f.adresse:v.f.nom)||'logement'}`),files=[];
   for(const r of RR(v)){const nums=phNums(r,v);for(const id of phIds(r,v)){
     v.it[id].ph.forEach((p,i)=>{const cap=fname(p.cap).slice(0,60);
@@ -1630,6 +1965,7 @@ const ORTHI="« Les informations collectées sur le logement peuvent faire l’o
 async function exportPdf(v){
   if(!window.jspdf){toast("Le module PDF n'est pas chargé : ouvrez l'application une fois avec internet.");return}
   toast('Génération du PDF…');
+  if(isDeg(v))return degPdf(v);
   const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',format:'a4'});
   const W=210,H=297,M=12,CW=W-2*M,TOP=12,BOT=H-14,PAD=1.5;
   const ROSE=[251,233,231],INK=[33,43,54],MUT=[96,110,122],ACC=[27,109,150],TINT=[233,242,247],LINE=[196,208,217],WHITE=[255,255,255],RED=[180,35,24],OK=[43,122,75];let y=TOP;
@@ -1879,6 +2215,109 @@ async function exportPdf(v){
   const n=doc.getNumberOfPages();
   for(let i=1;i<=n;i++){doc.setPage(i);doc.setDrawColor(...ACC);doc.setLineWidth(.4);doc.line(M,H-10,W-M,H-10);font(7.5,'normal',MUT);doc.text(T(`${pdl?cm.foot:'Constat Décence '+com.foot} / SOLIHA Charente-Maritime Deux-Sèvres`),M,H-6.5);font(7.5,'bold',ACC);doc.text(`Page ${i} / ${n}`,W-M,H-6.5,{align:'right'})}
   await offer(pdl?`Permis_de_louer_${slug(f.adresse)||'logement'}_${f.dateVis||today()}.pdf`:`Constat_decence_${slug(f.nom)||'logement'}_${f.dateVis||today()}.pdf`,doc.output('blob'));
+}
+
+/* ---------- rapport de dégradation : relecture IA et PDF ---------- */
+const degEtat=(s,e)=>s.h==null?'non noté':s.h==='SO'?'sans objet':s.h==='NV'?'non vérifiable'+(String(s.motif||'').trim()?' ('+s.motif.trim()+')':''):
+  [`note d’état ${s.h}`,e.a&&s.a!=null?`ampleur ${s.a*100} %`:'',e.p&&prorata(s.pt)!=null&&!Number.isNaN(prorata(s.pt))?`prorata ${f3(prorata(s.pt),2)}`:''].filter(Boolean).join(' · ');
+// Relecture IA : consigne + notes, commentaires et travaux d'une grille, sans nom ni adresse.
+function texteRelectureDeg(v,g){
+  const L=GRILLES[g.k].els.filter(e=>g.n[e.id]?.h!=null||degIt(v,g,e).note.trim()).map(e=>{const n=degIt(v,g,e).note.trim().replace(/\s*\n\s*/g,' ');return `- ${e.id} ${degLib(e)} : ${degEtat(g.n[e.id]||{},e)}${n?'. Commentaire : '+n:''}`});
+  return [`Tu relis un rapport d’analyse de la dégradation d’un logement (grille Anah « ${GRILLES[g.k].nom} »).`,
+    'Corrige l’orthographe et la grammaire des commentaires et de la synthèse des travaux, améliore la clarté sans changer le sens technique, et signale les incohérences : élément dégradé sans travaux correspondant, travaux sans désordre, commentaire qui ne justifie pas la note. N’ajoute pas d’exigence réglementaire non justifiée.',
+    'Rends d’abord les commentaires et la liste corrigés, dans la même structure, puis la liste de tes remarques.','',
+    'NOTES ET COMMENTAIRES :',...(L.length?L:['- Aucun']),'','SYNTHÈSE DES TRAVAUX :',v.f[g.id+'_trav']||''].join('\n')}
+// Rapport PDF : page de garde, descriptif, chapitres (modèle Word), synthèse, signature, puis une grille par annexe en paysage.
+async function degPdf(v){
+  const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',format:'a4'}),T=PDFT,f=v.f,fin=degFinal(v),imm=v.bien==='imm';
+  const INK=[33,43,54],MUT=[96,110,122],ACC=[27,109,150],TINT=[233,242,247],LINE=[196,208,217],WHITE=[255,255,255],RED=[180,35,24];
+  let W=210,H=297,y=15;const M=15,CW=()=>W-2*M,BOT=()=>H-16;
+  const font=(sz,st='normal',c=INK)=>{doc.setFont('helvetica',st);doc.setFontSize(sz);doc.setTextColor(...c)};
+  const LH=sz=>sz*.3528*1.3,fmt=src=>src.startsWith('data:image/png')?'PNG':'JPEG';
+  const page=(o='portrait')=>{doc.addPage('a4',o);[W,H]=o==='portrait'?[210,297]:[297,210];y=15};
+  const need=h=>{if(y+h>BOT())page(W>H?'landscape':'portrait')};
+  const lines=(s,w,sz,st='normal')=>{font(sz,st);return T(s).split('\n').flatMap(p=>p.trim()?doc.splitTextToSize(p,w):[''])};
+  const para=(s,o={})=>{const sz=o.sz||10,ind=o.ind||0;for(const l of lines(s,CW()-ind,sz,o.st)){need(LH(sz));font(sz,o.st||'normal',o.c||INK);doc.text(l,M+ind,y+LH(sz)*.75);y+=LH(sz)}};
+  const band=(s,sz=11)=>{need(16);doc.setFillColor(...ACC);doc.roundedRect(M,y,CW(),8,1.5,1.5,'F');font(sz,'bold',WHITE);doc.text(T(s),M+3,y+5.6);y+=11};
+  const titre=(s,sz=10.5,c=ACC)=>{const L=lines(s,CW(),sz,'bold');need(L.length*LH(sz)+12);font(sz,'bold',c);L.forEach(l=>{doc.text(l,M,y+LH(sz)*.75);y+=LH(sz)});y+=1};
+  // Tableau libellé / valeur.
+  const kv=rows=>{for(const [l,val] of rows){const a=lines(l,54,9,'bold'),b=lines(val==null||val===''?'—':String(val),CW()-62,9.5,'bold'),h=Math.max(a.length,b.length)*LH(9.5)+3;need(h);
+    doc.setFillColor(...TINT);doc.rect(M,y,58,h,'F');doc.setDrawColor(...LINE);doc.setLineWidth(.2);doc.rect(M,y,58,h);doc.rect(M+58,y,CW()-58,h);
+    font(9,'bold',ACC);a.forEach((x,i)=>doc.text(x,M+2,y+1.5+LH(9.5)*(i+.75)));font(9.5,'bold');b.forEach((x,i)=>doc.text(x,M+60,y+1.5+LH(9.5)*(i+.75)));y+=h}};
+  // Photos deux par ligne, légendées.
+  const photos=list=>{const cw=(CW()-6)/2;for(let i=0;i<list.length;i+=2){const row=list.slice(i,i+2),hs=row.map(p=>Math.min(68,cw*p.h/p.w));need(Math.max(...hs)+8);
+    row.forEach((p,k)=>{const ih=hs[k],iw=ih*p.w/p.h,x0=M+k*(cw+6);doc.addImage(p.src,fmt(p.src),x0+(cw-iw)/2,y,iw,ih);font(8,'italic',MUT);doc.text(lines(`Photo ${p.n}${p.cap?' – '+p.cap:''}`,cw,8,'italic')[0],x0,y+ih+4)});
+    y+=Math.max(...hs)+8}};
+  const coef=g=>{const t=degTot(v,g);return t.irr?'grille irrecevable ('+t.nv+' éléments non vérifiables)':f3(t.ID,2)+' – '+t.niv[1]+(t.rest?' (grille incomplète)':'')};
+  const ptxt=x=>+x>=1?String(Math.floor(+x)):'—';
+
+  /* --- page de garde --- */
+  try{const lg=await loadImg(LOGO);doc.addImage(LOGO,'PNG',M,y,44,44*lg.naturalHeight/lg.naturalWidth)}catch(e){}
+  y=48;if(f.op){band(f.op.toUpperCase(),12)}
+  y+=4;for(const l of lines(imm?'RAPPORT D’ANALYSE DE LA DÉGRADATION D’UN IMMEUBLE':'RAPPORT D’ANALYSE DE LA DÉGRADATION D’UNE MAISON INDIVIDUELLE',CW(),15,'bold')){font(15,'bold',ACC);doc.text(l,W/2,y+6,{align:'center'});y+=7.5}
+  font(11,'bold',ACC);doc.text(T(imm?'Parties communes et parties privatives':'Logement – partie privative'),W/2,y+5,{align:'center'});y+=12;
+  const fa=v.it.facade?.ph?.[0];if(fa){const h=Math.min(80,CW()*fa.h/fa.w),w=h*fa.w/fa.h;doc.addImage(fa.src,fmt(fa.src),(W-w)/2,y,w,h);y+=h+6}
+  kv([['Date de visite',frDate(f.dateVis)],['Rapport établi par',[P.nom,P.qual].filter(Boolean).join(' – ')],['Propriétaire',f.pNom],['Adresse',[f.adresse,cpv(v)].filter(Boolean).join(', ')]]);
+  y+=6;
+  if(imm){titre('Coefficient de dégradation (ID) de chaque grille');kv(v.g.map(g=>[gNom(v,g),coef(g)]))}
+  else{need(16);doc.setDrawColor(...ACC);doc.setLineWidth(.6);doc.roundedRect(M,y,CW(),14,2,2);font(12.5,'bold',ACC);doc.text(T('Coefficient de dégradation : '+coef(v.g[0])),W/2,y+9,{align:'center',maxWidth:CW()-6});y+=18}
+  if(!fin){y+=2;para('Projet : '+(v.g.some(g=>degTot(v,g).irr)?'grille irrecevable (3 éléments non vérifiables ou plus).':'grille incomplète (éléments non notés, ou niveaux / pièces non renseignés).'),{st:'bold',c:RED,sz:9.5})}
+  font(8.5,'normal',MUT);doc.text(T(SOLIHA_ADR),W/2,BOT()-2,{align:'center'});
+
+  /* --- descriptif, chapitres et synthèse d'une grille --- */
+  const descriptif=g=>{titre('DESCRIPTIF GÉNÉRAL',11);
+    if(g.k==='mi')kv([['Année de construction',f.annee],['Surface habitable',f.surf&&f.surf+' m²'],['Nombre de niveaux',ptxt(f.nbNiv)],['Pièces principales',ptxt(f.nbPP)],['Consommation avant travaux',f.conso&&f.conso+' kWhep/m².an'],['Type de ventilation',f.vent]]);
+    else if(g.k==='bc')kv([['Année de construction',f.annee],['Bâtiments de l’ensemble',f.nbBat],['Bâtiment évalué',f.nomBat],['Nombre de niveaux',ptxt(f.nbNiv)],['Consommation avant travaux',f.conso&&f.conso+' kWhep/m².an']]);
+    else kv([['Logement',lgtNom(v,g)],['Pièces principales',ptxt(f[g.id+'_nbPP'])],['Surface habitable',f[g.id+'_surf']&&f[g.id+'_surf']+' m²'],['Consommation avant travaux',f[g.id+'_conso']&&f[g.id+'_conso']+' kWhep/m².an']]);
+    const d=[g.k==='lc'?f[g.id+'_desc']:f.desc,degSoNv(v,g)].filter(x=>String(x||'').trim()).join('\n');
+    if(d){y+=3;titre('Descriptif technique, éléments manquants et spécificités',9.5,INK);para(d)}y+=4};
+  const chapitres=g=>{const G=GRILLES[g.k],nums=degPhNums(v,g);let part='',sous='';
+    for(const e of G.els){const s=g.n[e.id]||{},x=degIt(v,g,e),pre=e.id.includes('.')?e.id.split('.')[0]:'';
+      // Place de l'élément (titre, notes, première photo) réservée avec ses intitulés, pour ne pas les laisser seuls en bas de page.
+      const eh=24+(x.ph[0]?Math.min(68,(CW()-6)/2*x.ph[0].h/x.ph[0].w)+8:0),ns=pre&&pre!==sous&&SOUS_DEG[g.k][pre];
+      if(e.part!==part){need(eh+(ns?32:24));part=e.part;sous='';y+=2;band(`${part}. ${G.parts[part][0].toUpperCase()}`)}
+      if(ns){need(eh+10);sous=pre;titre(`${pre} ${SOUS_DEG[g.k][pre].toUpperCase()}`)}
+      need(eh);
+      titre(pre?`${e.id.replace('.','-')} ${e.t}`:`${e.id} ${e.t.toUpperCase()}`,pre?10:10.5,pre?INK:ACC);
+      para(degEtat(s,e).replace(/^./,c=>c.toUpperCase()),{sz:8.5,c:MUT});
+      if(x.note.trim())para(x.note.trim());
+      if(CLE_DEG[g.k][e.id]==='depose'&&+f.annee>0&&+f.annee<1949)para('Construction antérieure à 1949 : un constat de risque d’exposition au plomb (CREP) doit être réalisé avant travaux.',{st:'italic'});
+      photos(x.ph.map((p,i)=>({...p,n:nums[g.id+':'+e.id+':'+i]})));y+=3}};
+  const synthese=g=>{const t=String(f[g.id+'_trav']||'').trim();y+=2;band('SYNTHÈSE DES TRAVAUX');
+    if(t){para('Il est à prévoir pour les travaux :');t.split('\n').forEach(l=>l.trim()&&para(l.trim().replace(/^[•\-–]\s*/,'• '),{ind:4}))}else para('Aucuns travaux renseignés.',{c:MUT});
+    if((f[g.id+'_ar']||[]).length){y+=2;para(f[g.id+'_arT']||AUTOREH)}y+=4};
+  for(const g of v.g){page();if(imm)band(g.k==='bc'?'PARTIES COMMUNES – '+(f.nomBat||'bâtiment').toUpperCase():(/^logement/i.test(lgtNom(v,g))?'':'LOGEMENT – ')+lgtNom(v,g).toUpperCase(),12);descriptif(g);chapitres(g);synthese(g)}
+
+  /* --- date et signature --- */
+  need(48);y+=4;titre('Date et signature du technicien',10.5);para(`Fait le ${frDate(today())}`);para([P.nom,P.qual].filter(Boolean).join(' – '),{st:'bold'});
+  if(P.sig){const h=Math.min(26,60*P.sig.r);doc.addImage(P.sig.src,fmt(P.sig.src),M,y+2,h/P.sig.r,h);y+=h+4}
+
+  /* --- annexes : une grille par page en paysage --- */
+  const COLS=[['Élément',112],['Majeur',16],['Note d’état',20],['Ampleur',20],['Prorata',20],['Niv./pièces',22],['Note de dégradation',28],['Valeur max.',29]];
+  const trow=(cells,o={})=>{const C=o.span?[lines(cells[0],CW()-3,8,'bold')]:COLS.map(([,w],i)=>lines(String(cells[i]??''),w-3,8,o.b?'bold':'normal')),L=C[0],h=Math.max(...C.map(c=>c.length))*LH(8)+2;
+    if(y+h*(o.span?2.6:1)>BOT()){page('landscape');if(!o.head)trow(COLS.map(c=>c[0]),{head:1,b:1,fill:ACC,c:WHITE})}
+    let x=M;doc.setDrawColor(...LINE);doc.setLineWidth(.2);
+    if(o.span){doc.setFillColor(...o.fill);doc.rect(M,y,CW(),h,'FD');font(8,'bold',o.c||INK);doc.text(L[0],M+1.5,y+1+LH(8)*.75);y+=h;return}
+    COLS.forEach(([,w],i)=>{if(o.fill){doc.setFillColor(...o.fill);doc.rect(x,y,w,h,'FD')}else doc.rect(x,y,w,h);font(8,o.b?'bold':'normal',o.c||INK);
+      C[i].forEach((l,k)=>doc.text(l,i?x+w/2:x+1.5,y+1+LH(8)*(k+.75),{align:i?'center':'left'}));x+=w});y+=h};
+  for(const g of v.g){const G=GRILLES[g.k],t=degTot(v,g);page('landscape');band(`ANNEXE – GRILLE D’ÉVALUATION DE LA DÉGRADATION – ${G.nom.toUpperCase()}`);
+    para([gNom(v,g),g.k!=='lc'?'niveaux : '+ptxt(f.nbNiv):'',g.k==='mi'?'pièces principales : '+ptxt(f.nbPP):g.k==='lc'?'pièces principales : '+ptxt(f[g.id+'_nbPP']):'',f.annee?'année de construction : '+f.annee:''].filter(Boolean).join(' · '),{sz:9});y+=2;
+    trow(COLS.map(c=>c[0]),{head:1,b:1,fill:ACC,c:WHITE});let part='';
+    for(const e of G.els){if(e.part!==part){part=e.part;trow([`${part}. ${G.parts[part][0]}`],{span:1,fill:TINT,c:ACC})}
+      const s=g.n[e.id]||{},r=degNote(v,g,e),pr=prorata(s.pt);
+      trow([`${e.id} ${e.t}`,e.maj?'X':'',s.h??'',e.a&&s.a!=null?s.a*100+' %':'',e.p&&pr!=null&&!Number.isNaN(pr)?f3(pr,2):'',degK(v,g,e)??'',r.max==null?'–':f3(r.n,2),r.max??'–'])}
+    trow(['TOTAL',t.nmaj,'','','','',f3(t.sn,2),t.sm],{b:1,fill:TINT});
+    y+=4;need(12);const R=[['DM',f3(t.DM)],['DG',f3(t.DG)],['ID',t.irr?'–':f3(t.ID)],['Niveau',t.irr?'Grille irrecevable':t.niv[1]+(t.rest?' (grille incomplète)':'')]],bw=[40,40,40,CW()-120];let x=M;
+    R.forEach(([k,val],i)=>{doc.setDrawColor(...ACC);doc.setLineWidth(.4);doc.roundedRect(x,y,bw[i]-3,11,1.5,1.5);font(7.5,'bold',MUT);doc.text(k,x+2,y+4);font(10,'bold',ACC);doc.text(T(val),x+2,y+9,{maxWidth:bw[i]-6});x+=bw[i]});y+=14}
+
+  /* --- filigrane et pied de page --- */
+  const n=doc.getNumberOfPages();
+  for(let i=1;i<=n;i++){doc.setPage(i);const w=doc.internal.pageSize.getWidth(),h=doc.internal.pageSize.getHeight();
+    if(!fin){doc.saveGraphicsState();doc.setGState(new doc.GState({opacity:.12}));font(70,'bold',RED);doc.text('PROJET',w/2,h/2,{align:'center',angle:30});doc.restoreGraphicsState()}
+    doc.setDrawColor(...ACC);doc.setLineWidth(.4);doc.line(M,h-10,w-M,h-10);font(7.5,'normal',MUT);doc.text(T(`Rapport de dégradation – ${who(v)} – imprimé le ${frDate(today())} – SOLiHA Charente-Maritime Deux-Sèvres`),M,h-6.5);
+    font(7.5,'bold',ACC);doc.text(`Page ${i} / ${n}`,w-M,h-6.5,{align:'right'})}
+  await offer(`${fin?'':'PROJET_'}Rapport_degradation_${slug(who(v))||'logement'}_${f.dateVis||today()}.pdf`,doc.output('blob'));
+  if(!fin)toast('Projet généré (filigrane) : le dossier reste en cours tant que la grille n’est pas complète');
 }
 
 /* ---------- démarrage ---------- */
