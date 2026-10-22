@@ -241,6 +241,7 @@ button.lnk{min-height:44px;padding:0 4px;border:0;background:none;font-size:.85r
 </div>
 <div id="bar" class="bar" hidden><div class="wrapin" id="barin"></div></div>
 <div id="toast" class="toast" hidden role="status"></div>
+<div id="cbdl" hidden></div>
 
 <script src="jspdf.umd.min.js"></script>
 <script>
@@ -1081,6 +1082,16 @@ const COMMUNES={
 const isPdl=v=>v.type==='pdl';
 const isDeg=v=>v.type==='deg';
 const isLoc=v=>v.type==='loc';
+// Adresse saisie d'un seul tenant (« 12 rue X, 79000 Niort », ou sur plusieurs lignes) : code postal et ville détachés en fin de texte.
+function splitAdr(s){const t=String(s||'').trim(),m=/^([\s\S]*?)[\s,]*\b(\d{5})\s+([^,\n\d][^,\n]*?)\s*$/.exec(t);
+  const adr=x=>x.split(/\s*\n\s*/).filter(Boolean).join(', ').replace(/[\s,]+$/,'');
+  return m?{adr:adr(m[1]),cp:m[2],ville:m[3]}:{adr:adr(t),cp:'',ville:''}}
+// Numéro et voie d'une adresse (« 12 bis rue Chalon, 2e étage » -> « 12 », « rue Chalon »).
+const numVoie=s=>{const m=/^\s*(\d+)\s*(?:bis|ter|quater|[a-d])?\b[\s,]*([^,]*)/i.exec(String(s||''));return m?{numero:m[1],voie:m[2].trim()}:{numero:'',voie:String(s||'').split(',')[0].trim()}};
+console.assert(JSON.stringify(splitAdr('8 rue des Lilas\n79000 Niort'))==='{"adr":"8 rue des Lilas","cp":"79000","ville":"Niort"}'&&JSON.stringify(splitAdr('3 place X, Bât. B, 79100 Thouars'))==='{"adr":"3 place X, Bât. B","cp":"79100","ville":"Thouars"}'
+  &&JSON.stringify(splitAdr('12 rue Y'))==='{"adr":"12 rue Y","cp":"","ville":""}'&&splitAdr('').adr===''&&splitAdr('BP 12, 79000 Niort Cedex').ville==='Niort Cedex','splitAdr');
+console.assert(JSON.stringify(numVoie('12 Rue Chalon'))==='{"numero":"12","voie":"Rue Chalon"}'&&JSON.stringify(numVoie('12 bis rue Chalon, 2e étage'))==='{"numero":"12","voie":"rue Chalon"}'
+  &&JSON.stringify(numVoie('12 avenue Gambetta'))==='{"numero":"12","voie":"avenue Gambetta"}'&&JSON.stringify(numVoie('Impasse de l’Espérance'))==='{"numero":"","voie":"Impasse de l’Espérance"}','numVoie');
 const ADMIN_PDL=[
  ['h','Demande'],
  ['commune','Commune','r',Object.keys(COMMUNES)],
@@ -1091,10 +1102,10 @@ const ADMIN_PDL=[
  ['dateVis','Date de la visite','d'],
  ['dateRap','Date du rapport de visite','d'],
  ['h','Propriétaire'],
- ['pSoc','Société','t'],['pNom','Nom','t'],['pPrenom','Prénom','t'],['pAdr','Adresse','t'],
+ ['pSoc','Société','t'],['pNom','Nom','t'],['pPrenom','Prénom','t'],['pAdr','Adresse','t'],['pCp','Code postal','t'],['pVille','Ville','t'],
  ['pTelF','Tél. fixe','tel'],['pTelP','Tél. portable','tel'],['pMail','E-mail','email'],
  ['h','Mandataire'],
- ['mAg','Nom de l’agence','t'],['mNom','Nom du référent','t'],['mPrenom','Prénom du référent','t'],['mAdr','Adresse','t'],
+ ['mAg','Nom de l’agence','t'],['mNom','Nom du référent','t'],['mPrenom','Prénom du référent','t'],['mAdr','Adresse','t'],['mCp','Code postal','t'],['mVille','Ville','t'],
  ['mTelF','Tél. fixe','tel'],['mTelP','Tél. portable','tel'],['mMail','E-mail','email'],
  ['h','Logement'],
  ['adresse','Adresse','t'],['cp','Code postal','t'],['ville','Ville','t'],
@@ -1787,6 +1798,34 @@ const LEXIQUE_DEG=(()=>{const c=x=>x.toFixed(2).replace('.',','),[a,b]=SEUILS_ID
  ['NV',`Non vérifiable : élément qui n’a pas pu être vu. Il compte 0 mais garde sa valeur maximale ; la grille est irrecevable à partir de ${NV_MAX} NV.`]]})();
 console.assert(LEXIQUE_DEG.length===9&&LEXIQUE_DEG[2][1].includes('Moins de 0,35 : dégradation inexistante ou faible ; de 0,35 à 0,55 : dégradation moyenne ; 0,55 et plus : dégradation très importante.'),'LEXIQUE_DEG');
 
+/* ---------- Carnet d'adresses : propriétaires et mandataires ---------- */
+// Bloc « personne » de chaque type de dossier : champ du carnet -> champ du dossier (« loc.proprio.nom » = v.loc.proprio.nom, sinon v.f[clé]).
+// m(v,ecrire) : à l'écriture, un propriétaire occupant (dégradation) ne reçoit que son nom, pour ne pas écraser l'adresse du logement.
+const CB_CAT={prop:'Propriétaire',mand:'Mandataire ou agence'};
+const CBLOCS=[
+ {k:'pdec',cat:'prop',ok:v=>!isPdl(v)&&!isDeg(v)&&!isLoc(v),m:()=>({civ:'pCiv',nom:'pNom',prenom:'pPrenom',adr:'pAdr',cp:'pCp',ville:'pVille',telP:'pTel',mail:'pMail'})},
+ {k:'ppdl',cat:'prop',ok:isPdl,m:()=>({soc:'pSoc',nom:'pNom',prenom:'pPrenom',adr:'pAdr',cp:'pCp',ville:'pVille',telF:'pTelF',telP:'pTelP',mail:'pMail'})},
+ {k:'mpdl',cat:'mand',ok:isPdl,m:()=>({soc:'mAg',nom:'mNom',prenom:'mPrenom',adr:'mAdr',cp:'mCp',ville:'mVille',telF:'mTelF',telP:'mTelP',mail:'mMail'})},
+ {k:'pdeg',cat:'prop',ok:isDeg,m:(v,w)=>v.f.pStat==='Propriétaire bailleur'?{nom:'pNom',adr:'pAdr',cp:'pCp',ville:'pVille'}:w?{nom:'pNom'}:{nom:'pNom',adr:'adresse',cp:'cp',ville:'ville'}},
+ {k:'ploc',cat:'prop',ok:isLoc,m:()=>({soc:'loc.proprio.sci',nom:'loc.proprio.nom',prenom:'loc.proprio.prenoms',adr:'loc.proprio.adresse',cp:'loc.proprio.cp',ville:'loc.proprio.ville',telP:'loc.proprio.tel',mail:'loc.proprio.email'})}];
+const cbGet=(v,p)=>p.startsWith('loc.')?p.slice(4).split('.').reduce((o,k)=>o?.[k],v.loc):v.f[p];
+const cbSet=(v,p,x)=>{if(p.startsWith('loc.')){const ks=p.slice(4).split('.'),k=ks.pop();ks.reduce((o,k)=>o[k],v.loc)[k]=x}else v.f[p]=x};
+const cbNorm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+const cbNom=c=>c.soc?c.soc+(c.nom?' ('+[c.nom,c.prenom].filter(Boolean).join(' ')+')':''):[c.nom,c.prenom].filter(Boolean).join(' ');
+const cbLabel=c=>[cbNom(c),[c.cp,c.ville].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
+// Doublon : même catégorie, même nom (ou société) et même code postal, sans tenir compte des accents ni des majuscules.
+const cbKey=c=>c.cat+'|'+cbNorm(c.soc||[c.nom,c.prenom].join(' '))+'|'+(c.cp||'');
+function cbRead(v,b){const c={cat:b.cat};for(const [k,p] of Object.entries(b.m(v,0)))c[k]=String(cbGet(v,p)??'').trim();return c}
+// Un dossier sans champ prénom ni société (dégradation) reçoit le nom complet ; un seul téléphone reçoit le portable, à défaut le fixe.
+function cbFill(v,b,c){const m=b.m(v,1);for(const [k,p] of Object.entries(m))cbSet(v,p,(k==='nom'&&!m.prenom&&!m.soc?cbNom(c):k==='telP'&&!m.telF?c.telP||c.telF:c[k])||'')}
+(()=>{const pdl={type:'pdl',f:{pSoc:'SCI Les Tilleuls',pNom:'Martin',pPrenom:'Claire',pAdr:'8 rue des Lilas',pCp:'79000',pVille:'Niort',pTelF:'05 00',pMail:'c@x.fr'}};
+  const c=cbRead(pdl,CBLOCS[1]),loc={type:'loc',loc:{proprio:{}}},deg={type:'deg',f:{pStat:'Propriétaire occupant',adresse:'4 rue X',cp:'79100',ville:'Thouars'}};
+  cbFill(loc,CBLOCS[4],c);cbFill(deg,CBLOCS[3],c);
+  console.assert(loc.loc.proprio.sci==='SCI Les Tilleuls'&&loc.loc.proprio.prenoms==='Claire'&&loc.loc.proprio.tel==='05 00'&&loc.loc.proprio.cp==='79000','carnet pdl -> loc',loc.loc.proprio);
+  console.assert(deg.f.pNom==='SCI Les Tilleuls (Martin Claire)'&&deg.f.adresse==='4 rue X'&&cbRead(deg,CBLOCS[3]).adr==='4 rue X','carnet -> dégradation occupant',deg.f);
+  console.assert(cbKey(c)===cbKey({cat:'prop',soc:'sci les tilleuls',cp:'79000'})&&cbKey(c)!==cbKey({...c,cat:'mand'}),'carnet clé');
+  console.assert(CBLOCS.filter(b=>b.ok(pdl)).length===2&&CBLOCS.filter(b=>b.ok({f:{}})).map(b=>b.k).join()==='pdec','carnet blocs');})();
+
 
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
@@ -1830,9 +1869,13 @@ const store={db:null,mem:new Map(),
 function migrate(v){
   v.f=v.f||{};v.it=v.it||{};v.done=v.done||{};
   if(isDeg(v)){v.g=v.g||[];return v}
-  if(isLoc(v)){const d=locVide(),l=v.loc||{};v.loc={...d,...l,proprio:{...d.proprio,...l.proprio},bien:{...d.bien,...l.bien}};
+  if(isLoc(v)){const d=locVide(),l=v.loc||{};
+    // Ancienne saisie : n° et voie du bien séparés, adresse du propriétaire en texte libre.
+    if(l.bien&&l.bien.adresse===undefined){l.bien.adresse=[l.bien.numero,l.bien.voie].filter(Boolean).join(' ');delete l.bien.numero;delete l.bien.voie}
+    if(l.proprio&&l.proprio.cp===undefined&&l.proprio.ville===undefined){const a=splitAdr(l.proprio.adresse);Object.assign(l.proprio,{adresse:a.adr,cp:a.cp,ville:a.ville})}v.loc={...d,...l,proprio:{...d.proprio,...l.proprio},bien:{...d.bien,...l.bien}};
     if(!Array.isArray(v.loc.logements)||!v.loc.logements.length)v.loc.logements=[locLg(1)];if(!Array.isArray(v.loc.aidesProjet))v.loc.aidesProjet=[];return v}
-  if(isPdl(v)){if(!COMMUNES[v.f.commune])v.f.commune='Thouars';if(!v.f.typeVis)v.f.typeVis=v.f.cvDateVis?'Contre-visite':'Visite de contrôle'}else if(!COM[v.f.dem])v.f.dem='CAF';
+  if(isPdl(v)){for(const x of ['p','m'])if(v.f[x+'Cp']===undefined&&v.f[x+'Ville']===undefined){const a=splitAdr(v.f[x+'Adr']);v.f[x+'Adr']=a.adr;v.f[x+'Cp']=a.cp;v.f[x+'Ville']=a.ville}
+    if(!COMMUNES[v.f.commune])v.f.commune='Thouars';if(!v.f.typeVis)v.f.typeVis=v.f.cvDateVis?'Contre-visite':'Visite de contrôle'}else if(!COM[v.f.dem])v.f.dem='CAF';
   // Code postal et ville séparés ; bât., entrée, étage et courée regroupés dans l'adresse.
   const f=v.f;if(f.cpville!==undefined){if(!f.cp&&!f.ville){const m=/^\s*(\d{5})\s*(.*)$/.exec(f.cpville);if(m){f.cp=m[1];f.ville=m[2].trim()}else f.ville=f.cpville.trim()}delete f.cpville}
   const extra=[['bat','Bât. / Rés. '],['entree','entrée '],['etage','étage '],['couree','maison n° ']].filter(([k])=>String(f[k]||'').trim()).map(([k,l])=>l+String(f[k]).trim());
@@ -1864,7 +1907,7 @@ const frDate=d=>d&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d.split('-').reverse().join('/'
 const newVisit=(t,b)=>({dfTxt:1,dfV:3,id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),created:Date.now(),updated:Date.now(),
   ...(t==='loc'?{type:'loc',f:{dateVis:today()},loc:locVide()}:t==='deg'?{type:'deg',bien:b,f:{op:P.lastOp||'',dateVis:today(),...(b==='imm'?{g1_nom:'Logement 1'}:{})},g:b==='imm'?[{id:'g0',k:'bc',n:{}},{id:'g1',k:'lc',n:{}}]:[{id:'g0',k:'mi',n:{}}]}:t==='pdl'?{type:'pdl',f:{commune:'Thouars',cp:COMMUNES.Thouars.cp,ville:COMMUNES.Thouars.ville,typeVis:'Visite de contrôle',dateVis:today()}}:{f:{dem:'CAF',typeVis:'Visite initiale',dateVis:today(),mrCiv:'Madame, Monsieur'}}),it:{},done:{},sig:''});
 function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(t._t);t._t=setTimeout(()=>t.hidden=true,Math.max(2600,msg.length*60))}
-function save(now){if(!cur)return;cur.updated=Date.now();clearTimeout(saveT);const go=()=>store.put(cur).catch(e=>toast('Enregistrement impossible : '+e.message));if(now)return go();saveT=setTimeout(go,350)}
+function save(now){if(!cur)return;cur.updated=Date.now();clearTimeout(saveT);const v=cur,go=()=>store.put(v).catch(e=>toast('Enregistrement impossible : '+e.message));if(now)return go();saveT=setTimeout(go,350)}
 const itemOf=id=>RR(cur).flatMap(r=>r.items||[]).find(d=>d.id===id);
 const it=(id,v=cur)=>v.it[id]||(v.it[id]={on:false,o:[],t:[],df:[],note:'',loc:'',d:false,ph:[]});
 
@@ -1909,7 +1952,7 @@ function field([k,label,type,opts,hint,cond]){
   }else if(type==='dl')ctl=`<input id="f_${k}" type="text" list="dl_${k}" data-f="${k}" value="${esc(v)}"><datalist id="dl_${k}">${[...new Set([...opts,...(P.ops||[])])].map(o=>`<option value="${esc(o)}">`).join('')}</datalist>`;
   else if(type==='ta')ctl=`<textarea id="f_${k}" data-f="${k}" ${k==='trav'||k.endsWith('_trav')?'class="big"':''}>${esc(v)}</textarea>`;
   else{const t={t:'text',n:'number',d:'date',tm:'time',tel:'tel',email:'email'}[type];
-    ctl=`<input id="f_${k}" type="${t}" data-f="${k}" value="${esc(v)}" ${type==='n'?'inputmode="decimal" step="any"':''}>`}
+    ctl=`<input id="f_${k}" type="${t}" data-f="${k}" value="${esc(v)}" ${type==='n'?'inputmode="decimal" step="any"':''}${type==='t'?cbAttr(k):''}>`}
   return `<div class="field ${full?'full':''}"><span>${esc(label)}</span>${ctl}${hint?`<div class="hint">${esc(hint)}</div>`:''}</div>`;
 }
 // Saisie de la ligne « Diagnostics non à jour après travaux ».
@@ -1994,7 +2037,7 @@ function render(){
      <button class="big primary" data-act="new">${svg('plus')}<span><span class="t">Nouvelle visite</span><span class="d">Démarrer un constat</span></span></button>
      <button class="big secondary" data-act="go" data-v="encours">${svg('folder')}<span><span class="t">Dossiers en cours</span><span class="d">Constats non finalisés</span></span><span class="count" aria-label="${enc} dossier${enc>1?'s':''}">${enc}</span></button>
      <nav class="links" aria-label="Autres actions">
-      <button data-act="go" data-v="mairies">${svg('building')}<span class="grow">Carnet des mairies</span><span class="muted">${Object.keys(MAIRIES.l).length}</span>${svg('chev')}</button>
+      <button data-act="go" data-v="carnet">${svg('building')}<span class="grow">Carnet d’adresses</span><span class="muted">${Object.keys(CARNET.l).length+Object.keys(MAIRIES.l).length}</span>${svg('chev')}</button>
       <button data-act="go" data-v="termines">${svg('archive')}<span class="grow">Dossiers terminés</span><span class="muted">${visits.length-enc}</span>${svg('chev')}</button>
       <button data-act="go" data-v="sauvegarde">${svg('save')}<span class="grow">Sauvegarde et import</span>${svg('chev')}</button>
       ${instEv?`<button data-act="install">${svg('inst')}<span class="grow">Installer l’application</span>${svg('chev')}</button>`:''}
@@ -2022,7 +2065,7 @@ function render(){
        <span style="min-width:0"><span class="tag ${isPdl(v)?'pdl':isDeg(v)?'deg':isLoc(v)?'loc':''}">${esc(kind(v))}</span><span style="display:block;font-weight:700;margin-top:4px">${esc(who(v))}</span>
        <span class="muted" style="display:block;font-size:.9rem">${esc(where(v)||'Adresse non renseignée')}${v.f.dateVis?' · visite le '+esc(frDate(v.f.dateVis)):''}${v.pdfAt?' · terminé':''}</span></span></label>`).join('')
       :'<div class="empty">Aucun dossier sur cet appareil.</div>'}</div>
-     <label class="chip" style="margin-top:14px"><input type="checkbox" data-selmr ${exMairies?'checked':''}>Inclure le carnet des mairies (${Object.keys(MAIRIES.l).length})</label>
+     <label class="chip" style="margin-top:14px"><input type="checkbox" data-selmr ${exMairies?'checked':''}>Inclure le carnet d’adresses (${Object.keys(CARNET.l).length+Object.keys(MAIRIES.l).length})</label>
      <div class="links"><label class="btn">${svg('plus')}<span class="grow">Importer une sauvegarde</span><input type="file" accept=".json,application/json" data-import hidden></label></div>`;
     bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="export">${svg('pdf')}${n?`Exporter ${n} dossier${n>1?'s':''}`:'Exporter'}</button>`;
     return;
@@ -2042,15 +2085,12 @@ function render(){
      <p class="muted">Le type de bien ne peut plus être changé ensuite.</p>`;
     return;
   }
-  if(view==='mairies'){
-    const L=Object.entries(MAIRIES.l).sort((a,b)=>a[1].ville.localeCompare(b[1].ville,'fr'));
-    const inp=(k,m,c,l,t='text')=>`<div class="field"><span>${l}</span><input type="${t}" data-mr="${esc(k)}" data-mk="${c}" value="${esc(m[c])}"></div>`;
-    app.innerHTML=`${topbar('Carnet des mairies','Mémorisé sur cet appareil, repris dans les courriers',cur?'dash':'list')}
-     <p class="muted">Une mairie est ajoutée automatiquement quand vous saisissez ses coordonnées dans une visite. Le carnet est inclus dans la sauvegarde (.json).</p>
-     <div class="visits">${L.length?L.map(([k,m])=>`<div class="visit"><div class="name">Mairie de ${esc(m.ville)}</div>
-       <div class="form" style="margin:0">${inp(k,m,'civ','Civilité')}${inp(k,m,'adr','Adresse')}${inp(k,m,'cp','Code postal')}${inp(k,m,'mail','E-mail','email')}</div>
-       <div class="row"><button class="btn-danger" data-act="delmairie" data-k="${esc(k)}">Supprimer</button></div></div>`).join('')
-      :'<div class="empty">Aucune mairie enregistrée pour l’instant.</div>'}</div>`;
+  if(view==='carnet'){
+    app.innerHTML=`${topbar('Carnet d’adresses','Propriétaires, mandataires et mairies, mémorisés sur cet appareil',cur?'dash':'list')}
+     <p class="muted">Une personne est ajoutée automatiquement dès qu’elle a un nom et une adresse dans un dossier. Dans un dossier, tapez les premières lettres du nom pour reprendre ses coordonnées.</p>
+     <div class="field"><span>Rechercher</span><input type="text" id="cbq" value="${esc(cbQ)}" placeholder="Nom, ville, code postal…" autocomplete="off"></div>
+     <div class="chips" style="margin:10px 0 14px">${[['','Tous'],['prop','Propriétaires'],['mand','Mandataires'],['mairie','Mairies']].map(([k,l])=>`<label class="chip"><input type="radio" name="cbcat" data-cbcat="${k}" ${cbCat===k?'checked':''}>${l}</label>`).join('')}</div>
+     <div class="visits" id="cblist">${cbListe()}</div>`;
     bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="${cur?'dash':'list'}">Terminé</button>`;
     return;
   }
@@ -2272,8 +2312,8 @@ async function shrink(file){
 /* ---------- Simulation Loc'Avantages ---------- */
 // Dossier : v.loc = {proprio, bien, logements, aidesProjet, obs, compDuree}, même structure que le simulateur d'origine.
 const locLg=i=>({nom:'Logement '+i,surface:'',annexes:'',thematique:'TD',loc:2,iml:false,travaux:'',montant:'',ttc:'',loyerLibre:'',vacant:false,gain35:false,passoire:false,rdc:false,montantRdc:'',aidesManu:[]});
-const locVide=()=>({proprio:{nom:'',prenoms:'',email:'',tel:'',adresse:'',soliact:'',statut:'NP',sci:''},
- bien:{numero:'',voie:'',insee:'',communeTxt:'',description:'',ravalement:false,ori:false,pacteSol:true,force:'AUTO',tauxCom:'10',tva:'10',moe:false,moeTaux:'',photo:''},
+const locVide=()=>({proprio:{nom:'',prenoms:'',email:'',tel:'',adresse:'',cp:'',ville:'',soliact:'',statut:'NP',sci:''},
+ bien:{adresse:'',cp:'',insee:'',communeTxt:'',description:'',ravalement:false,ori:false,pacteSol:true,force:'AUTO',tauxCom:'10',tva:'10',moe:false,moeTaux:'',photo:''},
  logements:[locLg(1)],aidesProjet:[],obs:'',compDuree:9});
 const locEur=x=>Math.round(x).toLocaleString('fr-FR')+' €';
 const locEur2=x=>(+x).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
@@ -2281,17 +2321,18 @@ const locNum=x=>(Math.round(x*100)/100).toLocaleString('fr-FR');
 // Nombres saisis à la française (« 70,7 », « 28 000 ») convertis avant le calcul ; le moteur attend « 70.7 ».
 const locNombre=x=>typeof x==='string'&&/^\s*-?\d{1,3}(?:[\s]?\d{3})*(?:,\d+)?\s*$/.test(x)?x.replace(/[\s]/g,'').replace(',','.'):x;
 const locNorm=o=>Array.isArray(o)?o.map(locNorm):o&&typeof o==='object'?Object.fromEntries(Object.entries(o).map(([k,x])=>[k,k==='photo'?x:locNorm(x)])):locNombre(o);
-const locR=(v=cur)=>LOC_ENGINE.calcDossier(LOC_DATA,locNorm(v.loc),locEur);
+// Le moteur attend le n° et la voie séparés (périmètre de l'OPAH-RU) : tirés de l'adresse.
+const locR=(v=cur)=>{const d=locNorm(v.loc);Object.assign(d.bien,numVoie(d.bien.adresse));return LOC_ENGINE.calcDossier(LOC_DATA,d,locEur)};
 const LOC_BYNAME=Object.fromEntries(LOC_DATA.communes.map(c=>[LOC_ENGINE.norm(c[1]),c]));
 const LOC_COURT={STM:'OPAH-RU Saint-Maixent',AGGLO2B:'OPAH Agglo2B',MELLOIS:'Pacte Mellois',VDG:'Pacte Val de Gâtine',NONE:'Anah seule'};
 const locDispNom=ctx=>LOC_ENGINE.DISP[ctx.key].nom+(ctx.key==='AGGLO2B'?` – commune en ${ctx.agglo}`:'')+(ctx.key==='VDG'&&ctx.renforce?' – périmètre renforcé':'');
 const locWho=v=>{const p=v.loc.proprio,civ=[p.prenoms,p.nom].filter(Boolean).join(' ');return (p.statut!=='NP'&&p.sci?p.sci:civ)||'Propriétaire non renseigné'};
-const locWhere=v=>{const b=v.loc.bien;return [[b.numero,b.voie].filter(Boolean).join(' '),b.communeTxt].filter(Boolean).join(', ')};
+const locWhere=v=>{const b=v.loc.bien;return [b.adresse,[b.cp,b.communeTxt].filter(Boolean).join(' ')].filter(Boolean).join(', ')};
 const locRac=R=>R.tousTTC?locEur(R.resteTTC)+' TTC':locEur(R.reste)+' HT';
 
 // Champs : data-lk = chemin dans v.loc (ex. « logements.0.surface »).
 const lget=p=>p.split('.').reduce((o,k)=>o==null?o:o[k],cur.loc);
-const lin=(p,label,o={})=>`<div class="field${o.full?' full':''}"><span>${esc(label)}</span><input type="${o.type||'text'}" id="lk_${p.replace(/\./g,'_')}" data-lk="${p}" value="${esc(lget(p)??'')}"${o.ph?` placeholder="${esc(o.ph)}"`:''}${o.im?` inputmode="${o.im}"`:''} autocomplete="off">${o.hint||''}</div>`;
+const lin=(p,label,o={})=>`<div class="field${o.full?' full':''}"><span>${esc(label)}</span><input type="${o.type||'text'}" id="lk_${p.replace(/\./g,'_')}" data-lk="${p}" value="${esc(lget(p)??'')}"${o.ph?` placeholder="${esc(o.ph)}"`:''}${o.im?` inputmode="${o.im}"`:''} ${o.attr||' autocomplete="off"'}>${o.hint||''}</div>`;
 const lta=(p,label)=>`<div class="field full"><span>${esc(label)}</span><textarea id="lk_${p.replace(/\./g,'_')}" data-lk="${p}">${esc(lget(p))}</textarea></div>`;
 const lsel=(p,label,opts,full)=>`<div class="field${full?' full':''}"><span>${esc(label)}</span><select data-lk="${p}">${opts.map(([k,l])=>`<option value="${esc(k)}"${String(lget(p))===String(k)?' selected':''}>${esc(l)}</option>`).join('')}</select></div>`;
 const lchk=(p,label,dis)=>`<label class="chip"><input type="checkbox" data-lk="${p}"${lget(p)&&!dis?' checked':''}${dis?' disabled':''}>${esc(label)}</label>`;
@@ -2361,17 +2402,16 @@ function locView(app,bar,bi){
     locBar(bi,R,`<button class="btn-primary" data-act="pdf">${svg('pdf')}Générer le PDF</button>`);return true}
   if(view==='lprop'){const p=D.proprio,sci=p.statut!=='NP';
     app.innerHTML=`${topbar('Le propriétaire',who(cur),'dash')}<div class="form">
-      ${lin('proprio.nom','Nom')}${lin('proprio.prenoms','Prénom(s)')}
+      ${lin('proprio.nom','Nom',{attr:cbAttr('loc.proprio.nom')})}${lin('proprio.prenoms','Prénom(s)')}
       ${lrad('proprio.statut','Statut',[['NP','Nom propre'],['SCI_IR','SCI à l’IR'],['SCI_IS','SCI à l’IS']])}
-      ${sci?lin('proprio.sci','Nom de la SCI'):''}${lin('proprio.soliact','N° dossier Soliact')}
+      ${sci?lin('proprio.sci','Nom de la SCI',{attr:cbAttr('loc.proprio.sci')}):''}${lin('proprio.soliact','N° dossier Soliact')}
       ${lin('proprio.email','E-mail',{type:'email'})}${lin('proprio.tel','Téléphone',{type:'tel'})}
-      ${lta('proprio.adresse','Adresse postale')}</div>`;
+      ${lin('proprio.adresse','Adresse',{full:1})}${lin('proprio.cp','Code postal',{im:'numeric'})}${lin('proprio.ville','Ville')}</div>`;
     locBar(bi,R,`<button class="btn-primary" data-act="go" data-v="lbien">Continuer</button>`);return true}
   if(view==='lbien'){const b=D.bien;
     app.innerHTML=`${topbar('Le bien et le dispositif',locWhere(cur)||who(cur),'dash')}<div class="form">
-      ${lin('bien.numero','N°',{im:'numeric'})}
-      <div class="field"><span>Voie</span><input type="text" id="lk_bien_voie" data-lk="bien.voie" list="lrues" value="${esc(b.voie)}" autocomplete="off"><datalist id="lrues">${b.insee==='79270'?LOC_DATA.rues.map(r=>`<option value="${esc(r)}">`).join(''):''}</datalist></div>
-      <div class="field full"><span>Commune (Deux-Sèvres)</span><input type="text" id="lcom" data-lcom list="lcoms" value="${esc(b.communeTxt)}" placeholder="Tapez le nom de la commune" autocomplete="off"><datalist id="lcoms">${LOC_DATA.communes.map(c=>`<option value="${esc(c[1])}">`).join('')}</datalist></div>
+      ${lin('bien.adresse','Adresse (n° et voie)',{full:1,hint:'<div class="hint">Le numéro sert à vérifier le périmètre de l’OPAH-RU de Saint-Maixent.</div>'})}${lin('bien.cp','Code postal',{im:'numeric'})}
+      <div class="field"><span>Ville (commune des Deux-Sèvres)</span><input type="text" id="lcom" data-lcom list="lcoms" value="${esc(b.communeTxt)}" placeholder="Tapez le nom de la commune" autocomplete="off"><datalist id="lcoms">${LOC_DATA.communes.map(c=>`<option value="${esc(c[1])}">`).join('')}</datalist></div>
       ${locDispBox(R)}
       ${lsel('bien.tva','Taux de TVA des travaux',[['5.5','5,5 %'],['10','10 %'],['20','20 %']])}
       <div class="field"><span>Maîtrise d’œuvre</span><div class="chips">${lchk('bien.moe','Projet avec maîtrise d’œuvre')}</div></div>
@@ -2452,7 +2492,11 @@ document.addEventListener('input',e=>{
   const el=e.target;
   if(el.dataset.p){P[el.dataset.p]=el.value.trim();saveP();return}
   if(el.dataset.mr){const m=MAIRIES.l[el.dataset.mr];if(m){m[el.dataset.mk]=el.value;m.maj=today();saveMairies()}return}
+  if(el.dataset.cf){const c=CARNET.l[el.dataset.cf];if(c){c[el.dataset.ck]=el.value.trim();c.maj=today();saveCarnet();cbDL()}return}
+  if(el.id==='cbq'){cbQ=el.value;$('#cblist').innerHTML=cbListe();return}
   if(!cur)return;
+  // Fiche choisie dans les suggestions du champ « Nom » : tout le bloc est rempli.
+  if(el.dataset.cb){const c=Object.values(CARNET.l).find(c=>cbLabel(c)===el.value);if(c){cbFill(cur,CBLOCS.find(b=>b.k===el.dataset.cb),c);save();keep();toast('Coordonnées reprises du carnet d’adresses');return}}
   if(el.dataset.lcom!==undefined)return locCommune(el.value,false);
   if(el.dataset.lk&&!['checkbox','radio'].includes(el.type)&&el.tagName!=='SELECT'){locSet(el);save();return locLive()}
   if(el.dataset.gn==='pt'||el.dataset.gn==='motif'){const s=degS(el);s[el.dataset.gn]=el.value;save();return}
@@ -2465,6 +2509,7 @@ document.addEventListener('change',async e=>{
   if(el.dataset.import!==undefined)return importJson(el);
   if(el.dataset.sel){el.checked?exSel.add(el.dataset.sel):exSel.delete(el.dataset.sel);return keep()}
   if(el.dataset.selmr!==undefined){exMairies=el.checked;return}
+  if(el.dataset.cbcat!==undefined){cbCat=el.dataset.cbcat;return keep()}
   if(el.dataset.psig!==undefined){const f=el.files[0];el.value='';if(!f)return;try{const p=await shrink(f);P.sig={src:p.src,r:p.h/p.w};await saveP();render()}catch(err){toast('Image non importée : '+err.message)}return}
   if(!cur)return;
   if(el.dataset.lcom!==undefined)return locCommune(el.value,true);
@@ -2517,7 +2562,7 @@ document.addEventListener('click',async e=>{
   if(a==='open'){cur=visits.find(v=>v.id===b.dataset.id);view='dash';return go()}
   if(a==='ctrl'){const src=visits.find(v=>v.id===b.dataset.id);cur=structuredClone(src);Object.assign(cur,{id:newVisit().id,created:Date.now(),done:{},sig:''});cur.f.typeVis='Visite de contrôle';cur.f.dateVis=today();visits.push(cur);await save(true);view='dash';toast('Visite de contrôle créée à partir de la visite initiale');return go()}
   if(a==='delv'){if(!armed(b,'Confirmer la suppression'))return;await store.del(b.dataset.id);visits=visits.filter(v=>v.id!==b.dataset.id);return render()}
-  if(a==='list'){await save(true);cur=null;view='list';return go()}
+  if(a==='list'){await save(true);if(cur)carnetMemo(cur);cur=null;view='list';return go()}
   if(a==='reopen'){const v=visits.find(x=>x.id===b.dataset.id);delete v.pdfAt;await store.put(v);toast('Dossier remis en cours');return render()}
   if(a==='dash'){view='dash';return go()}
   if(a==='go'){view=b.dataset.v;if(b.dataset.g)gId=b.dataset.g;return go()}
@@ -2554,9 +2599,10 @@ document.addEventListener('click',async e=>{
   if(a==='ia'){try{await navigator.clipboard.writeText(texteRelecture(cur));toast('Texte copié : collez-le dans Copilot')}catch(err){toast('Copie impossible : '+err.message);return}
     open('https://copilot.microsoft.com/','_blank','noopener');return}
   if(a==='install'){const ev=instEv;instEv=null;render();if(ev){ev.prompt();await ev.userChoice.catch(()=>{})}return}
-  if(a==='pdf'){await save(true);if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur le rapport');view='profil';return go()}const v=cur;return exportPdf(v).then(()=>{if(window.jspdf&&(!isDeg(v)||degFinal(v))){v.pdfAt=Date.now();store.put(v).catch(()=>{})}}).catch(err=>toast('PDF impossible : '+err.message))}
+  if(a==='pdf'){await save(true);if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur le rapport');view='profil';return go()}const v=cur;carnetMemo(v);return exportPdf(v).then(()=>{if(window.jspdf&&(!isDeg(v)||degFinal(v))){v.pdfAt=Date.now();store.put(v).catch(()=>{})}}).catch(err=>toast('PDF impossible : '+err.message))}
   if(a==='export')return exportJson();
   if(a==='sel'){exSel.clear();for(const v of visits)if(b.dataset.k==='all'||b.dataset.k==='encours'&&!v.pdfAt)exSel.add(v.id);return keep()}
+  if(a==='cbdel'){if(!armed(b,'Confirmer la suppression'))return;delete CARNET.l[b.dataset.k];saveCarnet();cbDL();return keep()}
   if(a==='delmairie'){if(!armed(b,'Confirmer la suppression'))return;delete MAIRIES.l[b.dataset.k];saveMairies();return render()}
   if(['lettre','envoi','zipcour'].includes(a)){await save(true);if(!window.jspdf){toast("Le module PDF n'est pas chargé : ouvrez l'application une fois avec internet.");return}
     if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur les courriers');view='profil';return go()}
@@ -2566,7 +2612,7 @@ document.addEventListener('click',async e=>{
 });
 // Suppression en deux temps : le premier appui arme le bouton, le second confirme.
 function armed(b,label){if(b.classList.contains('armed'))return true;b.classList.add('armed');const old=b.textContent;b.textContent=label;setTimeout(()=>{b.classList.remove('armed');b.textContent=old},3000);return false}
-function go(){render();scrollTo(0,0)}
+function go(){if(cur)carnetMemo(cur);render();scrollTo(0,0)}
 // Relecture IA : consigne + désordres + travaux, sans donnée personnelle (ni nom, ni adresse).
 function texteRelecture(v){
   const des=RR(v).filter(r=>r.items).flatMap(r=>r.items.filter(d=>v.it[d.id]?.on).map(d=>{const s=v.it[d.id];
@@ -2623,10 +2669,10 @@ function exportPhotos(v){
 function exportJson(){
   const L=visits.filter(v=>exSel.has(v.id));
   if(!L.length&&!exMairies){toast('Cochez au moins un dossier à exporter');return}
-  if(!L.length&&!Object.keys(MAIRIES.l).length){toast('Cochez au moins un dossier à exporter');return}
+  if(!L.length&&!Object.keys(MAIRIES.l).length&&!Object.keys(CARNET.l).length){toast('Cochez au moins un dossier à exporter');return}
   const nom=L.length===1?slug(who(L[0])):L.length?L.length+'_dossiers':'carnet_mairies';
-  offer(`sauvegarde_${nom}_${today()}.json`,new Blob([JSON.stringify({app:'constat-decence',v:2,visits:L,...(exMairies?{mairies:MAIRIES.l}:{})})],{type:'application/json'}));
-  toast(`${L.length} dossier${L.length>1?'s':''} exporté${L.length>1?'s':''}${exMairies?' avec le carnet des mairies':''}`);
+  offer(`sauvegarde_${nom}_${today()}.json`,new Blob([JSON.stringify({app:'constat-decence',v:2,visits:L,...(exMairies?{mairies:MAIRIES.l,carnet:CARNET.l}:{})})],{type:'application/json'}));
+  toast(`${L.length} dossier${L.length>1?'s':''} exporté${L.length>1?'s':''}${exMairies?' avec le carnet d’adresses':''}`);
 }
 async function importJson(el){
   const f=el.files[0];el.value='';if(!f)return;
@@ -2641,7 +2687,9 @@ async function importJson(el){
     let n=0;for(const v of d.visits){if(!v||typeof v.id!=='string'||typeof v.f!=='object'||typeof v.it!=='object')continue;await store.put(migrate(v));n++}
     let nm=0;if(d.mairies&&typeof d.mairies==='object')for(const [k,m] of Object.entries(d.mairies))if(m&&typeof m.ville==='string'&&!MAIRIES.l[k]){MAIRIES.l[k]=m;nm++}
     if(nm)saveMairies();
-    visits=(await store.all()).map(migrate);render();toast(`${n} visite${n>1?'s':''} importée${n>1?'s':''}${nm?` · ${nm} mairie${nm>1?'s':''} ajoutée${nm>1?'s':''} au carnet`:''}`)}
+    let nc=0;if(d.carnet&&typeof d.carnet==='object')for(const [k,c] of Object.entries(d.carnet))if(c&&CB_CAT[c.cat]&&!CARNET.l[k]){CARNET.l[k]=c;nc++}
+    if(nc){saveCarnet();cbDL()}
+    visits=(await store.all()).map(migrate);render();toast(`${n} visite${n>1?'s':''} importée${n>1?'s':''}${nm+nc?` · ${nm+nc} adresse${nm+nc>1?'s':''} ajoutée${nm+nc>1?'s':''} au carnet`:''}`)}
   catch(e){toast('Import impossible : '+e.message)}
 }
 
@@ -2651,6 +2699,29 @@ async function importJson(el){
 let MAIRIES={id:'mairies',l:{}},mairT=null;
 const mkey=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\b(st|ste)\b/g,m=>m==='st'?'saint':'sainte').replace(/[^a-z0-9]+/g,' ').trim();
 console.assert(mkey('St-Maixent l’École')===mkey('SAINT MAIXENT L\'ECOLE')&&mkey('Trayes')==='trayes','mkey');
+// Carnet d'adresses (propriétaires, mandataires) : fiches par clé cbKey, mémorisées sur cet appareil.
+let CARNET={id:'carnet',l:{}},carT=null,cbQ='',cbCat='';
+const saveCarnet=()=>{clearTimeout(carT);carT=setTimeout(()=>store.putRec(CARNET).catch(e=>toast('Carnet d’adresses non enregistré : '+e.message)),400)};
+// Listes de suggestions du champ « Nom » (une par catégorie).
+const cbDL=()=>{$('#cbdl').innerHTML=Object.keys(CB_CAT).map(cat=>`<datalist id="cb_${cat}">${Object.values(CARNET.l).filter(c=>c.cat===cat).map(c=>`<option value="${esc(cbLabel(c))}">`).join('')}</datalist>`).join('')};
+// Ajout ou mise à jour automatique, au changement d'écran : une personne avec un nom (ou une société) et une adresse.
+function carnetMemo(v){let any=false;
+  for(const b of CBLOCS.filter(b=>b.ok(v))){const c=cbRead(v,b);if(!(c.nom||c.soc)||!c.adr)continue;
+    const k=cbKey(c),e=CARNET.l[k]||{cat:c.cat};let ch=!CARNET.l[k];for(const [x,y] of Object.entries(c))if(y&&e[x]!==y){e[x]=y;ch=true}
+    if(ch){e.maj=today();CARNET.l[k]=e;any=true}}
+  if(any){saveCarnet();cbDL()}}
+const cbFor=(v,key)=>CBLOCS.find(b=>b.ok(v)&&(m=>m.nom===key||m.soc===key)(b.m(v,1)));
+const cbAttr=k=>(b=>b?` list="cb_${b.cat}" data-cb="${b.k}" autocomplete="off"`:'')(cbFor(cur,k));
+function cbListe(){const q=cbNorm(cbQ),ok=t=>!q||cbNorm(t).includes(q);
+  const P=cbCat==='mairie'?[]:Object.entries(CARNET.l).filter(([,c])=>(!cbCat||c.cat===cbCat)&&ok([cbNom(c),c.adr,c.cp,c.ville,c.mail].join(' '))).sort((a,b)=>cbNom(a[1]).localeCompare(cbNom(b[1]),'fr'));
+  const M=cbCat&&cbCat!=='mairie'?[]:Object.entries(MAIRIES.l).filter(([,m])=>ok(['Mairie',m.ville,m.adr,m.cp,m.mail].join(' '))).sort((a,b)=>a[1].ville.localeCompare(b[1].ville,'fr'));
+  const inp=(a,k,f,l,val)=>`<div class="field"><span>${l}</span><input type="text" ${a}="${esc(k)}" data-${a==='data-cf'?'ck':'mk'}="${f}" value="${esc(val)}"></div>`;
+  return [...P.map(([k,c])=>`<div class="visit"><div class="name">${esc(cbNom(c)||'Sans nom')}</div><div class="muted">${CB_CAT[c.cat]}${c.maj?' · mis à jour le '+esc(frDate(c.maj)):''}</div>
+     <div class="form" style="margin:0">${[['soc','Société ou agence'],['civ','Civilité'],['nom','Nom'],['prenom','Prénom'],['adr','Adresse'],['cp','Code postal'],['ville','Ville'],['telF','Tél. fixe'],['telP','Tél. portable'],['mail','E-mail']].map(([f,l])=>inp('data-cf',k,f,l,c[f])).join('')}</div>
+     <div class="row"><button class="btn-danger" data-act="cbdel" data-k="${esc(k)}">Supprimer</button></div></div>`),
+   ...M.map(([k,m])=>`<div class="visit"><div class="name">Mairie de ${esc(m.ville)}</div><div class="muted">Mairie (courriers de décence)</div>
+     <div class="form" style="margin:0">${inp('data-mr',k,'civ','Civilité',m.civ)}${inp('data-mr',k,'adr','Adresse',m.adr)}${inp('data-mr',k,'cp','Code postal',m.cp)}${inp('data-mr',k,'mail','E-mail',m.mail)}</div>
+     <div class="row"><button class="btn-danger" data-act="delmairie" data-k="${esc(k)}">Supprimer</button></div></div>`)].join('')||'<div class="empty">Aucune adresse ne correspond.</div>'}
 const saveMairies=()=>{clearTimeout(mairT);mairT=setTimeout(()=>store.putRec(MAIRIES).catch(e=>toast('Carnet des mairies non enregistré : '+e.message)),400)};
 // Retient la mairie de la visite dès qu'elle a une adresse ou un e-mail.
 function memoMairie(v){const f=v.f,k=mkey(f.mrVille);if(isPdl(v)||!k||!(f.mrAdr||f.mrMail))return;
@@ -2839,8 +2910,8 @@ async function exportPdf(v){
   const LW=[38,148];
   row([LB('Référence dossier'),[rt([['N° '],[f.refDos,1]])]],LW);
   row([LB('PROPRIÉTAIRE'),LB('MANDATAIRE')],[93,93]);
-  row([[rt([['Société : '],[f.pSoc,1]]),rt([['Nom : '],[f.pNom,1],['     Prénom : '],[f.pPrenom,1]]),rt([['Adresse : '],[f.pAdr,1]]),rt([['Tél fixe : '],[f.pTelF,1]]),rt([['Tél portable : '],[f.pTelP,1]]),rt([['Mail : '],[f.pMail,1]])],
-       [rt([['Nom de l’agence : '],[f.mAg,1]]),rt([['Nom du référent : '],[f.mNom,1],['     Prénom : '],[f.mPrenom,1]]),rt([['Adresse : '],[f.mAdr,1]]),rt([['Tél fixe : '],[f.mTelF,1]]),rt([['Tél portable : '],[f.mTelP,1]]),rt([['Mail : '],[f.mMail,1]])]],[93,93]);
+  row([[rt([['Société : '],[f.pSoc,1]]),rt([['Nom : '],[f.pNom,1],['     Prénom : '],[f.pPrenom,1]]),rt([['Adresse : '],[[f.pAdr,[f.pCp,f.pVille].filter(Boolean).join(' ')].filter(Boolean).join(', '),1]]),rt([['Tél fixe : '],[f.pTelF,1]]),rt([['Tél portable : '],[f.pTelP,1]]),rt([['Mail : '],[f.pMail,1]])],
+       [rt([['Nom de l’agence : '],[f.mAg,1]]),rt([['Nom du référent : '],[f.mNom,1],['     Prénom : '],[f.mPrenom,1]]),rt([['Adresse : '],[[f.mAdr,[f.mCp,f.mVille].filter(Boolean).join(' ')].filter(Boolean).join(', '),1]]),rt([['Tél fixe : '],[f.mTelF,1]]),rt([['Tél portable : '],[f.mTelP,1]]),rt([['Mail : '],[f.mMail,1]])]],[93,93]);
   row([LB('Logement'),[rt([['Adresse : '],[[f.adresse,cpv(v)].filter(Boolean).join(', '),1]]),cbs([[f.occ==='Occupé','Occupé'],[f.occ==='Vacant','Vacant']],{pre:'Occupé ou vacant :'})]],LW);
   row([LB('Type de visite'),[cbs([[!cv,'VISITE DE CONTRÔLE']]),rt([['réalisée le : '],[frDate(f.dateVis),1]],{ind:4}),...(cv?[gap(1),cbs([[true,'CONTRE-VISITE']]),rt([['réalisée le : '],[frDate(f.cvDateVis),1]],{ind:4})]:[])]],LW);
   y+=4;
@@ -3196,7 +3267,7 @@ async function locPdf(v){
   /* --- propriétaire et conseiller --- */
   {const bw=(CW-6)/2,civ=[p.prenoms,p.nom].filter(Boolean).join(' '),sci=p.statut!=='NP'&&p.sci;
    const statut={NP:'Propriétaire en nom propre',SCI_IR:'SCI à l’impôt sur le revenu',SCI_IS:'SCI à l’impôt sur les sociétés'}[p.statut];
-   const box=[['PROPRIÉTAIRE',sci?p.sci:civ||'—',[sci&&civ?'Représentée par '+civ:'',statut,p.adresse,p.tel,p.email]],
+   const box=[['PROPRIÉTAIRE',sci?p.sci:civ||'—',[sci&&civ?'Représentée par '+civ:'',statut,p.adresse,[p.cp,p.ville].filter(Boolean).join(' '),p.tel,p.email]],
      ['VOTRE CONSEILLER',P.nom||'SOLIHA',['SOLIHA Charente-Maritime Deux-Sèvres',P.tel,P.mail]]].map(([l,n,L])=>[l,lines(n,bw-10,11,'bold'),L.filter(x=>String(x||'').trim()).flatMap(x=>lines(x,bw-10,8.5))]);
    const h=Math.max(...box.map(([,N,L])=>8+N.length*LH(11)+L.length*LH(8.5)))+5;
    box.forEach(([l,N,L],k)=>{const x=ML+k*(bw+6);doc.setFillColor(242,242,242);doc.rect(x,y,bw,h,'F');font(7.5,'bold',ACC);doc.text(l,x+5,y+6);let yy=y+8;
@@ -3327,6 +3398,8 @@ function locPdfChart(doc,cp,x0,y0,w,h,{T,font,ACC,LL,INK,MUT,LINE,SKYT}){
   try{visits=(await store.all()).map(migrate)}catch(e){visits=[]}
   try{P=await store.getProfil()}catch(e){}
   try{MAIRIES=await store.getRec('mairies');MAIRIES.l=MAIRIES.l||{}}catch(e){}
+  try{CARNET=await store.getRec('carnet');CARNET.l=CARNET.l||{}}catch(e){}
+  cbDL();
   render();
   try{await navigator.storage?.persist?.()}catch(e){}
   // Mode hors ligne : le service worker garde l'application en cache (impossible si le fichier est ouvert en local).
