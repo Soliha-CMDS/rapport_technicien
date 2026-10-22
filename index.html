@@ -422,6 +422,8 @@ const R=[
    o:["Logement d'avant 1949 + peintures dégradées","Constat de risque d'exposition au plomb (4) positif avec présence d'enfants mineurs ou femme enceinte",'Moisissures, champignons, traces d’humidité','Absence de diagnostics','Autre'],
    ow:['Suppression de l’accessibilité des peintures dégradées pouvant contenir du plomb, en l’absence d’enfants, suivie d’un nettoyage minutieux','Suppression de l’accessibilité des peintures contenant du plomb, en l’absence d’enfants, suivie d’un nettoyage minutieux',['hum','Décontamination fongique des supports colonisés par des moisissures'],'DIAG',null],
    tl:MEL,ty:['Certificat médical','Problèmes de santé exprimés par les occupants'],hint:"CREP obligatoire pour tout logement d'avant 1949 mis en location après le 12 août 2008."},
+  {id:'diagmaj',t:'Diagnostics non à jour après travaux',ref:'Décence-2',th:'regl',dm:1,
+   hint:'Diagnostics encore valides, mais antérieurs à des travaux qui ont modifié le logement : ils ne décrivent plus son état actuel.'},
   {id:'prec',t:'Risques liés à un éventuel problème de précarité énergétique',ref:'Décence-2.2, 2.6, 3.1, 3 bis',p:1,s:'equip',th:'chauf',
    o:["Bouches d'aération obstruées et/ou mauvaise aération du logement","Solutions de chauffage inadaptées (poêle à pétrole, chauffage d'appoint…) voire privation de chauffage","Isolation thermique insuffisante (simple vitrage, passage d'air, absence d'isolation, murs peu épais) au regard du moyen de chauffage",'La famille a déjà bénéficié du Fonds Solidarité Énergie (FSE)','Autre'],
    ow:[['vent','Dégagement des bouches d’aération et rétablissement d’une aération efficace'],'Mise à disposition d’un moyen de chauffage adapté aux caractéristiques du logement','Réalisation d’une isolation thermique adaptée à la nature du bâtiment et à ses caractéristiques',null,null],
@@ -683,6 +685,7 @@ const R_PDL=[
   {...ITEMS.plomb,tl:undefined,ty:undefined,df:ITEMS.plomb.df.filter(x=>!x.only),
    o:["Logement d'avant 1949 + peintures dégradées","Constat de risque d'exposition au plomb (CREP) positif",'Moisissures, champignons, traces d’humidité','Autre'],
    ow:[ITEMS.plomb.ow[0],ITEMS.plomb.ow[1],ITEMS.plomb.ow[2],null]},
+  ITEMS.diagmaj,
   {...ITEMS.prec,
    o:ITEMS.prec.o.filter((_,i)=>i!==3),ow:ITEMS.prec.ow.filter((_,i)=>i!==3),
    ty:["Présence d'humidité par condensation"]},
@@ -767,6 +770,39 @@ console.assert(R_PDL.every(r=>(r.items||[]).every(d=>(d.df||[]).every(x=>!x.only
   for(const k of Object.keys(TECH))console.assert(all.has(k),'TECH sans correctif : '+k);
   console.assert(R_PDL.length===8&&!R_PDL[5].items[0].o.some(x=>/diagnostic/i.test(x))&&!R_PDL[5].items.some(d=>d.id==='surocc'),'R_PDL');})();
 
+/* ---------- diagnostics non à jour après travaux (ligne diagmaj) ---------- */
+// s.dA / s.tA : années des diagnostics et des travaux ; s.tw : indices de DM_TW ; s.twA : texte « Autre » ; s.crep : Oui / Non / Inconnu.
+const DM_TW=['Remplacement du système de chauffage','Réfection totale de l’installation électrique','Réfection partielle de l’installation électrique',
+ 'Installation ou modification du gaz','Rénovation des peintures','Isolation ou remplacement des menuiseries','Autre'];
+const DM_TWL=['remplacement du système de chauffage','réfection totale de l’installation électrique','réfection partielle de l’installation électrique',
+ 'installation ou modification de l’installation de gaz','rénovation des peintures','isolation ou remplacement des menuiseries'];
+const DM_INTRO='Fournir un dossier de diagnostic technique mis à jour après travaux';
+// [décence, permis de louer (version technique)]
+const DM_COR={
+ elec:['Fournir un nouvel état de l’installation intérieure d’électricité établi après travaux, ou une attestation de conformité visée par le Consuel de moins de 6 ans',
+  'Faire établir par un diagnostiqueur certifié un nouvel état de l’installation intérieure d’électricité après travaux (norme NF C 16-600), ou fournir une attestation de conformité visée par le Consuel de moins de 6 ans'],
+ dpe:['Fournir un nouveau DPE intégrant les travaux réalisés',
+  'Faire établir par un diagnostiqueur certifié un nouveau DPE intégrant les travaux réalisés (isolation, menuiseries, système de chauffage)'],
+ gaz:['Fournir l’état de l’installation intérieure de gaz, ou le certificat de conformité de la nouvelle installation',
+  'Faire établir un état de l’installation intérieure de gaz après travaux (norme NF P 45-500), ou fournir le certificat de conformité de la nouvelle installation'],
+ crep:['Fournir un nouveau CREP établi après travaux',
+  'Faire établir par un diagnostiqueur certifié un nouveau CREP après travaux (article L. 1334-5 du code de la santé publique)']};
+const av49=v=>v.f.lAv49==='Avant 1949';
+function dmTexte(v,s){
+  const tw=s.tw||[],L=tw.filter(i=>i<6&&!(i===2&&tw.includes(1))).map(i=>DM_TWL[i]);
+  if(tw.includes(6)&&s.twA?.trim())L.push(s.twA.trim());
+  const liste=L.length>1?L.slice(0,-1).join(', ')+' et '+L[L.length-1]:L[0]||'…';
+  return `Le logement${av49(v)?', construit avant 1949,':''} a fait l’objet de diagnostics établis en ${s.dA||'…'}. Des travaux ont depuis été réalisés en ${s.tA||'…'} : ${liste}. `+
+   'Les diagnostics fournis ne décrivent donc plus l’état actuel du logement et ne permettent pas de vérifier la sécurité des installations (décret n° 2002-120, art. 2) ni la performance énergétique. '+
+   `Le dossier de diagnostic technique doit refléter l’état du logement au moment de la mise en location (loi n° 89-462, art. 3-3${isPdl(v)?' ; CCH, art. L. 635-4':''}).`;
+}
+// Une ligne par diagnostic concerné, sans doublon ; CREP seulement avant 1949 et si le CREP n'est pas négatif.
+function dmCorr(v,s){
+  const tw=s.tw||[],has=(...i)=>i.some(x=>tw.includes(x)),k=[];
+  if(has(1,2))k.push('elec');if(has(0,5))k.push('dpe');if(has(3))k.push('gaz');if(has(4)&&av49(v)&&s.crep!=='Non')k.push('crep');
+  return k.map(x=>DM_COR[x][isPdl(v)?1:0]);
+}
+
 /* ---------- liste de travaux ---------- */
 function travaux(v){
   const L={};Object.keys(TH).forEach(k=>L[k]=[]);
@@ -781,6 +817,7 @@ function travaux(v){
   for(const r of RR(v))for(const d of r.items||[]){
     const s=v.it[d.id];if(!s?.on||!d.th)continue;
     const subs=[],loc=s.loc?.trim()?`${s.loc.trim()} – `:'';
+    if(d.dm){const c=dmCorr(v,s);push(d.th,'• '+loc+DM_INTRO+(c.length?' :':'.'));c.forEach(x=>push(d.th,'   ◦ '+x));continue}
     const add=x=>{if(!x)return;if(x==='DIAG')return diag();Array.isArray(x)?subs.push({th:x[0],t:loc+tk(x[1])}):subs.push({th:d.th,t:loc+tk(x)})};
     s.o.forEach(i=>add(d.ow?.[i]));s.df.forEach(i=>add(d.df?.[i]?.[1]));(d.wx||[]).forEach(add);
     const main=subs.filter(x=>x.th===d.th);
@@ -822,6 +859,22 @@ function fusionTravaux(txt,blocks){
   }
   return{txt:lines.join('\n'),added};
 }
+(()=>{const t=(f,s,type)=>{const v={type,f,it:{diagmaj:{on:true,o:[],t:[],df:[],note:'',loc:'',ph:[],...s}}};return{v,txt:dmTexte(v,v.it.diagmaj),cor:dmCorr(v,v.it.diagmaj),trav:travaux(v)}};
+  // 1. chauffage + électricité partielle + peintures, avant 1949, CREP positif
+  const a=t({lAv49:'Avant 1949'},{dA:2024,tA:2026,tw:[0,2,4],crep:'Oui'});
+  console.assert(a.txt.startsWith('Le logement, construit avant 1949, a fait l’objet de diagnostics établis en 2024. Des travaux ont depuis été réalisés en 2026 : remplacement du système de chauffage, réfection partielle de l’installation électrique et rénovation des peintures.')&&a.txt.endsWith('(loi n° 89-462, art. 3-3).'),'dm texte 1');
+  console.assert(a.cor.length===3&&/électricité/.test(a.cor[0])&&/DPE/.test(a.cor[1])&&/CREP/.test(a.cor[2]),'dm correctif 1');
+  const L=a.trav.find(b=>b.title===TH.regl).lines;
+  console.assert(L[0]==='• '+DM_INTRO+' :'&&L.length===4&&L[1].startsWith('   ◦ Fournir un nouvel état'),'dm travaux 1');
+  // 2. peintures seules, logement de 1975 : pas de CREP, pas de sous-ligne
+  const b=t({lAv49:'Après 1949'},{dA:2023,tA:2025,tw:[4]});
+  console.assert(b.txt.startsWith('Le logement a fait')&&b.cor.length===0&&b.trav.find(x=>x.title===TH.regl).lines.join()==='• '+DM_INTRO+'.','dm 2');
+  // 3. gaz seul ; électricité totale + partielle → une seule ligne ; version permis de louer
+  const c=t({},{dA:2022,tA:2024,tw:[3]}),d=t({lAv49:'Avant 1949'},{tw:[1,2,6],twA:'Création d’une salle d’eau',crep:'Non'},'pdl');
+  console.assert(c.cor.length===1&&/gaz/.test(c.cor[0])&&c.txt.includes(': installation ou modification de l’installation de gaz.'),'dm 3');
+  console.assert(d.cor.length===1&&d.cor[0].includes('NF C 16-600')&&d.txt.includes('réfection totale de l’installation électrique et Création d’une salle d’eau.')&&d.txt.includes('en …')&&d.txt.endsWith('; CCH, art. L. 635-4).'),'dm pdl');
+  console.assert(R_PDL[5].items.some(x=>x.id==='diagmaj')&&ITEMS.diagmaj,'dm R_PDL');
+})();
 const dfi=(id,re)=>ITEMS[id].df.findIndex(x=>re.test(x[0]));
 (()=>{const t={f:{lAv49:'Avant 1949',detect:'Non',cNd:'Oui'},it:{elec:{on:true,o:[],t:[],df:[dfi('elec',/^Dispositif de coupure/),dfi('elec',/^Absence de protection diff/)],ph:[]},plomb:{on:true,o:[3],t:[],df:[],ph:[]}}};
   const b=travaux(t),txt=travauxTexte(t,b);
@@ -1413,6 +1466,18 @@ function field([k,label,type,opts,hint,cond]){
     ctl=`<input id="f_${k}" type="${t}" data-f="${k}" value="${esc(v)}" ${type==='n'?'inputmode="decimal" step="any"':''}>`}
   return `<div class="field ${full?'full':''}"><span>${esc(label)}</span>${ctl}${hint?`<div class="hint">${esc(hint)}</div>`:''}</div>`;
 }
+// Saisie de la ligne « Diagnostics non à jour après travaux ».
+function dmHtml(d,s){
+  const tw=s.tw||[],yr=(k,l)=>`<label class="field"><span>${l}</span><input type="number" inputmode="numeric" data-it="${d.id}" data-k="${k}" value="${esc(s[k]??'')}" min="1900" max="2100"></label>`;
+  const warn=s.dA&&s.tA&&+s.tA<=+s.dA?`<div class="hint warn">L’année des travaux (${esc(s.tA)}) n’est pas postérieure à celle des diagnostics (${esc(s.dA)}) : à vérifier.</div>`:'';
+  return `<div class="ln">${yr('dA','Année des diagnostics fournis')}${yr('tA','Année des travaux')}</div>${warn}
+    <div class="grp"><span>Travaux réalisés</span><div class="chips">${DM_TW.map((o,i)=>`<label class="chip"><input type="checkbox" data-it="${d.id}" data-k="tw" data-i="${i}" ${tw.includes(i)?'checked':''}>${esc(o)}</label>`).join('')}</div></div>
+    ${tw.includes(6)?`<label class="field"><span>Autres travaux (texte repris dans les précisions)</span><input type="text" data-it="${d.id}" data-k="twA" value="${esc(s.twA||'')}"></label>`:''}
+    ${av49(cur)?`<div class="grp"><span>CREP de 2024 positif (présence de plomb) ?</span><div class="chips">${['Oui','Non','Inconnu'].map(o=>`<label class="chip"><input type="radio" name="dmcrep" data-it="${d.id}" data-k="crep" value="${o}" ${s.crep===o?'checked':''}>${o}</label>`).join('')}</div></div>`:''}
+    <div class="row"><button type="button" data-act="dmregen" data-it="${d.id}">Régénérer le texte des précisions</button></div>`;
+}
+// Réécrit les précisions tant que l'enquêteur ne les a pas modifiées à la main.
+function dmMaj(s){const t=dmTexte(cur,s);if(!s.note.trim()||s.note===s.auto)s.note=t;s.auto=t}
 function itemHtml(d,nums){
   const s=it(d.id),grp=(k,lab,arr)=>`<div class="grp"><span>${esc(lab)}</span><div class="chips">${arr.map((o,i)=>`<label class="chip"><input type="checkbox" data-it="${d.id}" data-k="${k}" data-i="${i}" ${s[k].includes(i)?'checked':''}>${esc(o)}</label>`).join('')}</div></div>`;
   let norm='';
@@ -1431,6 +1496,7 @@ function itemHtml(d,nums){
     ${d.o?grp('o',d.ol||'Constat',d.o):''}
     ${d.ty&&d.tl===MEL?grp('t',d.tl,d.ty):''}
     ${d.d?`<label class="dgl"><input type="checkbox" data-it="${d.id}" data-k="d" ${s.d?'checked':''}>Danger</label>`:''}
+    ${d.dm?dmHtml(d,s):''}
     <label class="field"><span>Localisation (reprise dans les travaux préconisés)</span><input type="text" data-it="${d.id}" data-k="loc" value="${esc(s.loc)}" placeholder="Ex. : chambre 1, salle d’eau"></label>
     <div class="field"><span>Précisions (3) : description</span>
      ${d.df?`<select data-it="${d.id}" data-k="df" aria-label="Insérer un commentaire pré-rédigé"><option value="">+ Insérer un commentaire pré-rédigé…</option>${d.df.map((x,i)=>`<option value="${i}">${esc(x[0])}</option>`).join('')}<option value="autre">Autre (rédiger)</option></select>`:''}
@@ -1787,7 +1853,9 @@ document.addEventListener('change',async e=>{
     if(el.checked){a=no(el.value)?[]:a.filter(x=>!no(x));a.push(el.value)}cur.f[k]=a;save();return keep()}
   if(el.dataset.it&&el.dataset.k){
     const s=it(el.dataset.it),k=el.dataset.k;
-    if(k==='on'||k==='d'||k==='ras'){s[k]=el.checked;if(el.checked&&k!=='d')s[k==='on'?'ras':'on']=false;save();return keep()}
+    if(k==='on'||k==='d'||k==='ras'){s[k]=el.checked;if(el.checked&&k!=='d')s[k==='on'?'ras':'on']=false;if(k==='on'&&s.on&&itemOf(el.dataset.it).dm)dmMaj(s);save();return keep()}
+    if(['dA','tA','twA','crep','tw'].includes(k)){if(k==='tw'){const i=+el.dataset.i;s.tw=(s.tw||[]).filter(x=>x!==i);if(el.checked)s.tw.push(i);s.tw.sort((a,b)=>a-b)}else s[k]=el.value.trim();
+      dmMaj(s);save();return keep()}
     if(k==='df'){const v=el.value;el.value='';if(v==='')return;const ta=$('#note_'+el.dataset.it);
       if(v!=='autre'){const i=+v,t=itemOf(el.dataset.it).df[i][0];if(!s.df.includes(i))s.df.push(i);
         s.note=(s.note.trim()?s.note.replace(/\s+$/,'')+'\n':'')+t+(/[.!?]$/.test(t)?'':'.');ta.value=s.note;save()}
@@ -1825,6 +1893,7 @@ document.addEventListener('click',async e=>{
     for(const k of Object.keys(cur.f))if(k.startsWith(id+'_'))delete cur.f[k];for(const k of Object.keys(cur.it))if(k.startsWith(id+':'))delete cur.it[k];save();return keep()}
   if(a==='markdone'){cur.done[b.dataset.r]=!cur.done[b.dataset.r];save();return render()}
   if(a==='delph'){if(!armed(b,'Confirmer'))return;it(b.dataset.it).ph.splice(+b.dataset.i,1);save();return keep()}
+  if(a==='dmregen'){const s=it(b.dataset.it);s.note=s.auto=dmTexte(cur,s);save();return keep()}
   if(a==='deldf'){const s=it(b.dataset.it);s.df=s.df.filter(i=>i!==+b.dataset.i);save();return keep()}
   if(a==='clrpsig'){delete P.sig;saveP();return render()}
   if(a==='clrosig'){delete cur.f[sigKey(cur)];save();return keep()}
