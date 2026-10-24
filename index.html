@@ -233,9 +233,22 @@ button.lnk{min-height:44px;padding:0 4px;border:0;background:none;font-size:.85r
 .lkpis .hl{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .lkpis .hl span,.lkpis .hl small{color:inherit}
 
+/* Avancement du dossier, n° de dossier, bandeau de mise à jour, version */
+.prog{display:flex;align-items:center;gap:var(--sp-2);font-size:.85rem;color:var(--muted);flex-wrap:wrap}
+.prog .pbar{flex:1 1 120px;height:8px;border-radius:999px;background:var(--chip);overflow:hidden}
+.prog .pbar span{display:block;height:100%;background:var(--accent);border-radius:inherit}
+.prog .pbar.full span{background:var(--ok)}
+.prog.dash{margin:0 0 var(--sp-3)}
+.prog .dnum{font-weight:700;color:var(--accent)}
+.case .dnum{font-size:.85rem;font-weight:700;color:var(--accent);margin-top:2px}
+.banner.info{background:var(--chip);color:var(--accent)}
+.banner button{display:block;margin-top:8px}
+.ver{font-size:.8rem;margin-top:var(--sp-2)}
+
 </style>
 
 <div class="wrap">
+  <div id="maj" class="banner info" hidden role="status">Une nouvelle version de l’application est disponible. <button data-act="maj">Mettre à jour</button></div>
   <div id="banner" class="banner" hidden></div>
   <main id="app"></main>
 </div>
@@ -1845,6 +1858,8 @@ if(typeof CP_COM==='object')console.assert(cpAuto('17000','').ville==='La Rochel
   &&cpAuto('','St Maixent l Ecole').cp==='79400'&&!cpAuto('','Le Pin').cp&&cpsDe('Le Pin').length===2&&!cpAuto('79100','Thouars').ville&&!cpAuto('75001','').ville,'codes postaux');
 
 
+// Version : date de construction, écrite par build.py.
+const APP_VER='2026.10.24-1008';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -1913,10 +1928,35 @@ function migrate(v){
   return v;
 }
 
+/* ---------- n° de dossier, rappel de sauvegarde, avancement ---------- */
+// N° unique : type, année de création, initiales du technicien, compteur de l'appareil (DEC-2026-JM-0042).
+const NUM_PRE={pdl:'PDL',deg:'DEG',loc:'LOC'};
+const initiales=()=>(P.nom||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').split(/\s+/).filter(Boolean).map(x=>x[0]).slice(0,3).join('').toUpperCase().replace(/[^A-Z]/g,'');
+function numDos(v){if(v.num||!P.nom)return false;const k=(NUM_PRE[v.type]||'DEC')+'-'+new Date(v.created||Date.now()).getFullYear();
+  P.seq=P.seq||{};P.seq[k]=(P.seq[k]||0)+1;v.num=`${k}-${initiales()}-${String(P.seq[k]).padStart(4,'0')}`;return true}
+// Numérote les dossiers qui n'ont pas encore de n° (profil vide à leur création, ou version précédente), du plus ancien au plus récent.
+async function numeroter(){const L=visits.filter(v=>!v.num).sort((a,b)=>(a.created||0)-(b.created||0)).filter(numDos);if(!L.length)return;
+  await saveP();for(const v of L)await store.put(v).catch(()=>{})}
+const JOUR=864e5,ilya=t=>{const j=Math.floor((Date.now()-t)/JOUR);return j<1?'aujourd’hui':j<2?'hier':`il y a ${j} jours`};
+const sauve=v=>v.savedAt&&v.updated<=v.savedAt;
+// Rappel : dossiers modifiés depuis leur dernière sauvegarde, s'il n'y a pas eu de sauvegarde depuis 7 jours ou qu'un dossier terminé n'a jamais été sauvegardé.
+function rappelSauv(){const L=visits.filter(v=>!sauve(v));if(!L.length)return null;const ref=P.lastBak||Math.min(...L.map(v=>v.created||Date.now()));
+  return Date.now()-ref>=7*JOUR||L.some(v=>v.pdfAt&&!v.savedAt)?L:null}
+// Avancement : rubriques contrôlées et conclusion (décence, permis de louer), éléments notés (dégradation), étapes clés (Loc'Avantages).
+function prog(v){
+  if(isLoc(v)){const D=v.loc,R=locR(v),s=[D.proprio.nom||D.proprio.sci,D.bien.insee,R.lgs.every(r=>r.eligible),R.comp.ok];return {f:s.filter(Boolean).length,n:s.length,u:'étapes'}}
+  if(isDeg(v)){const E=v.g.flatMap(g=>GRILLES[g.k].els.map(e=>g.n[e.id]?.h!=null));return {f:E.filter(Boolean).length,n:E.length,u:'éléments notés'}}
+  const s=[...RR(v).map(r=>r.items?!r.items.some(d=>!v.it[d.id]?.on&&!v.it[d.id]?.ras)&&!preManq(r,v).length:!!v.done[r.id]),filled(isPdl(v)?v.f.etat:v.f.cNd)];
+  return {f:s.filter(Boolean).length,n:s.length,u:'étapes'}}
+function progHtml(v,num){const p=prog(v),pc=Math.round(100*p.f/(p.n||1));
+  return `<div class="prog${num?' dash':''}"><div class="pbar${pc===100?' full':''}" role="progressbar" aria-valuemin="0" aria-valuemax="${p.n}" aria-valuenow="${p.f}" aria-label="Avancement du dossier"><span style="width:${pc}%"></span></div><span>${p.f}/${p.n} ${p.u}</span>${num&&v.num?`<span class="dnum">N° ${esc(v.num)}</span>`:''}</div>`}
+
 /* ---------- état ---------- */
 let visits=[],cur=null,view='list',saveT=null,P={id:'moi'};
 // Sauvegarde : dossiers cochés pour l'export, et inclusion du carnet des mairies.
 const exSel=new Set();let exMairies=true;
+// Listes de dossiers : recherche et filtre par type.
+let lq='',lt='';
 const saveP=()=>store.putProfil(P).catch(e=>toast('Enregistrement du profil impossible : '+e.message));
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2039,18 +2079,24 @@ const where=v=>isLoc(v)?locWhere(v):isDeg(v)?[v.f.adresse,cpv(v)].filter(Boolean
 const logoOf=v=>isPdl(v)?COMMUNES[v.f.commune]?.logo:COM[v.f.dem]?.logo;
 const kind=v=>isLoc(v)?'Loc’Avantages · '+v.loc.logements.length+' logement'+(v.loc.logements.length>1?'s':''):isDeg(v)?['Dégradation',v.bien==='imm'?`Immeuble · ${v.g.length-1} logement${v.g.length>2?'s':''}`:'Maison individuelle',v.f.op].filter(Boolean).join(' · '):isPdl(v)?'Permis de louer · '+v.f.commune+' · '+(v.f.typeVis||''):(COM[v.f.dem]?.label||'')+' · '+(v.f.typeVis||'');
 
+// Dossiers en cours ou terminés, filtrés par type et par les mots recherchés (tous présents, sans accents ni casse).
+function listeDossiers(fin){const q=mkey(lq).split(' ').filter(Boolean);
+  const L=visits.filter(v=>!!v.pdfAt===fin&&(!lt||(v.type||'dec')===lt)&&(s=>q.every(w=>s.includes(w)))(mkey([who(v),where(v),kind(v),v.num,v.f.refDos,frDate(v.f.dateVis),v.f.nom,v.f.pNom,v.f.pSoc].join(' ')))).sort((a,b)=>b.updated-a.updated);
+  return L.length?L.map(caseHtml).join(''):'<div class="empty">Aucun dossier ne correspond à la recherche.</div>'}
 // Carte d'un dossier : type, occupant ou logement, avancement, actions.
 function caseHtml(v){
   if(isLoc(v)){const R=locR(v);return `<div class="case"><span class="tag loc">${esc(kind(v))}</span>
-   <div><div class="name">${esc(who(v))}</div><div class="muted">${esc(where(v)||'Adresse non renseignée')}</div></div>
+   <div><div class="name">${esc(who(v))}</div><div class="muted">${esc(where(v)||'Adresse non renseignée')}</div>${v.num?`<div class="dnum">N° ${esc(v.num)}</div>`:''}</div>
    <div class="meta"><span>Simulation du ${esc(frDate(v.f.dateVis))} · aides ${locEur(R.total)} · reste à charge ${locRac(R)}${v.pdfAt?' · PDF du '+new Date(v.pdfAt).toLocaleDateString('fr-FR'):''}</span></div>
+   ${v.pdfAt?'':progHtml(v)}
    <div class="row"><button class="btn-primary" data-act="open" data-id="${v.id}">${v.pdfAt?'Ouvrir':'Reprendre'}</button>
     ${v.pdfAt?`<button data-act="reopen" data-id="${v.id}">Remettre en cours</button>`:''}
     <button class="btn-danger" data-act="delv" data-id="${v.id}">Supprimer</button></div></div>`}
-  const deg=isDeg(v),dr=deg?v.g.reduce((n,g)=>n+degTot(v,g).rest,0):0,rs=RR(v),fait=rs.filter(r=>rstat(r,v)[0][0]!=='À faire').length,manq=rs.reduce((n,r)=>n+(r.items||[]).filter(d=>d.p&&v.it[d.id]?.on&&!v.it[d.id].ph.length).length,0);
+  const deg=isDeg(v),rs=RR(v),manq=rs.reduce((n,r)=>n+(r.items||[]).filter(d=>d.p&&v.it[d.id]?.on&&!v.it[d.id].ph.length).length,0);
   return `<div class="case"><span class="tag ${isPdl(v)?'pdl':deg?'deg':''}">${esc(kind(v))}</span>
-   <div><div class="name">${esc(who(v))}</div><div class="muted">${esc(where(v)||'Adresse non renseignée')}</div></div>
-   <div class="meta"><span>${v.f.dateVis?'Visite le '+esc(frDate(v.f.dateVis))+' · ':''}${v.pdfAt?'Rapport du '+new Date(v.pdfAt).toLocaleDateString('fr-FR'):deg?(dr?`${dr} élément${dr>1?'s':''} à noter`:'Grille complète'):fait+'/'+rs.length+' rubriques'}${manq?` · <b style="color:var(--danger)">${manq} photo${manq>1?'s':''} manquante${manq>1?'s':''}</b>`:''}</span></div>
+   <div><div class="name">${esc(who(v))}</div><div class="muted">${esc(where(v)||'Adresse non renseignée')}</div>${v.num?`<div class="dnum">N° ${esc(v.num)}</div>`:''}</div>
+   <div class="meta"><span>${[v.f.dateVis&&'Visite le '+esc(frDate(v.f.dateVis)),v.pdfAt&&'Rapport du '+new Date(v.pdfAt).toLocaleDateString('fr-FR'),manq&&`<b style="color:var(--danger)">${manq} photo${manq>1?'s':''} manquante${manq>1?'s':''}</b>`].filter(Boolean).join(' · ')}</span></div>
+   ${v.pdfAt?'':progHtml(v)}
    <div class="row"><button class="btn-primary" data-act="open" data-id="${v.id}">${v.pdfAt?'Ouvrir':'Reprendre'}</button>
     ${v.pdfAt?`<button data-act="reopen" data-id="${v.id}">Remettre en cours</button>`:''}
     ${isPdl(v)||deg?'':`<button data-act="ctrl" data-id="${v.id}">Créer la visite de contrôle</button>`}
@@ -2059,10 +2105,12 @@ function caseHtml(v){
 function render(){
   const app=$('#app'),bar=$('#bar'),bi=$('#barin');bar.hidden=true;
   if(view==='list'){
+    lq='';lt='';const rap=rappelSauv();
     const enc=visits.filter(v=>!v.pdfAt).length,ini=(P.nom||'').split(/\s+/).filter(Boolean).map(x=>x[0]).slice(0,2).join('').toUpperCase();
     app.innerHTML=`<div class="home-head"><img class="logo" src="${LOGO}" alt="SOLiHA Charente-Maritime Deux-Sèvres">
        <button class="avatar" data-act="go" data-v="profil" aria-label="Mon profil">${ini?esc(ini):svg('admin')}</button></div>
      ${P.nom?'':`<div class="banner">Renseignez votre profil (nom, téléphone, e-mail, signature) : il figure sur chaque rapport. <button data-act="go" data-v="profil">Remplir mon profil</button></div>`}
+     ${rap?`<div class="banner">${P.lastBak?'Dernière sauvegarde '+ilya(P.lastBak):'Aucune sauvegarde'} · ${rap.length} dossier${rap.length>1?'s':''} non sauvegardé${rap.length>1?'s':''}. Ils ne sont enregistrés que sur cet appareil. <button data-act="bak">Sauvegarder maintenant</button></div>`:''}
      <div class="eyebrow">Constat décence · Permis de louer</div>
      <h1 class="hello">${P.nom?'Bonjour '+esc(P.nom.split(/\s+/)[0]):'Bonjour'}</h1>
      <button class="big primary" data-act="new">${svg('plus')}<span><span class="t">Nouvelle visite</span><span class="d">Démarrer un constat</span></span></button>
@@ -2070,17 +2118,21 @@ function render(){
      <nav class="links" aria-label="Autres actions">
       <button data-act="go" data-v="carnet">${svg('building')}<span class="grow">Carnet d’adresses</span><span class="muted">${Object.keys(CARNET.l).length+Object.keys(MAIRIES.l).length}</span>${svg('chev')}</button>
       <button data-act="go" data-v="termines">${svg('archive')}<span class="grow">Dossiers terminés</span><span class="muted">${visits.length-enc}</span>${svg('chev')}</button>
-      <button data-act="go" data-v="sauvegarde">${svg('save')}<span class="grow">Sauvegarde et import</span>${svg('chev')}</button>
+      <button data-act="go" data-v="sauvegarde">${svg('save')}<span class="grow">Sauvegarde et import</span><span class="muted">${P.lastBak?ilya(P.lastBak):'jamais'}</span>${svg('chev')}</button>
       ${instEv?`<button data-act="install">${svg('inst')}<span class="grow">Installer l’application</span>${svg('chev')}</button>`:''}
      </nav>
      ${iosNonInst?'<p class="muted">Pour installer l’application : Partager, puis « Sur l’écran d’accueil ».</p>':''}
-     <div class="offline">${svg('ok')}Fonctionne hors ligne · données enregistrées sur cet appareil</div>`;
+     <div class="offline">${svg('ok')}Fonctionne hors ligne · données enregistrées sur cet appareil</div>
+     <p class="muted ver">Version ${esc(APP_VER)}</p>`;
     return;
   }
   if(view==='encours'||view==='termines'){
-    const fin=view==='termines',L=visits.filter(v=>!!v.pdfAt===fin).sort((a,b)=>b.updated-a.updated);
+    const fin=view==='termines',T0=visits.filter(v=>!!v.pdfAt===fin),types=[...new Set(T0.map(v=>v.type||'dec'))];
+    if(!types.includes(lt))lt='';
     app.innerHTML=`${topbar(fin?'Dossiers terminés':'Dossiers en cours',fin?'Rapport PDF généré':'Constats non finalisés','list')}
-     <div class="visits">${L.length?L.map(caseHtml).join('')
+     ${T0.length?`<div class="field"><span>Rechercher</span><input type="text" enterkeyhint="search" id="lq" value="${esc(lq)}" placeholder="Nom, adresse, ville, n° de dossier…" autocomplete="off"></div>
+     ${types.length>1?`<div class="chips" style="margin:10px 0 14px">${[['','Tous'],['dec','Décence'],['pdl','Permis de louer'],['deg','Dégradation'],['loc','Loc’Avantages']].filter(([k])=>!k||types.includes(k)).map(([k,l])=>`<label class="chip"><input type="radio" name="lt" data-lt="${k}" ${lt===k?'checked':''}>${l}</label>`).join('')}</div>`:''}`:''}
+     <div class="visits" id="vlist">${T0.length?listeDossiers(fin)
       :`<div class="empty"><strong>${fin?'Aucun dossier terminé.':'Aucun dossier en cours.'}</strong><br>${fin?'Un dossier passe ici dès que son rapport PDF est généré.':'Touchez « Nouvelle visite » pour démarrer un constat.'}</div>`}</div>`;
     bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="new">${svg('plus')}Nouvelle visite</button>`;
     return;
@@ -2090,11 +2142,11 @@ function render(){
     app.innerHTML=`${topbar('Sauvegarde et import','Visites et carnet des mairies','list')}
      <p class="muted">Cochez les dossiers à exporter. La sauvegarde (.json) sert à transférer des dossiers vers un PC ou à les partager avec un collègue. L’import accepte aussi les dossiers (.json) enregistrés avec l’ancien « Simulateur Loc’Avantages ».</p>
      <div class="hint">Pour transférer une sauvegarde vers un téléphone, utilisez Quick Share, le Bluetooth ou un câble USB, pas Outlook, Teams ni OneDrive professionnel : ces applications chiffrent le fichier, qui devient impossible à importer.</div>
-     <div class="row" style="margin-bottom:12px"><button data-act="sel" data-k="all">Tout cocher</button><button data-act="sel" data-k="encours">Dossiers en cours</button><button data-act="sel" data-k="none">Tout décocher</button></div>
+     <div class="row" style="margin-bottom:12px"><button data-act="sel" data-k="all">Tout cocher</button><button data-act="sel" data-k="encours">Dossiers en cours</button><button data-act="sel" data-k="nonsauv">Non sauvegardés</button><button data-act="sel" data-k="none">Tout décocher</button></div>
      <div class="items">${L.length?L.map(v=>`<label class="item ${exSel.has(v.id)?'on':''}" style="display:flex;gap:12px;align-items:flex-start;padding:12px 14px;cursor:pointer">
        <input type="checkbox" data-sel="${v.id}" ${exSel.has(v.id)?'checked':''} style="width:24px;height:24px;margin:2px 0 0;accent-color:var(--accent);flex:none">
        <span style="min-width:0"><span class="tag ${isPdl(v)?'pdl':isDeg(v)?'deg':isLoc(v)?'loc':''}">${esc(kind(v))}</span><span style="display:block;font-weight:700;margin-top:4px">${esc(who(v))}</span>
-       <span class="muted" style="display:block;font-size:.9rem">${esc(where(v)||'Adresse non renseignée')}${v.f.dateVis?' · visite le '+esc(frDate(v.f.dateVis)):''}${v.pdfAt?' · terminé':''}</span></span></label>`).join('')
+       <span class="muted" style="display:block;font-size:.9rem">${esc(where(v)||'Adresse non renseignée')}${v.f.dateVis?' · visite le '+esc(frDate(v.f.dateVis)):''}${v.pdfAt?' · terminé':''}${v.num?' · N° '+esc(v.num):''} · ${sauve(v)?'sauvegardé le '+new Date(v.savedAt).toLocaleDateString('fr-FR'):'<b style="color:var(--warn)">non sauvegardé</b>'}</span></span></label>`).join('')
       :'<div class="empty">Aucun dossier sur cet appareil.</div>'}</div>
      <label class="chip" style="margin-top:14px"><input type="checkbox" data-selmr ${exMairies?'checked':''}>Inclure le carnet d’adresses (${Object.keys(CARNET.l).length+Object.keys(MAIRIES.l).length})</label>
      <div class="links"><label class="btn">${svg('plus')}<span class="grow">Importer une sauvegarde</span><input type="file" accept=".json,application/json" data-import hidden></label></div>`;
@@ -2148,6 +2200,7 @@ function render(){
       <div class="field full"><span>Signature : signez au doigt ou importez une image scannée</span><canvas class="pad" id="pad" aria-label="Zone de signature de l'enquêteur"></canvas>
        <div class="row"><button data-act="clrpsig">Effacer</button><label class="btn">Importer une image<input type="file" accept="image/*" data-psig hidden></label></div></div>
      </div>`;
+    app.insertAdjacentHTML('beforeend',`<p class="muted ver">Version ${esc(APP_VER)}</p>`);
     initPad(P.sig?.src,(src,r)=>{P.sig={src,r};saveP()});
     bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="${cur?'dash':'list'}">Terminé</button>`;
     return;
@@ -2158,7 +2211,7 @@ function render(){
   if(view==='dash'){
     const tile=(id,n,t,ic,st)=>`<button class="tile" data-act="go" data-v="${id}"><img class="ic" src="${ICO[ic]}" alt=""><span class="num">${n}</span><span class="lbl">${esc(t)}</span>${pills(st)}</button>`;
     const aN=ADM(cur).filter(f=>f[0]!=='h'&&filled(cur.f[f[0]])).length;
-    app.innerHTML=`${topbar(who(cur),[cur.f.typeVis,where(cur)].filter(Boolean).join(' · '),'list',logo)}
+    app.innerHTML=`${topbar(who(cur),[cur.f.typeVis,where(cur)].filter(Boolean).join(' · '),'list',logo)}${progHtml(cur,1)}
      <div class="tiles">
       ${tile('admin','INFOS','Informations administratives','admin',[[aN?`${aN} champs`:'À faire',aN?'info':'']])}
       ${pdl?'':tile('courriers','AVANT LA VISITE','Courriers d’information','courrier',[[(n=>n?`${n} à compléter`:'Prêts')(lettres(cur).filter(l=>l.manque.length).length),lettres(cur).some(l=>l.manque.length)?'warn':'ok']])}
@@ -2278,9 +2331,9 @@ function degView(app,bar,bi){
     bar.hidden=false;bi.innerHTML=`<button data-act="zipph">${svg('cam')}Photos (.zip)</button><button class="btn-primary" data-act="pdf">${svg('pdf')}${degFinal(cur)?'Générer le rapport PDF':'Générer un projet (PDF)'}</button>`;
     const trav=g=>{const t=cur.f[g.id+'_trav'],c=degTravCtrl(cur,g,t),n=String(t||'').split('\n').filter(l=>l.trim()).length;
       return `<button class="tile" data-act="go" data-v="trav" data-g="${g.id}"><img class="ic" src="${ICO_DEG.synthese}" alt=""><span class="num">SYNTHÈSE</span><span class="lbl">Synthèse des travaux</span>${pills([[n?n+' ligne'+(n>1?'s':''):'À faire',n?'info':''],...(c.manque.length+c.zero.length?[['À vérifier','danger']]:[])])}</button>`};
-    if(cur.bien!=='imm'){const g=cur.g[0];app.innerHTML=`<div class="degtop">${topbar(who(cur),kind(cur),'list')}${degScore(cur,g)}</div><div class="tiles">${adm}${chap(g)}${trav(g)}</div>`;return true}
+    if(cur.bien!=='imm'){const g=cur.g[0];app.innerHTML=`<div class="degtop">${topbar(who(cur),kind(cur),'list')}${degScore(cur,g)}</div>${progHtml(cur,1)}<div class="tiles">${adm}${chap(g)}${trav(g)}</div>`;return true}
     const [bc,...L]=cur.g;
-    app.innerHTML=`${topbar(who(cur),kind(cur),'list')}<div class="tiles">${adm}</div>
+    app.innerHTML=`${topbar(who(cur),kind(cur),'list')}${progHtml(cur,1)}<div class="tiles">${adm}</div>
      <h2 class="sec">Parties communes</h2>
      <div class="gcard"><div class="name">${esc(gNom(cur,bc))}</div>${degScore(cur,bc)}<div class="tiles">${chap(bc)}${trav(bc)}</div></div>
      <h2 class="sec">Logements (parties privatives)</h2>
@@ -2421,7 +2474,7 @@ function locView(app,bar,bi){
   if(view==='dash'){
     const tile=(v,n,t,ic,st)=>`<button class="tile" data-act="go" data-v="${v}"><img class="ic" src="${ic}" alt=""><span class="num">${n}</span><span class="lbl">${esc(t)}</span>${pills(st)}</button>`;
     const p=D.proprio,nl=D.logements.length,inel=R.lgs.filter(r=>!r.eligible).length,np=(D.aidesProjet||[]).length;
-    app.innerHTML=`${topbar(who(cur),kind(cur),'list')}
+    app.innerHTML=`${topbar(who(cur),kind(cur),'list')}${progHtml(cur,1)}
      <div class="tiles">
       ${tile('lprop','PROPRIÉTAIRE','Le propriétaire',ICO.admin,[[p.nom||p.sci?'Renseigné':'À faire',p.nom||p.sci?'ok':'']])}
       ${tile('lbien','LE BIEN','Adresse et dispositif',ICO.logement,[[D.bien.insee?LOC_COURT[ctx.key]:'Commune à saisir',D.bien.insee?'info':'warn']])}
@@ -2525,6 +2578,7 @@ document.addEventListener('input',e=>{
   if(el.dataset.mr){const m=MAIRIES.l[el.dataset.mr];if(m){m[el.dataset.mk]=el.value;m.maj=today();saveMairies()}return}
   if(el.dataset.cf){const c=CARNET.l[el.dataset.cf];if(c){c[el.dataset.ck]=el.value.trim();c.maj=today();saveCarnet();cbDL()}return}
   if(el.id==='cbq'){cbQ=el.value;$('#cblist').innerHTML=cbListe();return}
+  if(el.id==='lq'){lq=el.value;$('#vlist').innerHTML=listeDossiers(view==='termines');return}
   if(!cur)return;
   if(el.dataset.cpv!==undefined)cpLien(el);
   // Fiche choisie dans les suggestions du champ « Nom » : tout le bloc est rempli.
@@ -2542,6 +2596,7 @@ document.addEventListener('change',async e=>{
   if(el.dataset.sel){el.checked?exSel.add(el.dataset.sel):exSel.delete(el.dataset.sel);return keep()}
   if(el.dataset.selmr!==undefined){exMairies=el.checked;return}
   if(el.dataset.cbcat!==undefined){cbCat=el.dataset.cbcat;return keep()}
+  if(el.dataset.lt!==undefined){lt=el.dataset.lt;return keep()}
   if(el.dataset.psig!==undefined){const f=el.files[0];el.value='';if(!f)return;try{const p=await shrink(f);P.sig={src:p.src,r:p.h/p.w};await saveP();render()}catch(err){toast('Image non importée : '+err.message)}return}
   if(!cur)return;
   if(el.dataset.vcp!==undefined)cpLien(el);
@@ -2586,14 +2641,16 @@ document.addEventListener('change',async e=>{
 document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
   if(a==='new'){view='choose';return go()}
+  if(a==='bak'){exSel.clear();for(const v of visits)if(!sauve(v))exSel.add(v.id);view='sauvegarde';return go()}
+  if(a==='maj'){await save(true);setTimeout(()=>location.reload(),500);return}
   if(a==='laddlg'){cur.loc.logements.push(locLg(cur.loc.logements.length+1));save();return keep()}
   if(a==='ldellg'){if(!armed(b,'Confirmer la suppression'))return;cur.loc.logements.splice(+b.dataset.i,1);save();return keep()}
   if(a==='laddaid'||a==='ldelaid'){const ks=b.dataset.s.split('.'),k=ks.pop();let o=cur.loc;for(const x of ks)o=o[x];const L=o[k]=o[k]||[];
     if(a==='laddaid')L.push({fin:'',lib:'',m:''});else L.splice(+b.dataset.k,1);save();return keep()}
   if(a==='ldelph'){cur.loc.bien.photo='';save();return keep()}
-  if(a==='newt'){cur=newVisit(b.dataset.t,b.dataset.b);visits.push(cur);await save(true);view=isLoc(cur)?'lprop':'admin';return go()}
+  if(a==='newt'){cur=newVisit(b.dataset.t,b.dataset.b);visits.push(cur);if(numDos(cur))saveP();await save(true);view=isLoc(cur)?'lprop':'admin';return go()}
   if(a==='open'){cur=visits.find(v=>v.id===b.dataset.id);view='dash';return go()}
-  if(a==='ctrl'){const src=visits.find(v=>v.id===b.dataset.id);cur=structuredClone(src);Object.assign(cur,{id:newVisit().id,created:Date.now(),done:{},sig:''});cur.f.typeVis='Visite de contrôle';cur.f.dateVis=today();visits.push(cur);await save(true);view='dash';toast('Visite de contrôle créée à partir de la visite initiale');return go()}
+  if(a==='ctrl'){const src=visits.find(v=>v.id===b.dataset.id);cur=structuredClone(src);Object.assign(cur,{id:newVisit().id,created:Date.now(),done:{},sig:''});delete cur.num;delete cur.savedAt;delete cur.pdfAt;if(numDos(cur))saveP();cur.f.typeVis='Visite de contrôle';cur.f.dateVis=today();visits.push(cur);await save(true);view='dash';toast('Visite de contrôle créée à partir de la visite initiale');return go()}
   if(a==='delv'){if(!armed(b,'Confirmer la suppression'))return;await store.del(b.dataset.id);visits=visits.filter(v=>v.id!==b.dataset.id);return render()}
   if(a==='list'){await save(true);if(cur)carnetMemo(cur);cur=null;view='list';return go()}
   if(a==='reopen'){const v=visits.find(x=>x.id===b.dataset.id);delete v.pdfAt;await store.put(v);toast('Dossier remis en cours');return render()}
@@ -2632,20 +2689,20 @@ document.addEventListener('click',async e=>{
   if(a==='ia'){try{await navigator.clipboard.writeText(texteRelecture(cur));toast('Texte copié : collez-le dans Copilot')}catch(err){toast('Copie impossible : '+err.message);return}
     open('https://copilot.microsoft.com/','_blank','noopener');return}
   if(a==='install'){const ev=instEv;instEv=null;render();if(ev){ev.prompt();await ev.userChoice.catch(()=>{})}return}
-  if(a==='pdf'){await save(true);if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur le rapport');view='profil';return go()}const v=cur;carnetMemo(v);return exportPdf(v).then(()=>{if(window.jspdf&&(!isDeg(v)||degFinal(v))){v.pdfAt=Date.now();store.put(v).catch(()=>{})}}).catch(err=>toast('PDF impossible : '+err.message))}
+  if(a==='pdf'){await save(true);if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur le rapport');view='profil';return go()}await numeroter();const v=cur;carnetMemo(v);return exportPdf(v).then(()=>{if(window.jspdf&&(!isDeg(v)||degFinal(v))){v.pdfAt=Date.now();store.put(v).catch(()=>{})}}).catch(err=>toast('PDF impossible : '+err.message))}
   if(a==='export')return exportJson();
-  if(a==='sel'){exSel.clear();for(const v of visits)if(b.dataset.k==='all'||b.dataset.k==='encours'&&!v.pdfAt)exSel.add(v.id);return keep()}
+  if(a==='sel'){exSel.clear();for(const v of visits)if(b.dataset.k==='all'||b.dataset.k==='encours'&&!v.pdfAt||b.dataset.k==='nonsauv'&&!sauve(v))exSel.add(v.id);return keep()}
   if(a==='cbdel'){if(!armed(b,'Confirmer la suppression'))return;delete CARNET.l[b.dataset.k];saveCarnet();cbDL();return keep()}
   if(a==='delmairie'){if(!armed(b,'Confirmer la suppression'))return;delete MAIRIES.l[b.dataset.k];saveMairies();return render()}
   if(['lettre','envoi','zipcour'].includes(a)){await save(true);if(!window.jspdf){toast("Le module PDF n'est pas chargé : ouvrez l'application une fois avec internet.");return}
-    if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur les courriers');view='profil';return go()}
+    if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur les courriers');view='profil';return go()}await numeroter();
     try{if(a==='lettre')await telechargerLettre(cur,b.dataset.k);else if(a==='envoi')await envoyerLettre(cur,b.dataset.k);else await zipLettres(cur)}catch(err){toast('Courrier impossible : '+err.message)}return}
   if(a==='copymail'){const l=lettres(cur).find(x=>x.k===b.dataset.k);try{await navigator.clipboard.writeText(l.mail);toast('Adresse copiée')}catch(e){toast(l.mail)}return}
   if(a==='zipph')return exportPhotos(cur);
 });
 // Suppression en deux temps : le premier appui arme le bouton, le second confirme.
 function armed(b,label){if(b.classList.contains('armed'))return true;b.classList.add('armed');const old=b.textContent;b.textContent=label;setTimeout(()=>{b.classList.remove('armed');b.textContent=old},3000);return false}
-function go(){if(cur)carnetMemo(cur);render();scrollTo(0,0)}
+function go(){if(cur)carnetMemo(cur);if(P.nom)numeroter();render();scrollTo(0,0)}
 // Après chaque affichage : suggestions code postal / commune selon les valeurs déjà saisies.
 {const r0=render;render=function(){r0();cpInit()}}
 // Relecture IA : consigne + désordres + travaux, sans donnée personnelle (ni nom, ni adresse).
@@ -2708,6 +2765,8 @@ function exportJson(){
   const nom=L.length===1?slug(who(L[0])):L.length?L.length+'_dossiers':'carnet_mairies';
   offer(`sauvegarde_${nom}_${today()}.json`,new Blob([JSON.stringify({app:'constat-decence',v:2,visits:L,...(exMairies?{mairies:MAIRIES.l,carnet:CARNET.l}:{})})],{type:'application/json'}));
   toast(`${L.length} dossier${L.length>1?'s':''} exporté${L.length>1?'s':''}${exMairies?' avec le carnet d’adresses':''}`);
+  // Date de sauvegarde, sans toucher à la date de modification : sert au rappel de l'accueil.
+  if(L.length){const t=Date.now();for(const v of L){v.savedAt=t;store.put(v).catch(()=>{})}P.lastBak=t;saveP();keep()}
 }
 async function importJson(el){
   const f=el.files[0];el.value='';if(!f)return;
@@ -2775,9 +2834,9 @@ function lettres(v){
   const f=v.f,com=COM[f.dem]||COM.CAF,quand=`le ${dateLong(f.dateVis)} à ${heureFr(f.heureVis)}`,ou=`${f.adresse||'…'} à ${f.ville||'…'}`;
   const pour=`Nous intervenons pour le compte de ${com.lettre}.`,cv=c=>c||'Madame, Monsieur';
   const base=[!f.dateVis&&'date de visite',!f.heureVis&&'heure de visite',!f.adresse&&'adresse du logement',!f.ville&&'ville du logement'];
-  const objet='Information concernant une visite de vérification de la décence de votre logement';
+  const objet='Information concernant une visite de vérification de la décence de votre logement',pre=preNum(v);
   return [
-   {k:'proprietaire',titre:'Courrier au propriétaire',file:'Courrier_Proprietaire',mail:f.pMail,civ:cv(f.pCiv),objet,
+   {k:'proprietaire',titre:'Courrier au propriétaire',file:pre+'Courrier_Proprietaire',mail:f.pMail,civ:cv(f.pCiv),objet,
     dest:[qui(f.pCiv,f.pNom,f.pPrenom),f.pAdr,[f.pCp,f.pVille].filter(Boolean).join(' ')],
     manque:[...base,!f.pNom&&'nom du propriétaire',!f.pAdr&&'adresse du propriétaire'].filter(Boolean),
     paras:[pour,`Nous vous informons que nous avons été missionnés pour réaliser un diagnostic de décence concernant le logement occupé par ${qui(f.civ,f.nom,f.prenom)||'…'} au ${ou}.`,
@@ -2785,7 +2844,7 @@ function lettres(v){
      `Cette visite est programmée ${quand}.`,
      'L’objectif de cette intervention est de vérifier la conformité du logement aux critères réglementaires de décence (sécurité, salubrité, équipements essentiels).',
      `Nous restons à votre disposition pour toute information complémentaire et vous prions d’agréer, ${cv(f.pCiv)}, l’expression de nos salutations distinguées.`]},
-   {k:'locataire',titre:'Courrier au locataire',file:'Courrier_Locataire',mail:f.mail,civ:cv(f.civ),objet,
+   {k:'locataire',titre:'Courrier au locataire',file:pre+'Courrier_Locataire',mail:f.mail,civ:cv(f.civ),objet,
     dest:[qui(f.civ,f.nom,f.prenom),f.adresse,[f.cp,f.ville].filter(Boolean).join(' ')],
     manque:[...base,!f.nom&&'nom du locataire'].filter(Boolean),
     paras:[pour,'Dans ce cadre, nous devons réaliser une visite de votre logement afin de vérifier qu’il répond bien aux critères de décence fixés par la réglementation (sécurité, salubrité, équipements essentiels). Cette démarche vise à s’assurer que le logement offre des conditions normales d’habitation et ne constitue pas une remise en cause de votre occupation du logement.',
@@ -2794,7 +2853,7 @@ function lettres(v){
      'Votre présence est nécessaire afin de nous permettre l’accès au logement et d’échanger, si besoin, sur les points observés lors de la visite.',
      'Nous vous remercions par avance de votre accueil et restons à votre disposition pour toute question complémentaire.',
      `Nous vous prions d’agréer, ${cv(f.civ)}, l’expression de nos salutations distinguées.`]},
-   {k:'mairie',titre:'Courrier à la mairie',file:'Courrier_Mairie',mail:f.mrMail,civ:cv(f.mrCiv),objet:'Information concernant une visite de vérification de la décence d’un logement',
+   {k:'mairie',titre:'Courrier à la mairie',file:pre+'Courrier_Mairie',mail:f.mrMail,civ:cv(f.mrCiv),objet:'Information concernant une visite de vérification de la décence d’un logement',
     dest:[f.mrVille?'Mairie de '+f.mrVille:'',f.mrAdr,[f.mrCp,f.mrVille].filter(Boolean).join(' ')],
     manque:[...base,!f.mrAdr&&'adresse de la mairie'].filter(Boolean),
     paras:[pour,`Nous devons réaliser un constat de décence d’un logement situé au ${ou}. Vous êtes invité à vous y rendre si vous le souhaitez.`,
@@ -2813,7 +2872,7 @@ async function letterPdf(v,l){
   l.dest.filter(x=>String(x||'').trim()).forEach((s,i)=>{font(10.5,i?'normal':'bold');doc.text(T(s),XD,y);y+=5});
   y=Math.max(y,72)+6;font(10);doc.text(T('Le '+dateLong(today())),XD,y);
   y+=14;font(10,'bold');const ob=doc.splitTextToSize(T('Objet : '+l.objet),CW);doc.text(ob,M,y);y+=ob.length*5;
-  font(9.5,'normal',MUT);doc.text(T(`Suivi par : ${[P.nom,P.tel,P.mail].filter(Boolean).join(' - ')}`),M,y+1);
+  font(9.5,'normal',MUT);doc.text(T(`Suivi par : ${[P.nom,P.tel,P.mail].filter(Boolean).join(' - ')}`),M,y+1);if(v.num)doc.text(T('Notre référence : '+v.num),M,y+6);
   y+=14;font(10.5);doc.text(T(l.civ+','),M,y);y+=9;
   for(const p of l.paras){const ls=doc.splitTextToSize(T(p),CW);doc.text(T(p),M,y,{maxWidth:CW,align:'justify'});y+=ls.length*10.5*.3528*1.35+3.5}
   y+=6;font(10.5,'bold');doc.text('Le Service Technique',XD,y);
@@ -2822,7 +2881,7 @@ async function letterPdf(v,l){
   doc.setDrawColor(...ACC);doc.setLineWidth(.4);doc.line(M,284,190,284);font(7.5,'normal',MUT);doc.text(T(SOLIHA_ADR),105,288.5,{align:'center'});
   return doc.output('blob');
 }
-const dossierCourriers=v=>fname(`Courriers décence ${v.f.nom||'logement'} ${v.f.refDos||''}`);
+const dossierCourriers=v=>fname(`${v.num||''} Courriers décence ${v.f.nom||'logement'} ${v.f.refDos||''}`);
 async function telechargerLettre(v,k){const l=lettres(v).find(x=>x.k===k);await offer(l.file+'.pdf',await letterPdf(v,l))}
 async function zipLettres(v){const files=[];for(const l of lettres(v))files.push({name:`${dossierCourriers(v)}/${l.file}.pdf`,data:new Uint8Array(await (await letterPdf(v,l)).arrayBuffer())});
   offer(dossierCourriers(v)+'.zip',zip(files))}
@@ -2843,6 +2902,16 @@ async function envoyerLettre(v,k){
 
 /* ---------- PDF : tableaux au format de la fiche ---------- */
 const ORTHI="« Les informations collectées sur le logement peuvent faire l’objet d’un traitement informatique par la caisse d’allocations familiales ou dans le cadre de l’outil de repérage et de traitement de l’habitat indigne (ORTHI). Ces informations peuvent être transmises aux institutions compétentes en matière d’habitat indigne : agence régionale de santé, collectivités territoriales, Fonds de solidarité logement et être utilisées aux fins d’études, d’enquêtes et de sondages. Vous pouvez exercer votre droit d’accès et de rectification auprès du directeur de la Caf (demande formulée par courrier postal accompagnée d’une preuve d’identité) et dans le cadre d’ORTHI auprès du préfet du département où se situe le logement selon les modalités prévues par l'article 5 de l'arrêté du 30 septembre 2011 portant création d'un traitement de données à caractère personnel relatif à l'habitat indigne et non décent. »";
+// Pied de page commun à tous les rapports : n° de dossier, type de rapport, date d'édition, coordonnées de l'agence, pagination.
+function piedPdf(doc,v,type,ml,mr){const n=doc.getNumberOfPages();
+  for(let i=1;i<=n;i++){doc.setPage(i);const w=doc.internal.pageSize.getWidth(),h=doc.internal.pageSize.getHeight();
+    doc.setDrawColor(214,224,231);doc.setLineWidth(.3);doc.line(ml,h-11.5,w-mr,h-11.5);
+    let x=ml;doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(27,109,150);
+    if(v.num){const r=PDFT('N° '+v.num);doc.text(r,x,h-7.8);x+=doc.getTextWidth(r+'   ')}
+    doc.text(`Page ${i} / ${n}`,w-mr,h-7.8,{align:'right'});
+    doc.setFont('helvetica','normal');doc.setTextColor(68,83,95);doc.text(PDFT(`${type} · édité le ${frDate(today())}`),x,h-7.8,{maxWidth:w-mr-25-x});
+    doc.setFontSize(6.5);doc.text(PDFT(SOLIHA_ADR+' · contact.deux-sevres@soliha.fr'),ml,h-4.8)}}
+const preNum=v=>v.num?v.num+'_':'';
 async function exportPdf(v){
   if(!window.jspdf){toast("Le module PDF n'est pas chargé : ouvrez l'application une fois avec internet.");return}
   toast('Génération du PDF…');
@@ -3094,8 +3163,8 @@ async function exportPdf(v){
   }
 
   const n=doc.getNumberOfPages();
-  for(let i=1;i<=n;i++){doc.setPage(i);doc.setDrawColor(...ACC);doc.setLineWidth(.4);doc.line(M,H-10,W-M,H-10);font(7.5,'normal',MUT);doc.text(T(`${pdl?cm.foot:'Constat Décence '+com.foot} / SOLIHA Charente-Maritime Deux-Sèvres`),M,H-6.5);font(7.5,'bold',ACC);doc.text(`Page ${i} / ${n}`,W-M,H-6.5,{align:'right'})}
-  await offer(pdl?`Permis_de_louer_${slug(f.adresse)||'logement'}_${f.dateVis||today()}.pdf`:`Constat_decence_${slug(f.nom)||'logement'}_${f.dateVis||today()}.pdf`,doc.output('blob'));
+  piedPdf(doc,v,pdl?cm.foot:'Constat Décence '+com.foot,M,M);
+  await offer(preNum(v)+(pdl?`Permis_de_louer_${slug(f.adresse)||'logement'}_${f.dateVis||today()}.pdf`:`Constat_decence_${slug(f.nom)||'logement'}_${f.dateVis||today()}.pdf`),doc.output('blob'));
 }
 
 /* ---------- rapport de dégradation : relecture IA et PDF ---------- */
@@ -3262,9 +3331,9 @@ async function degPdf(v){
   for(let i=1;i<=n;i++){doc.setPage(i);const w=doc.internal.pageSize.getWidth(),h=doc.internal.pageSize.getHeight();
     doc.setFillColor(...ACC);doc.rect(0,0,6.3,h,'F');
     if(!fin){doc.saveGraphicsState();doc.setGState(new doc.GState({opacity:.12}));font(70,'bold',RED);doc.text('PROJET',w/2,h/2,{align:'center',angle:30});doc.restoreGraphicsState()}
-    doc.setDrawColor(...LINE);doc.setLineWidth(.3);doc.line(ML,h-10,w-MR,h-10);font(7.5,'normal',MUT);doc.text(T(`Diagnostic de dégradation · ${who(v)} · imprimé le ${frDate(today())}`),ML,h-6.5);
-    font(7.5,'bold',ACC);doc.text(`Page ${i} / ${n}`,w-MR,h-6.5,{align:'right'})}
-  await offer(`${fin?'':'PROJET_'}Rapport_degradation_${slug(who(v))||'logement'}_${f.dateVis||today()}.pdf`,doc.output('blob'));
+  }
+  piedPdf(doc,v,fin?'Diagnostic de dégradation':'Diagnostic de dégradation (projet)',ML,MR);
+  await offer(`${fin?'':'PROJET_'}${preNum(v)}Rapport_degradation_${slug(who(v))||'logement'}_${f.dateVis||today()}.pdf`,doc.output('blob'));
   if(!fin)toast('Projet généré (filigrane) : le dossier reste en cours tant que la grille n’est pas complète');
 }
 
@@ -3393,9 +3462,10 @@ async function locPdf(v){
    doc.setFillColor(...ACC);doc.rect(ML,y,CW,15,'F');font(9,'bold',WHITE);doc.text('SOLIHA CHARENTE-MARITIME DEUX-SÈVRES',ML+6,y+6.5);font(8,'normal',[214,232,242]);doc.text("Solidaires pour l'habitat",ML+6,y+11);
    font(8,'bold',WHITE);doc.text('Agence de Niort · 6 route de La Rochelle, 79000 Bessines',ML+CW-6,y+6.5,{align:'right'});font(8,'normal',[214,232,242]);doc.text('05 35 00 16 02 · contact.deux-sevres@soliha.fr',ML+CW-6,y+11,{align:'right'})}
   /* --- bandeau latéral et pied de page --- */
-  const n=doc.getNumberOfPages(),foot=T(["SOLIHA · Simulation Loc'Avantages",p.soliact?'Dossier '+p.soliact:'',who(v),dateTxt].filter(Boolean).join(' · '));
-  for(let i=1;i<=n;i++){doc.setPage(i);doc.setFillColor(...ACC);doc.rect(0,0,6.3,H,'F');hr(H-10);font(7.5,'normal',MUT);doc.text(foot,ML,H-6.5,{maxWidth:CW-25});font(7.5,'bold',ACC);doc.text(`Page ${i} / ${n}`,W-MR,H-6.5,{align:'right'})}
-  const nom=['Aides_LocAvantages',slug(p.statut!=='NP'&&p.sci?p.sci:p.nom),slug(p.soliact)].filter(Boolean).join('_');
+  const n=doc.getNumberOfPages();
+  for(let i=1;i<=n;i++){doc.setPage(i);doc.setFillColor(...ACC);doc.rect(0,0,6.3,H,'F')}
+  piedPdf(doc,v,"Simulation Loc'Avantages"+(p.soliact?' · dossier Soliact '+p.soliact:''),ML,MR);
+  const nom=[v.num,'Aides_LocAvantages',slug(p.statut!=='NP'&&p.sci?p.sci:p.nom),slug(p.soliact)].filter(Boolean).join('_');
   await offer(nom+'.pdf',doc.output('blob'));
 }
 // Graphique du bilan cumulé (revenus cumulés − investissement), redessiné d'après chartBilan du simulateur.
@@ -3434,12 +3504,17 @@ function locPdfChart(doc,cp,x0,y0,w,h,{T,font,ACC,LL,INK,MUT,LINE,SKYT}){
   try{P=await store.getProfil()}catch(e){}
   try{MAIRIES=await store.getRec('mairies');MAIRIES.l=MAIRIES.l||{}}catch(e){}
   try{CARNET=await store.getRec('carnet');CARNET.l=CARNET.l||{}}catch(e){}
+  await numeroter();
   cbDL();
   $('#cpdl').innerHTML=`<datalist id="cp_all">${Object.entries(CP_COM).flatMap(([cp,l])=>l.map(([n])=>`<option value="${esc(n)}" label="${cp}">`)).join('')}</datalist>`;
   render();
   try{await navigator.storage?.persist?.()}catch(e){}
   // Mode hors ligne : le service worker garde l'application en cache (impossible si le fichier est ouvert en local).
   if('serviceWorker' in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('sw.js').catch(()=>{});
+  setTimeout(verifMaj,3000);addEventListener('online',verifMaj);document.addEventListener('visibilitychange',()=>{if(!document.hidden)verifMaj()});
 })();
+// Nouvelle version déposée sur le serveur : l'application ouverte (hors ligne ou depuis longtemps) le signale par un bandeau.
+async function verifMaj(){if(location.protocol==='file:'||!navigator.onLine||!$('#maj').hidden||APP_VER.includes('VER'))return;
+  try{const m=/const APP_VER='([^']+)'/.exec(await (await fetch('index.html',{cache:'no-store'})).text());if(m&&m[1]!==APP_VER)$('#maj').hidden=false}catch(e){}}
 </script>
 </body></html>
