@@ -2000,7 +2000,7 @@ const AVIS={"origine":[["observe","Observé / mesuré"],["document","Document fo
    Élément (mur, fenêtre, chaudière…) : {id, decl (non vu, déclaré par le propriétaire), note, …choix simples}.
    La fiche de saisie traduit les choix simples en libellés DPEV5 (listes AREF, générées par build.py depuis referentiels-audit.json). */
 const isAud=v=>v.type==='aud';
-const AUD_VIDE=()=>({v:2,gen:{},env:{},murs:[],pb:[],plaf:[],baies:[],portes:[],chauf:[],ecs:[],vent:[],constats:[],contraintes:[],travaux:[],aucunTrav:false});
+const AUD_VIDE=()=>({v:3,gen:{},env:{},murs:[],pb:[],plaf:[],baies:[],portes:[],chauf:[],ecs:[],vent:[],constats:[],contraintes:[],travaux:[],aucunTrav:false});
 const audLab=(k,id)=>(AREF[k]||AVIS[k]||[]).find(x=>String(x[0])===String(id))?.[1]??'';
 // Icônes des choix (option D : images générées puis intégrées dans assets.js sous ICO_AUD) ; sans icône, bouton texte.
 const ICO_AUD=typeof ICO_AUD_IMG!=='undefined'?ICO_AUD_IMG:{};
@@ -2027,22 +2027,43 @@ const AUD_ISO=[['iso','Isolant','c',AC('Oui','Non','Ne sait pas')],
   ['isoType','Type d’isolant','s',AC('Laine minérale','Polystyrène','Polyuréthane','Laine de bois / biosourcé','Ouate de cellulose','Autre'),{si:e=>e.iso==='Oui'}],
   ['isoEp','Épaisseur de l’isolant (cm)','n',null,{si:e=>e.iso==='Oui'}]];
 const AUD_COMB=['ch_gaz','ch_fioul','ch_bois','poele'];
+// Compositions des parois selon les écrans de DPEV5 (validé le 24/10/2026) : valeur = n° ADEME,
+// sauf béton cellulaire (cell) et ossature bois isolée (obi), dont le n° dépend de l'année, et pavés de verre (verre, hors liste ADEME).
+const AUD_MUR=[['1','Inconnu','m_autre'],['2','Pierre / moellons, un seul matériau','m_pierre'],['3','Pierre / moellons, remplissage tout venant','m_pierre'],['4','Pisé ou béton de terre','m_terre'],
+  ['5','Pans de bois sans remplissage','m_bois'],['6','Pans de bois avec remplissage','m_bois'],['7','Bois en rondins','m_bois'],['8','Briques pleines simples','m_brique_pleine'],
+  ['9','Double brique pleine avec lame d’air','m_brique_pleine'],['10','Briques creuses','m_brique_creuse'],['11','Blocs béton pleins','m_parpaing'],['12','Blocs béton creux (parpaing)','m_parpaing'],
+  ['13','Béton banché','m_beton'],['14','Béton de mâchefer','m_beton'],['15','Mono mur (brique alvéolaire)','m_brique_creuse'],['cell','Béton cellulaire','m_cellulaire'],
+  ['19','Sandwich béton / isolant / béton','m_beton'],['obi','Ossature bois, remplissage isolant','m_bois'],['27','Ossature bois, remplissage tout venant','m_bois'],['25','Ossature bois sans remplissage','m_bois'],
+  ['20','Cloison de plâtre','m_autre'],['verre','Pavés de verre','m_autre']];
+const AUD_PB=AC(['1','Inconnu'],['2','Avec ou sans remplissage'],['3','Entre solives métalliques'],['4','Entre solives bois'],['5','Bois sur solives métalliques'],['6','Bardeaux et remplissage'],
+  ['7','Voûtains sur solives métalliques'],['8','Voûtains en briques ou moellons'],['9','Dalle béton'],['10','Bois sur solives bois'],['11','Lourd : entrevous terre cuite, poutrelles béton'],['12','Entrevous isolants']);
+const AUD_PH=AC(['1','Inconnu'],['2','Avec ou sans remplissage'],['3','Entre solives métalliques'],['4','Entre solives bois'],['5','Sur solives métalliques'],['6','Sous solives métalliques'],['7','Bardeaux et remplissage'],
+  ['8','Dalle béton'],['9','Sur solives bois'],['10','Sous solives bois'],['11','Entrevous terre cuite ou poutrelles béton'],['12','Combles aménagés sous rampants'],['13','Toiture en chaume'],['14','Plaque de plâtre'],['16','Bac acier']);
+const AUD_FERM=AC(['1','Aucune'],['2','Jalousie, persiennes ou volets battants à ajours fixes'],['3','Volet roulant alu ou fermeture sans ajours'],['4','Volet roulant PVC ou bois, e < 12 mm'],['6','Volet roulant PVC ou bois, e > 12 mm'],
+  ['5','Persienne coulissante ou volet battant PVC ou bois, e < 22 mm'],['7','Persienne coulissante ou volet battant PVC ou bois, e > 22 mm'],['8','Fermeture isolée sans ajours']);
+const AUD_DOUB={non:2,connu:5,lame:4,nsp:1};
+const fen=e=>(e.paroi||'fen')==='fen';
 const ADEF={
  murs:{t:'Murs',s:'Mur',ic:'murs',f:[
-   ['mat','Matériau','c',[['pierre','Pierre / moellons','m_pierre'],['parpaing','Parpaing','m_parpaing'],['brique_pleine','Brique pleine','m_brique_pleine'],['brique_creuse','Brique creuse','m_brique_creuse'],
-     ['beton','Béton','m_beton'],['bois','Bois','m_bois'],['cellulaire','Béton cellulaire','m_cellulaire'],['terre','Terre / pisé','m_terre'],['autre','Autre','m_autre']]],
-   ['ep','Épaisseur du mur (cm)','c',AC('20','30','40','50','60 et +')],['sur','Donne sur','c',AC('Extérieur','Local non chauffé')],
+   ['mat','Composition','c',AUD_MUR],
+   ['ep','Épaisseur du mur (cm)','s',[['inc','Inconnue'],...Array.from({length:16},(_,i)=>String(5*i+5)).map(x=>[x,x+' cm'])]],
+   ['doubl','Doublage','c',[['non','Non'],['connu','Oui : plâtre, brique ou bois'],['lame','Oui, avec lame d’air > 15 mm'],['nsp','Ne sait pas']]],
+   ['sur','Donne sur','c',AC('Extérieur','Local non chauffé')],
    ...AUD_ISO,['isoPos','Position de l’isolant','c',AC('Intérieur','Extérieur'),{si:e=>e.iso==='Oui'}]]},
  pb:{t:'Planchers bas',s:'Plancher bas',ic:'planchers',f:[
    ['sur','Sur','c',[['terreplein','Terre-plein','pb_terreplein'],['vs','Vide sanitaire','pb_vs'],['cave','Cave / sous-sol','pb_cave'],['garage','Garage','pb_garage']]],
-   ['struct','Structure','c',AC('Béton','Bois','Voûtains','Hourdis')],...AUD_ISO]},
+   ['comp','Composition','c',AUD_PB],...AUD_ISO]},
  plaf:{t:'Toiture et combles',s:'Toiture',ic:'isolation',f:[
    ['type','Type','c',[['perdus','Combles perdus','t_perdus'],['rampants','Rampants (combles aménagés)','t_rampants'],['terrasse','Toiture-terrasse','t_terrasse']]],
-   ...AUD_ISO,['tasse','Isolant tassé ou abîmé','c',AC('Oui','Non'),{si:e=>e.iso==='Oui'}]]},
+   ['comp','Composition','c',AUD_PH],...AUD_ISO,['tasse','Isolant tassé ou abîmé','c',AC('Oui','Non'),{si:e=>e.iso==='Oui'}]]},
  baies:{t:'Fenêtres',s:'Fenêtre',ic:'fenetres',f:[
-   ['vitrage','Vitrage','c',[['simple','Simple','v_simple'],['double','Double','v_double'],['triple','Triple','v_triple'],['survitrage','Survitrage','v_survitrage']]],
-   ['mat','Matériau','c',AC('Bois','PVC','Alu','Métal')],['pose','Pose','c',[['tunnel','Tunnel','p_tunnel'],['applique','Applique','p_applique']]],
-   ['orient','Orientation','c',AC('N','S','E','O')],['volets','Volets','c',AC('Aucun','Battants','Roulants')],['nb','Nombre identique','n']]},
+   ['paroi','Type de paroi','c',[['fen','Fenêtre ou porte-fenêtre'],['bv','Brique de verre'],['pc','Polycarbonate']]],
+   ['menu','Menuiserie','c',AC(['4','Fenêtre battante, fixe ou oscillante'],['7','Porte-fenêtre battante sans soubassement'],['8','Porte-fenêtre battante avec soubassement'],['5','Fenêtre coulissante'],['6','Porte-fenêtre coulissante']),{si:fen}],
+   ['vitrage','Vitrage','c',[['simple','Simple','v_simple'],['survitrage','Simple + survitrage','v_survitrage'],['double','Double','v_double'],['triple','Triple','v_triple']],{si:fen}],
+   ['mat','Matériau','c',AC(['3','Bois'],['4','Bois-métal'],['5','PVC'],['6','Métal avec rupture de pont thermique'],['7','Métal sans rupture de pont thermique']),{si:fen}],
+   ['pose','Position (pose)','c',[['2','Nu intérieur','p_applique'],['1','Nu extérieur','p_applique'],['3','Tunnel','p_tunnel']]],
+   ['ferm','Fermeture','s',AUD_FERM],['joint','Menuiserie avec joint','c',AC('Oui','Non'),{si:fen}],['dfen','Double fenêtre','c',AC('Oui','Non'),{si:fen}],['toit','Fenêtre de toit','c',AC('Oui','Non')],
+   ['orient','Orientation','c',AC('N','S','E','O')],['nb','Nombre identique','n']]},
  portes:{t:'Portes',s:'Porte',ic:'portes',f:[['mat','Matériau','c',AC('Bois','PVC','Métal')],['vitree','Vitrée','c',AC('Non','Oui')]]},
  chauf:{t:'Chauffage',s:'Chauffage',ic:'chauffage',f:[['role','Rôle','c',AC('Principal','Appoint')],
    ['type','Type','c',[['ch_gaz','Chaudière gaz','c_gaz'],['ch_fioul','Chaudière fioul','c_fioul'],['ch_bois','Chaudière bois','c_bois'],['pac','Pompe à chaleur','c_pac'],['elec','Électrique','c_elec'],['poele','Poêle / insert','c_poele']]],
@@ -2079,7 +2100,7 @@ function audDesig(c,e,i){const n=i+1,t=k=>audTxt(c,e,k).toLowerCase();
   switch(c){case 'murs':return `Mur n°${n}${e.mat?' '+t('mat'):''}${e.sur?' sur '+t('sur'):''}`;
    case 'pb':return `Plancher bas n°${n}${e.sur?' sur '+t('sur'):''}`;
    case 'plaf':return `${e.type?audTxt(c,e,'type'):'Toiture n°'+n}`;
-   case 'baies':return `Fenêtre n°${n}${e.vitrage?' '+t('vitrage')+' vitrage':''}${e.mat?' '+audTxt(c,e,'mat'):''}${e.orient?' '+e.orient:''}${+e.nb>1?' (×'+e.nb+')':''}`;
+   case 'baies':return `Fenêtre n°${n}${e.vitrage==='survitrage'?' simple vitrage + survitrage':e.vitrage?' '+t('vitrage')+' vitrage':''}${e.mat?' '+audTxt(c,e,'mat'):''}${e.orient?' '+e.orient:''}${+e.nb>1?' (×'+e.nb+')':''}`;
    case 'portes':return `Porte n°${n}${e.mat?' '+t('mat'):''}${e.vitree==='Oui'?' vitrée':''}`;
    case 'chauf':return `${e.role||'Chauffage'} : ${e.type?audTxt(c,e,'type'):'à préciser'}`;
    case 'ecs':return `Eau chaude : ${e.type?t('type'):'à préciser'}`;
@@ -2098,16 +2119,23 @@ function audFamCh(e){const t=e.type;
   return null}
 function audDpe(c,e,v){const L=[],add=(l,x)=>L.push([l,x]),lab=(k,id)=>audLab(k,id),pre='à préciser';
   const iso=()=>e.iso==='Non'?lab('type_isolation',2):e.iso==='Ne sait pas'?lab('type_isolation',1):e.iso==='Oui'?(c==='murs'?(e.isoPos==='Extérieur'?'ITE':e.isoPos==='Intérieur'?'ITI':'Isolé (position '+pre+')'):'Isolé'):'';
-  if(c==='murs'){const an=AUD_AN(v),m={pierre:3,parpaing:12,brique_pleine:8,brique_creuse:10,beton:13,terre:4,cellulaire:an&&an>=2013?17:16}[e.mat];
-    if(e.mat)add('Composition',m?lab('materiaux_structure_mur',m):e.mat==='bois'?'Pan de bois ou ossature bois ('+pre+')':pre);
+  if(c==='murs'){const an=AUD_AN(v),m=e.mat;
+    if(m)add('Composition',m==='cell'?(an?lab('materiaux_structure_mur',an>=2013?17:16):'Béton cellulaire (avant ou à partir de 2013 : '+pre+')')
+      :m==='obi'?(!an?'Murs en ossature bois avec isolant en remplissage (période '+pre+')':an<2001?lab('materiaux_structure_mur',26):an<=2005?lab('materiaux_structure_mur',24):'Murs en ossature bois avec isolant en remplissage ≥ 2006')
+      :m==='verre'?lab('materiaux_structure_mur',23)+' (pavés de verre)':lab('materiaux_structure_mur',m)||pre);
+    if(e.ep)add('Épaisseur du mur',e.ep==='inc'?'Inconnue':e.ep+' cm');if(e.doubl)add('Doublage',lab('type_doublage',AUD_DOUB[e.doubl]));
     if(e.sur)add('Position',e.sur==='Extérieur'?lab('type_adjacence',1):'Local non chauffé (type '+pre+')');if(e.iso)add('Isolation',iso())}
   if(c==='pb'){if(e.sur)add('Position',lab('type_adjacence',{terreplein:5,vs:3,cave:6,garage:8}[e.sur]));
-    if(e.struct)add('Type de plancher',lab('type_plancher_bas',{Béton:9,Bois:10,Voûtains:8,Hourdis:11}[e.struct]));if(e.iso)add('Isolation',iso())}
-  if(c==='plaf'){if(e.type)add('Type',e.type==='rampants'?lab('type_plancher_haut',12):e.type==='terrasse'?lab('type_plancher_haut',8)+' (toiture-terrasse)':'Combles perdus : plafond et ventilation du comble '+pre);if(e.iso)add('Isolation',iso())}
-  if(c==='baies'){if(e.vitrage)add('Type de vitrage',lab('type_vitrage',{simple:1,double:2,triple:3,survitrage:4}[e.vitrage]));
-    if(e.mat)add('Matériau',e.mat==='Alu'?'Métal (rupture de pont thermique '+pre+')':lab('type_materiaux_menuiserie',{Bois:3,PVC:5,Métal:7}[e.mat]));
-    if(e.pose)add('Type de pose',lab('type_pose',e.pose==='tunnel'?3:2)+(e.pose==='applique'?' (nu intérieur ou extérieur '+pre+')':''));
-    if(e.orient)add('Orientation',lab('orientation',{N:2,S:1,E:3,O:4}[e.orient]));if(e.volets)add('Fermeture',e.volets==='Aucun'?lab('type_fermeture',1):e.volets+' ('+pre+')')}
+    if(e.comp)add('Type de plancher',lab('type_plancher_bas',e.comp));if(e.iso)add('Isolation',iso())}
+  if(c==='plaf'){if(e.type)add('Position',e.type==='perdus'?'Comble (fortement, faiblement ou très faiblement ventilé : '+pre+')':lab('type_adjacence',1)+(e.type==='terrasse'?' (toiture-terrasse)':''));
+    if(e.comp)add('Type de plafond',lab('type_plancher_haut',e.comp));if(e.iso)add('Isolation',iso())}
+  if(c==='baies'){const f=fen(e);
+    if(!f)add('Type de baie',e.paroi==='pc'?lab('type_baie',3):'Paroi en brique de verre (pleine ou creuse : '+pre+')');else if(e.menu)add('Type de baie',lab('type_baie',e.menu));
+    if(!f)add('Matériau',lab('type_materiaux_menuiserie',e.paroi==='pc'?2:1));else if(e.mat)add('Matériau',lab('type_materiaux_menuiserie',e.mat));
+    if(!f)add('Type de vitrage',lab('type_vitrage',e.paroi==='pc'?6:5));else if(e.vitrage)add('Type de vitrage',lab('type_vitrage',{simple:1,double:2,triple:3,survitrage:4}[e.vitrage]));
+    if(e.pose)add('Type de pose',lab('type_pose',e.pose));if(e.toit)add('Inclinaison',lab('inclinaison_vitrage',e.toit==='Oui'?2:3));
+    if(e.orient)add('Orientation',lab('orientation',{N:2,S:1,E:3,O:4}[e.orient]));if(e.ferm)add('Fermeture',lab('type_fermeture',e.ferm));
+    if(f&&e.joint)add('Menuiserie avec joint',e.joint);if(f&&e.dfen==='Oui')add('Double fenêtre','Oui')}
   if(c==='portes'&&e.mat)add('Type de porte',e.vitree==='Oui'?`Porte en ${e.mat.toLowerCase()} vitrée (part de vitrage ${pre})`:lab('type_porte',{Bois:1,PVC:5,Métal:9}[e.mat]));
   if(c==='chauf'){const f=audFamCh(e),id=f&&audMatch('type_generateur_ch',f,e.annee);if(e.type)add('Générateur',id?lab('type_generateur_ch',id):f?f+(e.annee?'':' (année '+pre+')'):audTxt(c,e,'type')+' ('+pre+')')}
   if(c==='ecs'){const id=e.type==='gaz'?audMatch('type_generateur_ecs','Chauffe-eau gaz à production instantanée',e.annee):null;
@@ -2117,13 +2145,14 @@ function audDpe(c,e,v){const L=[],add=(l,x)=>L.push([l,x]),lab=(k,id)=>audLab(k,
 
 /* --- saisie --- */
 const audObj=p=>{const ks=p.split('.'),k=ks.pop();let o=cur.a;for(const x of ks)o=o[x];return [o,k]};
-function audSet(el){const [o,k]=audObj(el.dataset.ak);o[k]=el.type==='checkbox'?el.checked:el.value}
+function audSet(el){const [o,k]=audObj(el.dataset.ak);o[k]=el.type==='checkbox'?el.checked:el.value;
+  if(/^plaf\.\d+\.type$/.test(el.dataset.ak)&&o.type==='rampants'&&!o.comp)o.comp='12'}
 function audOrig(){}  // ancienne saisie de l'origine champ par champ, remplacée par la case « déclaré » de chaque fiche
 const audId=()=>'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
-function audNew(c){const e={id:audId()};if(c==='chauf')e.role=cur.a.chauf.some(x=>x.role==='Principal')?'Appoint':'Principal';if(c==='baies')e.nb='1';return e}
+function audNew(c){const e={id:audId()};if(c==='chauf')e.role=cur.a.chauf.some(x=>x.role==='Principal')?'Appoint':'Principal';if(c==='baies'){e.nb='1';e.paroi='fen'}return e}
 function audFld(base,e,[k,lab,typ,opts,o={}]){if(o.si&&!o.si(e))return '';const p=base+'.'+k,v=e[k]??'';let ctl;
   if(typ==='c'){const ic=opts.some(x=>x[2]&&ICO_AUD[x[2]]);
-    ctl=`<div class="abtns${ic?' ic':''}${opts.length<=4&&!ic?' n'+opts.length:''}" role="radiogroup" aria-label="${esc(lab)}">${opts.map(([c,l,i])=>`<label class="abtn"><input type="radio" name="${p}" data-ak="${p}" value="${esc(c)}" ${v===c?'checked':''}>${i&&ICO_AUD[i]?`<img src="${ICO_AUD[i]}" alt="">`:''}<span>${esc(l)}</span></label>`).join('')}</div>`}
+    ctl=`<div class="abtns${ic?' ic':''}${opts.length<=4&&!ic?(opts.map(x=>x[1]).join('').length>40?' n2':' n'+opts.length):opts.length>6?' n2':''}" role="radiogroup" aria-label="${esc(lab)}">${opts.map(([c,l,i])=>`<label class="abtn"><input type="radio" name="${p}" data-ak="${p}" value="${esc(c)}" ${v===c?'checked':''}>${i&&ICO_AUD[i]?`<img src="${ICO_AUD[i]}" alt="">`:''}<span>${esc(l)}</span></label>`).join('')}</div>`}
   else if(typ==='s')ctl=`<select data-ak="${p}"><option value="">—</option>${opts.map(([c,l])=>`<option value="${esc(c)}" ${v===c?'selected':''}>${esc(l)}</option>`).join('')}</select>`;
   else if(typ==='ta')ctl=`<textarea data-ak="${p}" placeholder="Note (dictée possible avec le micro du clavier)">${esc(v)}</textarea>`;
   else ctl=`<input type="text" ${typ==='n'?'inputmode="numeric"':''} data-ak="${p}" value="${esc(v)}">`;
@@ -2222,7 +2251,7 @@ async function audAct(a,b){const c=b.dataset.c||aCol,L=cur.a[c];
 }
 
 /* --- reprise des fiches saisies avec la première version (champ par champ, numéros ADEME) --- */
-function audMigre(a){if(a.v>=2)return a;const X=(o,m)=>m[o]??'',fam=e=>String(e.genFam||'').toLowerCase();
+function audMigre(a){if(a.v>=2)return audMigre3(a);const X=(o,m)=>m[o]??'',fam=e=>String(e.genFam||'').toLowerCase();
   for(const e of a.murs||[]){e.mat||=X(e.composition,{2:'pierre',3:'pierre',4:'terre',5:'bois',6:'bois',7:'bois',8:'brique_pleine',9:'brique_pleine',10:'brique_creuse',11:'parpaing',12:'parpaing',13:'beton',16:'cellulaire',17:'cellulaire',18:'bois',24:'bois',25:'bois',26:'bois',27:'bois'});
     if(e.epaisseur&&!e.ep){const n=+e.epaisseur;e.ep=n<25?'20':n<35?'30':n<45?'40':n<55?'50':'60 et +'}
     if(e.position&&!e.sur)e.sur=+e.position===1?'Extérieur':'Local non chauffé'}
@@ -2235,7 +2264,19 @@ function audMigre(a){if(a.v>=2)return a;const X=(o,m)=>m[o]??'',fam=e=>String(e.
   for(const e of a.vent||[]){const f=fam(e);if(!e.type&&f)e.type=/double|df/.test(f)?'df':/hygro/.test(f)?'hygro':/vmc/.test(f)?'vmc':/entrées d'air/.test(f)?'grilles':'aucune'}
   for(const e of a.constats||[]){if(e.description&&!e.note)e.note=e.description+(e.conseil?'\nConseil : '+e.conseil:'');if(e.localisation&&!e.loc)e.loc=e.localisation}
   for(const e of a.contraintes||[])if(e.description&&!e.note)e.note=e.description;
-  a.v=2;return a}
+  a.v=2;return audMigre3(a)}
+// Version allégée (v2) -> compositions DPEV5 (v3). Un choix sans équivalent exact passe dans la note, à préciser.
+function audMigre3(a){if(a.v>=3)return a;const nt=(e,t)=>e.note=(e.note?e.note+'\n':'')+t;
+  for(const e of a.murs||[]){const m={pierre:'2',parpaing:'12',brique_pleine:'8',brique_creuse:'10',beton:'13',cellulaire:'cell',terre:'4',autre:'verre'}[e.mat];
+    if(e.mat==='bois'){nt(e,'Composition relevée : bois (pans de bois, rondins ou ossature : à préciser)');e.mat=''}else if(e.mat==='autre'){nt(e,'Composition relevée : autre (à préciser)');e.mat=''}else if(m)e.mat=m;
+    if(e.ep==='60 et +')e.ep='60'}
+  for(const e of a.pb||[]){if(e.struct)e.comp={Béton:'9',Bois:'10',Voûtains:'8',Hourdis:'11'}[e.struct]||'';delete e.struct}
+  for(const e of a.plaf||[])if(e.type==='rampants'&&!e.comp)e.comp='12';
+  for(const e of a.baies||[]){e.paroi||='fen';
+    if(e.mat==='Alu'){nt(e,'Matériau relevé : alu (rupture de pont thermique : à préciser)');e.mat=''}else if(e.mat)e.mat={Bois:'3',PVC:'5',Métal:'7'}[e.mat]||e.mat;
+    if(e.pose==='tunnel')e.pose='3';else if(e.pose==='applique'){nt(e,'Pose relevée : applique (nu intérieur ou nu extérieur : à préciser)');e.pose=''}
+    if(e.volets==='Aucun')e.ferm='1';else if(e.volets)nt(e,'Volets relevés : '+e.volets.toLowerCase()+' (type de fermeture : à préciser)');delete e.volets}
+  a.v=3;return a}
 
 /* --- auto-tests --- */
 (()=>{const t=(c,m,...x)=>console.assert(c,m,...x),lab=(k,f,an)=>audLab(k,audMatch(k,f,an));
@@ -2243,18 +2284,27 @@ function audMigre(a){if(a.v>=2)return a;const X=(o,m)=>m[o]??'',fam=e=>String(e.
     &&JSON.stringify(audPer('Foyer fermé installé installé de 2007 à 2017 avec label flamme verte'))==='[2007,2017]'&&audPer('Pac air/eau installée à partir de 2017')[0]===2017,'périodes ADEME');
   t(lab('type_generateur_ch','Chaudière gaz à condensation',2012)==='Chaudière gaz à condensation 2001-2015','chaudière gaz 2012');
   const v={a:{gen:{annee:'1965'}}},dp=(c,e)=>Object.fromEntries(audDpe(c,e,v));
-  t(dp('murs',{mat:'parpaing',sur:'Extérieur',iso:'Oui',isoPos:'Intérieur'}).Composition==='Murs en blocs de béton creux'&&dp('murs',{iso:'Oui',isoPos:'Intérieur'}).Isolation==='ITI','mur → DPEV5');
-  t(dp('baies',{vitrage:'double',mat:'PVC',pose:'tunnel',orient:'S'})['Type de pose']==='Tunnel'&&dp('baies',{mat:'PVC'})['Matériau']==='PVC'&&dp('baies',{orient:'N'}).Orientation==='Nord','fenêtre → DPEV5');
+  const mu=dp('murs',{mat:'12',ep:'30',doubl:'connu',sur:'Extérieur',iso:'Oui',isoPos:'Intérieur'});
+  t(mu.Composition==='Murs en blocs de béton creux'&&mu['Épaisseur du mur']==='30 cm'&&mu.Doublage==='Doublage connu (plâtre brique bois)'&&dp('murs',{iso:'Oui',isoPos:'Intérieur'}).Isolation==='ITI'
+    &&dp('murs',{mat:'cell'}).Composition==='Béton cellulaire avant 2013'&&dp('murs',{mat:'obi'}).Composition==='Murs en ossature bois avec isolant en remplissage <2001','mur → DPEV5',mu);
+  t(dp('pb',{comp:'9'})['Type de plancher']==='Dalle béton'&&dp('plaf',{type:'rampants',comp:'12'})['Type de plafond']==='Combles aménagés sous rampant','planchers et plafonds → DPEV5');
+  const fb=dp('baies',{paroi:'fen',menu:'7',vitrage:'double',mat:'5',pose:'3',orient:'S',ferm:'6',toit:'Non',joint:'Oui'});
+  t(fb['Type de pose']==='Tunnel'&&fb['Matériau']==='PVC'&&fb['Type de baie']==='Portes-fenêtres battantes sans soubassement'&&fb.Fermeture==='Volets roulants PVC ou bois (e sup 12 mm)'&&fb.Inclinaison==='Sup75°'
+    &&dp('baies',{orient:'N'}).Orientation==='Nord'&&dp('baies',{paroi:'pc'})['Type de vitrage']==='Polycarbonate','fenêtre → DPEV5',fb);
   t(dp('chauf',{type:'ch_gaz',cond:'Oui',annee:'2012'}).Générateur==='Chaudière gaz à condensation 2001-2015'&&/à préciser/.test(dp('chauf',{type:'ch_gaz',cond:'Non'}).Générateur)
     &&dp('chauf',{type:'pac',pacT:'Air/eau',annee:'2016'}).Générateur.startsWith('Pac air/eau'),'chauffage → DPEV5',dp('chauf',{type:'pac',pacT:'Air/eau',annee:'2016'}));
-  t(audDesig('murs',{mat:'parpaing',sur:'Extérieur'},0)==='Mur n°1 parpaing sur extérieur'&&audDesig('baies',{vitrage:'double',mat:'PVC',orient:'S',nb:'2'},1)==='Fenêtre n°2 double vitrage PVC S (×2)','désignation');
+  t(audDesig('murs',{mat:'12',sur:'Extérieur'},0)==='Mur n°1 blocs béton creux (parpaing) sur extérieur'&&audDesig('baies',{vitrage:'double',mat:'5',orient:'S',nb:'2'},1)==='Fenêtre n°2 double vitrage PVC S (×2)','désignation');
   const m=audMigre({murs:[{composition:12,epaisseur:'20',position:8,isolation:3}],baies:[{vitrage:2,materiau:5,pose:3,orientation:1}],chauf:[{genFam:'Chaudière gaz à condensation',genAn:2012}],vent:[{genFam:'VMC SF Hygro B'}]});
-  t(m.murs[0].mat==='parpaing'&&m.murs[0].ep==='20'&&m.murs[0].sur==='Local non chauffé'&&m.murs[0].iso==='Oui'&&m.murs[0].isoPos==='Intérieur'&&m.baies[0].vitrage==='double'&&m.baies[0].mat==='PVC'&&m.baies[0].pose==='tunnel'&&m.baies[0].orient==='S'
-    &&m.chauf[0].type==='ch_gaz'&&m.chauf[0].cond==='Oui'&&m.vent[0].type==='hygro','reprise de la première version',m);})();
+  t(m.v===3&&m.murs[0].mat==='12'&&m.murs[0].ep==='20'&&m.murs[0].sur==='Local non chauffé'&&m.murs[0].iso==='Oui'&&m.murs[0].isoPos==='Intérieur'&&m.baies[0].vitrage==='double'&&m.baies[0].mat==='5'&&m.baies[0].pose==='3'&&m.baies[0].orient==='S'
+    &&m.chauf[0].type==='ch_gaz'&&m.chauf[0].cond==='Oui'&&m.vent[0].type==='hygro','reprise de la première version',m);
+  const m3=audMigre3({v:2,murs:[{mat:'bois',ep:'60 et +'},{mat:'cellulaire'}],pb:[{struct:'Hourdis'}],plaf:[{type:'rampants'}],baies:[{mat:'Alu',pose:'applique',volets:'Roulants'},{mat:'Bois',pose:'tunnel',volets:'Aucun'}]});
+  t(m3.v===3&&m3.murs[0].mat===''&&/bois/.test(m3.murs[0].note)&&m3.murs[0].ep==='60'&&m3.murs[1].mat==='cell'&&m3.pb[0].comp==='11'&&!('struct' in m3.pb[0])&&m3.plaf[0].comp==='12'
+    &&m3.baies[0].mat===''&&m3.baies[0].pose===''&&/alu/.test(m3.baies[0].note)&&/applique/.test(m3.baies[0].note)&&/roulants/.test(m3.baies[0].note)&&!('volets' in m3.baies[0])
+    &&m3.baies[1].mat==='3'&&m3.baies[1].pose==='3'&&m3.baies[1].ferm==='1'&&m3.baies[1].paroi==='fen','reprise de la version allégée',m3);})();
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.10.24-1847';
+const APP_VER='2026.10.24-1916';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
