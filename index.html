@@ -1910,7 +1910,7 @@ if(typeof CP_COM==='object')console.assert(cpAuto('17000','').ville==='La Rochel
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.10.24-1107';
+const APP_VER='2026.10.24-1154';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -2035,6 +2035,9 @@ const exSel=new Set();let exMairies=true;
 let STO={};
 const tailleTxt=n=>n<1e6?Math.max(1,Math.round(n/1e3))+' Ko':n>=1e9?(n/1e9).toLocaleString('fr-FR',{maximumFractionDigits:1})+' Go':(n/1e6).toLocaleString('fr-FR',{maximumFractionDigits:n<1e7?1:0})+' Mo';
 const stoPlein=()=>STO.q>0&&(STO.u/STO.q>=.85||STO.q-STO.u<100e6);
+// Chrome protège le stockage d'un site mis en favori (vérifié sur Android) ; sur iPhone, l'ajout à l'écran d'accueil.
+const IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1;
+const conseilSto=()=>IOS?'Ajoutez l’application à l’écran d’accueil (Partager, puis « Sur l’écran d’accueil ») et sauvegardez régulièrement.':'Ajoutez ce site aux favoris de Chrome (☆), puis touchez Réessayer.';
 async function majStockage(){try{const e=await navigator.storage?.estimate?.(),p=await navigator.storage?.persisted?.(),n={u:e?.usage||0,q:e?.quota||0,p};
   const chg=Math.round(n.u/1e6)!==Math.round((STO.u||0)/1e6)||n.p!==STO.p||n.q!==STO.q;STO=n;if(chg&&['list','sauvegarde'].includes(view))keep()}catch(e){}}
 // Listes de dossiers : recherche et filtre par type.
@@ -2202,7 +2205,7 @@ function render(){
      ${P.nom?'':`<div class="banner">Renseignez votre profil (nom, téléphone, e-mail, signature) : il figure sur chaque rapport. <button data-act="go" data-v="profil">Remplir mon profil</button></div>`}
      ${rap?`<div class="banner">${P.lastBak?'Dernière sauvegarde '+ilya(P.lastBak):'Aucune sauvegarde'} · ${rap.length} dossier${rap.length>1?'s':''} non sauvegardé${rap.length>1?'s':''}. Ils ne sont enregistrés que sur cet appareil. <button data-act="bak">Sauvegarder maintenant</button></div>`:''}
      ${stoPlein()?`<div class="banner">Espace presque plein (${Math.round(100*STO.u/STO.q)} %). Sauvegardez puis supprimez des dossiers terminés pour pouvoir ajouter des photos. <button data-act="go" data-v="sauvegarde">Voir l’espace utilisé</button></div>`:''}
-     ${STO.p===false&&visits.length?'<div class="banner">Stockage non protégé : le navigateur peut effacer les données si l’appareil manque de place. Installez l’application sur l’écran d’accueil.</div>':''}
+     ${STO.p===false&&visits.length?`<div class="banner">Stockage non protégé : le navigateur peut effacer les données si l’appareil manque de place. ${conseilSto()} <button data-act="persist">Réessayer</button></div>`:''}
      <div class="eyebrow">Constat décence · Permis de louer</div>
      <h1 class="hello">${P.nom?'Bonjour '+esc(P.nom.split(/\s+/)[0]):'Bonjour'}</h1>
      <button class="big primary" data-act="new">${svg('plus')}<span><span class="t">Nouvelle visite</span><span class="d">Démarrer un constat</span></span></button>
@@ -2235,7 +2238,7 @@ function render(){
      <p class="muted">Cochez les dossiers à exporter. La sauvegarde (.json) sert à transférer des dossiers vers un PC ou à les partager avec un collègue. L’import accepte aussi les dossiers (.json) enregistrés avec l’ancien « Simulateur Loc’Avantages ».</p>
      ${STO.q?`<div class="sto"><div class="eyebrow">Espace de stockage</div><div class="pbar${stoPlein()?' plein':''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(100*STO.u/STO.q)}" aria-label="Espace de stockage utilisé"><span style="width:${Math.max(1,Math.round(100*STO.u/STO.q))}%"></span></div>
       <div>${tailleTxt(STO.u)} utilisés sur environ ${tailleTxt(STO.q)} disponibles</div>
-      <div class="muted">${STO.p?'Stockage protégé : le navigateur ne supprimera pas les données.':STO.p===false?'Stockage non protégé : installez l’application sur l’écran d’accueil pour éviter un effacement automatique.':''}</div></div>`:''}
+      <div class="muted">${STO.p?'Stockage protégé : le navigateur ne supprimera pas les données.':STO.p===false?'Stockage non protégé : '+conseilSto()+` <button data-act="persist">Réessayer</button>`:''}</div></div>`:''}
      <div class="hint">Pour transférer une sauvegarde vers un téléphone, utilisez Quick Share, le Bluetooth ou un câble USB, pas Outlook, Teams ni OneDrive professionnel : ces applications chiffrent le fichier, qui devient impossible à importer.</div>
      <div class="row" style="margin-bottom:12px"><button data-act="sel" data-k="all">Tout cocher</button><button data-act="sel" data-k="encours">Dossiers en cours</button><button data-act="sel" data-k="nonsauv">Non sauvegardés</button><button data-act="sel" data-k="none">Tout décocher</button></div>
      <div class="items">${L.length?L.map(v=>`<label class="item ${exSel.has(v.id)?'on':''}" style="display:flex;gap:12px;align-items:flex-start;padding:12px 14px;cursor:pointer">
@@ -2751,6 +2754,7 @@ document.addEventListener('change',async e=>{
 document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
   if(a==='new'){view='choose';return go()}
+  if(a==='persist'){let ok=false;try{ok=await navigator.storage?.persist?.()}catch(e){}await majStockage();keep();toast(ok?'Stockage protégé':'Protection refusée par le navigateur : vérifiez le favori, puis réessayez');return}
   if(a==='bak'){exSel.clear();for(const v of visits)if(!sauve(v))exSel.add(v.id);view='sauvegarde';return go()}
   if(a==='maj'){await save(true);setTimeout(()=>location.reload(),500);return}
   if(a==='laddlg'){cur.loc.logements.push(locLg(cur.loc.logements.length+1));save();return keep()}
@@ -2894,12 +2898,21 @@ async function importJson(el){
       const v=newVisit('loc'),{proprio,bien,logements,aidesProjet,obs,compDuree}=d;v.loc={proprio,bien,logements,aidesProjet,obs,compDuree};migrate(v);
       await store.put(v);visits=(await store.all()).map(migrate);render();toast('Simulation Loc’Avantages importée : '+who(v));return}
     if(d.app!=='constat-decence'||!Array.isArray(d.visits))throw new Error('ce fichier n’est pas une sauvegarde de cette application');
-    let n=0;for(const v of d.visits){if(!v||typeof v.id!=='string'||typeof v.f!=='object'||typeof v.it!=='object')continue;await store.put(migrate(v));n++}
+    // Un dossier déjà présent n'est remplacé que par une version modifiée plus récemment (allers-retours téléphone ↔ PC).
+    const loc=new Map(visits.map(v=>[v.id,v])),ini=initiales();let na=0,nu=0,ni=0,seq=false;
+    for(const v of d.visits){if(!v||typeof v.id!=='string'||typeof v.f!=='object'||typeof v.it!=='object')continue;
+      const m=migrate(v),x=loc.get(m.id);if(x&&(x.updated||0)>=(m.updated||0)){ni++;continue}
+      await store.put(m);x?nu++:na++;
+      // Compteur de n° calé sur les dossiers du même technicien créés sur un autre appareil.
+      const k=/^([A-Z]{3}-\d{4})-([A-Z]*)-(\d+)$/.exec(m.num||'');if(k&&ini&&k[2]===ini&&+k[3]>((P.seq||{})[k[1]]||0)){P.seq={...P.seq,[k[1]]:+k[3]};seq=true}}
+    if(seq)saveP();
     let nm=0;if(d.mairies&&typeof d.mairies==='object')for(const [k,m] of Object.entries(d.mairies))if(m&&typeof m.ville==='string'&&!MAIRIES.l[k]){MAIRIES.l[k]=m;nm++}
     if(nm)saveMairies();
     let nc=0;if(d.carnet&&typeof d.carnet==='object')for(const [k,c] of Object.entries(d.carnet))if(c&&CB_CAT[c.cat]&&!CARNET.l[k]){CARNET.l[k]=c;nc++}
     if(nc){saveCarnet();cbDL()}
-    visits=(await store.all()).map(migrate);render();toast(`${n} visite${n>1?'s':''} importée${n>1?'s':''}${nm+nc?` · ${nm+nc} adresse${nm+nc>1?'s':''} ajoutée${nm+nc>1?'s':''} au carnet`:''}`)}
+    visits=(await store.all()).map(migrate);if(cur)cur=visits.find(v=>v.id===cur.id)||null;render();
+    const pl=(n,a,b)=>n+' '+(n>1?b:a);
+    toast([na&&pl(na,'dossier ajouté','dossiers ajoutés'),nu&&pl(nu,'dossier mis à jour','dossiers mis à jour'),ni&&pl(ni,'dossier ignoré (version plus ancienne ou identique)','dossiers ignorés (versions plus anciennes ou identiques)'),nm+nc&&pl(nm+nc,'adresse ajoutée au carnet','adresses ajoutées au carnet')].filter(Boolean).join(' · ')||'Aucun dossier dans ce fichier')}
   catch(e){toast('Import impossible : '+e.message)}
 }
 
