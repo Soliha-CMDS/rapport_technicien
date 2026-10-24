@@ -245,6 +245,24 @@ button.lnk{min-height:44px;padding:0 4px;border:0;background:none;font-size:.85r
 .banner button{display:block;margin-top:8px}
 .ver{font-size:.8rem;margin-top:var(--sp-2)}
 
+/* Photo d'un désordre : image au-dessus, légende et commentaire */
+.phc.st{grid-template-columns:1fr}
+.phc.st img{width:100%;height:auto;max-height:240px;object-fit:cover}
+.phc .lab{font-size:.85rem;font-weight:700;color:var(--muted)}
+.phc.st textarea[data-k=cap]{min-height:44px}
+
+/* Contrôle avant le PDF */
+.ctls{display:grid;gap:8px;margin-bottom:var(--sp-3)}
+.ctl{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
+.ctl .i{flex:none;width:22px;height:22px}
+.ctl.ko .i{color:var(--danger)}.ctl.av .i{color:var(--warn)}
+.ctlh.ko{color:var(--danger)}.ctlh.av{color:var(--warn)}
+/* Espace de stockage */
+.sto{display:grid;gap:6px;margin-bottom:var(--sp-3)}
+.sto .pbar{height:10px;border-radius:999px;background:var(--chip);overflow:hidden}
+.sto .pbar span{display:block;height:100%;background:var(--accent)}
+.sto .pbar.plein span{background:var(--danger)}
+
 </style>
 
 <div class="wrap">
@@ -1272,6 +1290,27 @@ function dmCorr(v,s){
 }
 
 /* ---------- liste de travaux ---------- */
+// Commentaires pré-rédigés reliés à un sous-constat : [début du commentaire, début du sous-constat].
+// Résolus par le texte (les rangs diffèrent entre décence et permis de louer). Le commentaire choisi coche le sous-constat,
+// et son correctif remplace celui du sous-constat dans les travaux ; sans commentaire relié, le sous-constat garde son correctif.
+const DF_O={
+ vent:[['Aucune bouche d’extraction dans la salle d’eau',"Salle d'eau"],['Aucune bouche d’extraction dans la cuisine','Cuisine'],['Aucune ventilation dans le WC','WC']],
+ degr:[['Couverture non étanche','De la toiture'],['Gouttières ou descentes','Des chéneaux'],['Fissures en façade','Des murs'],['Fenêtres ou portes extérieures ne fermant','Menuiseries'],['Infiltrations d’eau par les menuiseries',"Infiltration d'eau depuis"]],
+ pc:[['Escalier des parties communes dégradé','Mauvais état des parties communes'],['Éclairage des parties communes','Mauvais état des parties communes'],['Parties communes encombrées','Mauvais état des parties communes'],['Revêtements des parties communes','Mauvais état des parties communes']],
+ elec:[['Nombre de prises insuffisant','Insuffisante']],
+ eau:[['Absence d’alimentation en eau potable','Absence']],
+ chauf:[['Pièces principales dépourvues','Présent mais insuffisant : dispositif absent'],['Chaudière en panne','Présent mais insuffisant : installation partiellement']],
+ co:[['Bouches d’aération obstruées dans un local',"Bouches d'aération obstruées"]],
+ cuis:[['Douche ou baignoire installée dans une pièce de vie',"Manque d'intimité"]],
+ wc:[['WC situé à l’extérieur','WC extérieur']],
+ hum:[['Traces d’humidité et salpêtre en partie basse','En bas des murs']],
+ chute:[['Trémie d’escalier ou palier sans protection','Escalier / palier'],['Absence de main courante','Escalier / palier']],
+ degint:[['Sol dégradé','Des sols'],['Murs intérieurs fissurés','Des murs intérieurs'],['Portes intérieures ou placards','Des menuiseries intérieures']],
+ plomb:[['Logement construit avant 1949',"Logement d'avant 1949"]]};
+// Rang du sous-constat relié au commentaire i de la pathologie d, ou -1.
+const dfO=(d,i)=>{const c=d.df?.[i]?.[0],m=c&&(DF_O[d.id]||[]).find(([a])=>c.startsWith(a));return m?(d.o||[]).findIndex(o=>o.startsWith(m[1])):-1};
+// Sous-constat coché sans aucun commentaire rédigé (désordre ou photo) : bloque le pré-remplissage des travaux.
+const comManq=(d,s)=>!!(s?.on&&s.o?.length&&!String(s.note||'').trim()&&!(s.ph||[]).some(p=>String(p.com||'').trim()));
 function travaux(v){
   const L={};Object.keys(TH).forEach(k=>L[k]=[]);
   // Permis de louer : chaque correctif est remplacé par sa version avec les règles techniques.
@@ -1284,14 +1323,14 @@ function travaux(v){
      'État des risques et pollutions (ERP)','État de l’installation intérieure de gaz, le cas échéant','Diagnostic amiante, le cas échéant (permis de construire antérieur au 1er juillet 1997)'].forEach(x=>push('regl','   ◦ '+x))};
   for(const r of RR(v))for(const d of r.items||[]){
     const s=v.it[d.id];if(!s?.on||!d.th)continue;
-    const subs=[],loc=s.loc?.trim()?`${s.loc.trim()} – `:'';
-    if(d.dm){const c=dmCorr(v,s);push(d.th,'• '+loc+DM_INTRO+(c.length?' :':'.'));c.forEach(x=>push(d.th,'   ◦ '+x));continue}
-    const add=x=>{if(!x)return;if(x==='DIAG')return diag();Array.isArray(x)?subs.push({th:x[0],t:loc+tk(x[1])}):subs.push({th:d.th,t:loc+tk(x)})};
-    s.o.forEach(i=>add(d.ow?.[i]));s.df.forEach(i=>add(d.df?.[i]?.[1]));(d.wx||[]).forEach(add);
+    const subs=[];
+    if(d.dm){const c=dmCorr(v,s);push(d.th,'• '+DM_INTRO+(c.length?' :':'.'));c.forEach(x=>push(d.th,'   ◦ '+x));continue}
+    const add=x=>{if(!x)return;if(x==='DIAG')return diag();Array.isArray(x)?subs.push({th:x[0],t:tk(x[1])}):subs.push({th:d.th,t:tk(x)})};
+    s.o.forEach(i=>{if(!s.df.some(j=>dfO(d,j)===i))add(d.ow?.[i])});s.df.forEach(i=>add(d.df?.[i]?.[1]));(d.wx||[]).forEach(add);
     const main=subs.filter(x=>x.th===d.th);
-    if(d.grp&&d.w){if(main.length){push(d.th,'• '+loc+d.w+' :');main.forEach(x=>push(d.th,'   ◦ '+x.t.slice(loc.length)))}else push(d.th,'• '+loc+tk(d.w))}
+    if(d.grp&&d.w){if(main.length){push(d.th,'• '+d.w+' :');main.forEach(x=>push(d.th,'   ◦ '+x.t))}else push(d.th,'• '+tk(d.w))}
     else if(main.length)main.forEach(x=>push(d.th,'• '+x.t));
-    else if(d.w)push(d.th,'• '+loc+tk(d.w));
+    else if(d.w)push(d.th,'• '+tk(d.w));
     subs.filter(x=>x.th!==d.th).forEach(x=>push(x.th,'• '+x.t));
   }
   // Le DAAF relève du CCH (R.142-2), pas du décret décence : on le précise hors permis de louer.
@@ -1299,6 +1338,16 @@ function travaux(v){
   return Object.entries(L).filter(([,l])=>l.length).map(([k,l])=>({title:TH[k],lines:l}));
 }
 // Phrase fixe sur les justificatifs, placée par le rapport avant la liste de travaux (non modifiable).
+(()=>{const all=[...R,...R_PDL].flatMap(r=>r.items||[]);
+  for(const [k,L] of Object.entries(DF_O))for(const [a,b] of L){const d=ITEMS[k],i=(d.df||[]).findIndex(x=>x[0].startsWith(a));
+    console.assert(i>=0&&dfO(d,i)>=0&&d.o[dfO(d,i)].startsWith(b),'lien commentaire -> sous-constat',k,a);
+    for(const x of all.filter(x=>x.id===k&&x!==d)){const j=(x.df||[]).findIndex(y=>y[0].startsWith(a));if(j>=0)console.assert(dfO(x,j)>=0,'lien PDL',k,a)}}
+  const V=ITEMS.vent,ix=a=>V.df.findIndex(x=>x[0].startsWith(a)),tv=(o,df)=>travaux({f:{},it:{vent:{on:true,o,t:[],df,ph:[],note:'x'}}}).flatMap(b=>b.lines);
+  const q=tv([0,1,2],[ix('Aucune bouche d’extraction dans la salle'),ix('Aucune bouche d’extraction dans la cuisine'),ix('Aucune ventilation dans le WC')]);
+  console.assert(q.filter(l=>/xtraction d’air/.test(l)).length===3&&!q.some(l=>l.includes('◦ Extraction d’air')),'VMC sans doublon',q);
+  const q2=tv([0,1],[ix('Aucune bouche d’extraction dans la cuisine')]);
+  console.assert(q2.some(l=>l.includes('Création d’une extraction d’air dans la cuisine'))&&q2.some(l=>l.includes('◦ Extraction d’air dans la salle d’eau'))&&!q2.some(l=>l.includes('◦ Extraction d’air dans la cuisine')),'secours du sous-constat',q2);
+  console.assert(comManq(V,{on:true,o:[0],note:'',ph:[{com:' '}]})&&!comManq(V,{on:true,o:[0],note:'',ph:[{com:'ok'}]})&&!comManq(V,{on:true,o:[],note:''}),'commentaire manquant');})();
 function justifTexte(v){
   const pr='des documents probants : factures détaillées des entreprises (nature des travaux, matériel posé, localisation), attestations ou diagnostics lorsqu’ils sont requis, et photographies';
   const soi='Pour les travaux réalisés par le propriétaire lui-même : factures d’achat du matériel et photographies.';
@@ -1327,7 +1376,7 @@ function fusionTravaux(txt,blocks){
   }
   return{txt:lines.join('\n'),added};
 }
-(()=>{const t=(f,s,type)=>{const v={type,f,it:{diagmaj:{on:true,o:[],t:[],df:[],note:'',loc:'',ph:[],...s}}};return{v,txt:dmTexte(v,v.it.diagmaj),cor:dmCorr(v,v.it.diagmaj),trav:travaux(v)}};
+(()=>{const t=(f,s,type)=>{const v={type,f,it:{diagmaj:{on:true,o:[],t:[],df:[],note:'',ph:[],...s}}};return{v,txt:dmTexte(v,v.it.diagmaj),cor:dmCorr(v,v.it.diagmaj),trav:travaux(v)}};
   // 1. chauffage + électricité partielle + peintures, avant 1949, CREP positif
   const a=t({lAv49:'Avant 1949'},{dA:2024,tA:2026,tw:[0,2,4],crep:'Oui'});
   console.assert(a.txt.startsWith('Le logement, construit avant 1949, a fait l’objet de diagnostics établis en 2024. Des travaux ont depuis été réalisés en 2026 : remplacement du système de chauffage, réfection partielle de l’installation électrique et rénovation des peintures.')&&a.txt.endsWith('(loi n° 89-462, art. 3-3).'),'dm texte 1');
@@ -1352,9 +1401,11 @@ const dfi=(id,re)=>ITEMS[id].df.findIndex(x=>re.test(x[0]));
   console.assert(m.txt.includes('• Ma ligne perso')&&m.txt.includes('2. Obligations réglementaires')&&fusionTravaux(m.txt,b).added===0,'fusion travaux');
   const p=travaux({type:'pdl',f:{detect:'Non'},it:{chute:{on:true,o:[0],t:[],df:[dfi('chute',/main courante dans/)],ph:[]},plomb:{on:true,o:[0],t:[],df:[],ph:[]}}});
   const pt=p.flatMap(b=>b.lines).join(' ');
-  const q=travaux({f:{},it:{chute:{on:true,o:[],t:[],df:[dfi('chute',/main courante dans/)],ph:[],loc:'escalier vers l’étage'},elec:{on:true,o:[0],t:[],df:[],ph:[],loc:'chambre 1'}}}).flatMap(b=>b.lines);
-  console.assert(q.includes('• escalier vers l’étage – Installation d’une main courante dans l’escalier')&&q.some(l=>l.startsWith('• chambre 1 – Mise en sécurité'))&&q.includes('   ◦ Création de prises de courant en nombre suffisant et suppression des surcharges'),'travaux localisation');
-  console.assert(pt.includes('90 à 95 cm')&&pt.includes('NF P01-012')&&pt.includes('Certibiocide')===false&&!pt.includes('diagnostic technique'),'travaux pdl');})();
+  const q=travaux({f:{},it:{chute:{on:true,o:[],t:[],df:[dfi('chute',/main courante dans/)],ph:[]},elec:{on:true,o:[0],t:[],df:[],ph:[]}}}).flatMap(b=>b.lines);
+  console.assert(q.includes('• Installation d’une main courante dans l’escalier')&&q.some(l=>l.startsWith('• Mise en sécurité'))&&q.includes('   ◦ Création de prises de courant en nombre suffisant et suppression des surcharges'),'travaux (sans localisation)');
+  // Commentaire « main courante » relié au sous-constat « Escalier / palier » : seul son correctif est repris ; sans lui, celui du sous-constat (garde-corps).
+  const pg=travaux({type:'pdl',f:{},it:{chute:{on:true,o:[0],t:[],df:[],ph:[]}}}).flatMap(b=>b.lines).join(' ');
+  console.assert(pt.includes('90 à 95 cm')&&!pt.includes('NF P01-012')&&pg.includes('NF P01-012')&&pt.includes('Certibiocide')===false&&!pt.includes('diagnostic technique'),'travaux pdl');})();
 
 /* ---------- Rapport de dégradation (grilles Anah) ---------- */
 // Relevé des 3 grilles Excel (sources/ref-degradation). L'Excel prime sur le guide pour les règles de calcul.
@@ -1859,7 +1910,7 @@ if(typeof CP_COM==='object')console.assert(cpAuto('17000','').ville==='La Rochel
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.10.24-1008';
+const APP_VER='2026.10.24-1107';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -1883,7 +1934,8 @@ const IC={
  chev:'<path d="M9 6l6 6-6 6"/>',
  ok:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 10"/>',
  sync:'<path d="M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5"/>',
- inst:'<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>'
+ inst:'<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+ warn:'<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17v.5"/>'
 };
 const svg=k=>`<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${IC[k]}</svg>`;
 
@@ -1913,7 +1965,7 @@ function migrate(v){
   const f=v.f;if(f.cpville!==undefined){if(!f.cp&&!f.ville){const m=/^\s*(\d{5})\s*(.*)$/.exec(f.cpville);if(m){f.cp=m[1];f.ville=m[2].trim()}else f.ville=f.cpville.trim()}delete f.cpville}
   const extra=[['bat','Bât. / Rés. '],['entree','entrée '],['etage','étage '],['couree','maison n° ']].filter(([k])=>String(f[k]||'').trim()).map(([k,l])=>l+String(f[k]).trim());
   if(extra.length)f.adresse=[f.adresse,...extra].filter(x=>String(x||'').trim()).join(', ');for(const k of ['bat','entree','etage','couree'])delete f[k];
-  for(const s of Object.values(v.it)){s.o=s.o||[];s.t=s.t||[];s.df=s.df||[];s.ph=(s.ph||[]).map(p=>({cap:'',...p}));s.note=s.note||'';s.loc=s.loc||''}
+  for(const s of Object.values(v.it)){s.o=s.o||[];s.t=s.t||[];s.df=s.df||[];s.ph=(s.ph||[]).map(p=>({cap:'',...p}));s.note=s.note||''}
   // Le type de chauffage / d'eau chaude était saisi dans la pathologie : il passe dans les champs de la rubrique 4.
   // Visite antérieure à la liste de commentaires pré-rédigés : indices de l'ancienne liste de défauts types.
   if(!(v.dfV>=2)){for(const [id,s] of Object.entries(v.it)){if(!OLD_DF[id]||!s.df.length)continue;const old=s.df.map(i=>OLD_DF[id][i]).filter(Boolean);
@@ -1921,6 +1973,11 @@ function migrate(v){
     s.df=[...new Set(old.map(t=>dfNew(id,t)).filter(i=>i>=0))]}v.dfTxt=1;v.dfV=3}
   // Liste électricité enrichie (NF C 16-600) : les rangs de la version 2 sont repris par libellé.
   if(v.dfV===2){for(const [id,s] of Object.entries(v.it))if(DF_V2[id])s.df=[...new Set(s.df.map(i=>dfV3(id,i)).filter(i=>i>=0))];v.dfV=3}
+  // Localisation supprimée (24/10/2026) : elle passe en tête du commentaire. Les précisions d'un désordre photographié
+  // deviennent le commentaire de la photo 1 ; sans photo (ou diagnostics non à jour), elles restent le commentaire du désordre.
+  if(!v.phV){for(const r of RR(v))for(const d of r.items||[]){const s=v.it[d.id];if(!s)continue;const l=String(s.loc||'').trim(),n=s.note.trim(),t=l&&n?l+' : '+n:l||n;
+      if(s.ph.length&&!d.dm){if(t)s.ph[0].com=[s.ph[0].com,t].filter(x=>String(x||'').trim()).join('\n');s.note=''}else if(l)s.note=t}
+    for(const s of Object.values(v.it))delete s.loc;v.phV=1}
   for(const d of [ITEMS.chauf,ITEMS.ecs,ITEMS.vent])if(!v.f[d.tf]&&v.it[d.id]?.t.length)v.f[d.tf]=v.it[d.id].t.map(i=>d.ty[i]);
   if(!isPdl(v))delete v.f.cvPresc;
   // Ancien bouton « Marquer comme vérifiée » des rubriques à pathologies : les lignes sans défaut passent en RAS.
@@ -1946,15 +2003,40 @@ function rappelSauv(){const L=visits.filter(v=>!sauve(v));if(!L.length)return nu
 function prog(v){
   if(isLoc(v)){const D=v.loc,R=locR(v),s=[D.proprio.nom||D.proprio.sci,D.bien.insee,R.lgs.every(r=>r.eligible),R.comp.ok];return {f:s.filter(Boolean).length,n:s.length,u:'étapes'}}
   if(isDeg(v)){const E=v.g.flatMap(g=>GRILLES[g.k].els.map(e=>g.n[e.id]?.h!=null));return {f:E.filter(Boolean).length,n:E.length,u:'éléments notés'}}
-  const s=[...RR(v).map(r=>r.items?!r.items.some(d=>!v.it[d.id]?.on&&!v.it[d.id]?.ras)&&!preManq(r,v).length:!!v.done[r.id]),filled(isPdl(v)?v.f.etat:v.f.cNd)];
+  const s=[...RR(v).map(r=>r.items?!r.items.some(d=>!v.it[d.id]?.on&&!v.it[d.id]?.ras||comManq(d,v.it[d.id]))&&!preManq(r,v).length:!!v.done[r.id]),filled(isPdl(v)?v.f.etat:v.f.cNd)];
   return {f:s.filter(Boolean).length,n:s.length,u:'étapes'}}
 function progHtml(v,num){const p=prog(v),pc=Math.round(100*p.f/(p.n||1));
   return `<div class="prog${num?' dash':''}"><div class="pbar${pc===100?' full':''}" role="progressbar" aria-valuemin="0" aria-valuemax="${p.n}" aria-valuenow="${p.f}" aria-label="Avancement du dossier"><span style="width:${pc}%"></span></div><span>${p.f}/${p.n} ${p.u}</span>${num&&v.num?`<span class="dnum">N° ${esc(v.num)}</span>`:''}</div>`}
+
+/* ---------- contrôle avant le PDF (décence, permis de louer) ---------- */
+// Points à corriger ('ko' : le dossier reste en cours si le PDF est forcé) ou à vérifier ('av'), avec la vue à ouvrir.
+function controles(v){
+  const f=v.f,pdl=isPdl(v),L=[],add=(n,t,vw)=>L.push([n,t,vw]),sg=(n,a,b)=>n+' '+(n>1?b:a);
+  for(const [r,ds] of aControler(v)){const it_=ds.filter(d=>d.id),nl=it_.filter(d=>!v.it[d.id]?.on&&!v.it[d.id]?.ras).length,nc=it_.filter(d=>comManq(d,v.it[d.id])).length,nt=ds.length-it_.length;
+    add('ko',`Rubrique ${r.n} : `+[nl&&sg(nl,'ligne ni Défaut ni RAS','lignes ni Défaut ni RAS'),nc&&sg(nc,'commentaire manquant','commentaires manquants'),nt&&(nt>1?'types':'type')+' d’équipement à renseigner'].filter(Boolean).join(', '),r.id)}
+  if(pdl?!filled(f.etat):!filled(f.cNd))add('ko',pdl?'État global du logement non renseigné':'Conclusion : non-décence non renseignée','synth');
+  if(isCv(v)&&!filled(f.cvLeve))add('ko','Contre-visite : levée des réserves non renseignée','r8');
+  const gen=RR(v).find(r=>r.gen),bl=travaux(v),non=RR(v).flatMap(r=>r.items||[]).filter(d=>v.it[d.id]?.on).length;
+  if(bl.length&&!filled(f.trav))add('ko',`Travaux préconisés vides alors que ${sg(non,'désordre est coché','désordres sont cochés')}`,gen?.id);
+  if(!P.sig)add('ko','Signature de l’enquêteur absente (Mon profil)','profil');
+  if(!f.dateVis)add('ko','Date de visite manquante','admin');
+  if(!filled(f.adresse))add('ko','Adresse du logement manquante','admin');
+  for(const r of RR(v)){const n=(r.items||[]).filter(d=>d.p&&v.it[d.id]?.on&&!v.it[d.id].ph.length).length;if(n)add('av',`Rubrique ${r.n} : ${sg(n,'photo requise manquante','photos requises manquantes')}`,r.id)}
+  if(bl.length&&filled(f.trav)){const n=fusionTravaux(f.trav,bl).added;if(n)add('av',`Liste de travaux pas à jour : ${sg(n,'correctif manquant','correctifs manquants')}`,gen?.id)}
+  if(pdl){if(!filled(f.pNom)&&!filled(f.pSoc))add('av','Nom du propriétaire manquant','admin');if(!f[sigKey(v)])add('av','Signature du propriétaire absente','synth')}
+  else{if(!filled(f.nom))add('av','Nom de l’occupant manquant','admin');if(!filled(f.refDos))add('av','Référence du dossier vide','admin')}
+  return L}
 
 /* ---------- état ---------- */
 let visits=[],cur=null,view='list',saveT=null,P={id:'moi'};
 // Sauvegarde : dossiers cochés pour l'export, et inclusion du carnet des mairies.
 const exSel=new Set();let exMairies=true;
+// Espace de stockage (estimation du navigateur) et protection contre l'effacement automatique.
+let STO={};
+const tailleTxt=n=>n<1e6?Math.max(1,Math.round(n/1e3))+' Ko':n>=1e9?(n/1e9).toLocaleString('fr-FR',{maximumFractionDigits:1})+' Go':(n/1e6).toLocaleString('fr-FR',{maximumFractionDigits:n<1e7?1:0})+' Mo';
+const stoPlein=()=>STO.q>0&&(STO.u/STO.q>=.85||STO.q-STO.u<100e6);
+async function majStockage(){try{const e=await navigator.storage?.estimate?.(),p=await navigator.storage?.persisted?.(),n={u:e?.usage||0,q:e?.quota||0,p};
+  const chg=Math.round(n.u/1e6)!==Math.round((STO.u||0)/1e6)||n.p!==STO.p||n.q!==STO.q;STO=n;if(chg&&['list','sauvegarde'].includes(view))keep()}catch(e){}}
 // Listes de dossiers : recherche et filtre par type.
 let lq='',lt='';
 const saveP=()=>store.putProfil(P).catch(e=>toast('Enregistrement du profil impossible : '+e.message));
@@ -1962,12 +2044,14 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today=()=>new Date().toISOString().slice(0,10);
 const frDate=d=>d&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d.split('-').reverse().join('/'):(d||'');
-const newVisit=(t,b)=>({dfTxt:1,dfV:3,id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),created:Date.now(),updated:Date.now(),
+const newVisit=(t,b)=>({dfTxt:1,dfV:3,phV:1,id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),created:Date.now(),updated:Date.now(),
   ...(t==='loc'?{type:'loc',f:{dateVis:today()},loc:locVide()}:t==='deg'?{type:'deg',bien:b,f:{op:P.lastOp||'',dateVis:today(),...(b==='imm'?{g1_nom:'Logement 1'}:{})},g:b==='imm'?[{id:'g0',k:'bc',n:{}},{id:'g1',k:'lc',n:{}}]:[{id:'g0',k:'mi',n:{}}]}:t==='pdl'?{type:'pdl',f:{commune:'Thouars',cp:COMMUNES.Thouars.cp,ville:COMMUNES.Thouars.ville,typeVis:'Visite de contrôle',dateVis:today()}}:{f:{dem:'CAF',typeVis:'Visite initiale',dateVis:today(),mrCiv:'Madame, Monsieur'}}),it:{},done:{},sig:''});
 function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(t._t);t._t=setTimeout(()=>t.hidden=true,Math.max(2600,msg.length*60))}
 function save(now){if(!cur)return;cur.updated=Date.now();clearTimeout(saveT);const v=cur,go=()=>store.put(v).catch(e=>toast('Enregistrement impossible : '+e.message));if(now)return go();saveT=setTimeout(go,350)}
+// Alerte « commentaire manquant » d'une pathologie, mise à jour pendant la saisie.
+const cmMaj=id=>{const d=itemOf(id),e=$('#cm_'+id);if(d&&e)e.hidden=!comManq(d,it(id))};
 const itemOf=id=>RR(cur).flatMap(r=>r.items||[]).find(d=>d.id===id);
-const it=(id,v=cur)=>v.it[id]||(v.it[id]={on:false,o:[],t:[],df:[],note:'',loc:'',d:false,ph:[]});
+const it=(id,v=cur)=>v.it[id]||(v.it[id]={on:false,o:[],t:[],df:[],note:'',d:false,ph:[]});
 
 // Numéro de chaque photo dans sa rubrique : « itemId:index » -> 1, 2, 3…
 // Entrées qui portent des photos : pathologies cochées, puis photos propres à la rubrique (commentaires).
@@ -1983,6 +2067,7 @@ function rstat(r,v=cur){
     const rest=r.items.filter(i=>!v.it[i.id]?.on&&!v.it[i.id]?.ras).length;
     if(on.length)p.push([`${on.length} désordre${on.length>1?'s':''}`,'info']);else if(!rest)p.push(['RAS','ok']);
     if(rest&&rest<r.items.length)p.push([`${rest} ligne${rest>1?'s':''} à contrôler`,'warn']);
+    const cm=r.items.filter(d=>comManq(d,v.it[d.id])).length;if(cm)p.push([cm>1?cm+' commentaires manquants':'Commentaire manquant','warn']);
     const pm=preManq(r,v).length;if(pm)p.push([pm>1?'Types à renseigner':'Type à renseigner','warn']);
     if(dg)p.push(['Danger','danger']);
     if(miss)p.push([`${miss} photo${miss>1?'s':''} manquante${miss>1?'s':''}`,'warn']);
@@ -1993,7 +2078,7 @@ function rstat(r,v=cur){
 }
 // Lignes de pathologie ni en défaut ni en RAS, par rubrique : elles bloquent le pré-remplissage des travaux.
 const preManq=(r,v=cur)=>(r.pre||[]).filter(f=>!filled(v.f[f[0]]));
-const aControler=(v=cur)=>RR(v).filter(r=>r.items).map(r=>[r,[...r.items.filter(d=>!v.it[d.id]?.on&&!v.it[d.id]?.ras),...preManq(r,v)]]).filter(x=>x[1].length);
+const aControler=(v=cur)=>RR(v).filter(r=>r.items).map(r=>[r,[...r.items.filter(d=>!v.it[d.id]?.on&&!v.it[d.id]?.ras||comManq(d,v.it[d.id])),...preManq(r,v)]]).filter(x=>x[1].length);
 const sumAuto=(k,v=cur)=>Object.values(ITEMS).some(i=>i.s===k&&v.it[i.id]?.on);
 const sumVal=(k,v=cur)=>v.f['sum_'+k]||(sumAuto(k,v)?'Oui':'Non');
 const pills=p=>`<div class="pills">${p.map(([t,c])=>`<span class="pill ${c}">${esc(t)}</span>`).join('')}</div>`;
@@ -2054,22 +2139,27 @@ function itemHtml(d,nums){
     ${d.hint?`<div class="hint">${esc(d.hint)}</div>`:''}${norm}
     ${d.ty&&d.tl!==MEL&&!d.tf?grp('t',d.tl,d.ty):''}
     ${d.o?grp('o',d.ol||'Constat',d.o):''}
+    <div class="hint warn" id="cm_${d.id}" ${comManq(d,s)?'':'hidden'}>Sous-constat coché : rédigez un commentaire (ci-dessous ou sur une photo).</div>
     ${d.ty&&d.tl===MEL?grp('t',d.tl,d.ty):''}
     ${d.d?`<label class="dgl"><input type="checkbox" data-it="${d.id}" data-k="d" ${s.d?'checked':''}>Danger</label>`:''}
     ${d.dm?dmHtml(d,s):''}
-    <label class="field"><span>Localisation (reprise dans les travaux préconisés)</span><input type="text" data-it="${d.id}" data-k="loc" value="${esc(s.loc)}" placeholder="Ex. : chambre 1, salle d’eau"></label>
-    <div class="field"><span>Précisions (3) : description</span>
-     ${d.df?`<select data-it="${d.id}" data-k="df" aria-label="Insérer un commentaire pré-rédigé"><option value="">+ Insérer un commentaire pré-rédigé…</option>${d.df.map((x,i)=>`<option value="${i}">${esc(x[0])}</option>`).join('')}<option value="autre">Autre (rédiger)</option></select>`:''}
-     <textarea id="note_${d.id}" data-it="${d.id}" data-k="note" aria-label="Précisions" placeholder="Ex. : prise arrachée de son support (voir photo 1)">${esc(s.note)}</textarea>
-     ${linked.length?`<div class="dfs"><span class="muted" style="font-size:.85rem">Correctifs liés (repris dans les travaux préconisés) :</span>${linked.map(i=>`<div class="df"><span>${esc(d.df[i][0])}</span><button type="button" data-act="deldf" data-it="${d.id}" data-i="${i}" aria-label="Retirer ce correctif">${svg('x')}</button></div>`).join('')}</div>`:''}</div>
-    ${phBlock(d.id,s,nums,d.p&&!s.ph.length)}
+    ${d.dm||!s.ph.length?`<div class="field"><span>${d.dm?'Précisions (3)':'Commentaire'}</span>
+     ${dfSel(d)}
+     <textarea id="note_${d.id}" data-it="${d.id}" data-k="note" aria-label="Commentaire" placeholder="Ex. : prise arrachée de son support">${esc(s.note)}</textarea>
+     ${d.dm?'':'<span class="muted" style="font-size:.85rem">Dès qu’une photo est ajoutée, ce commentaire devient celui de la photo 1.</span>'}</div>`:''}
+    ${phBlock(d.id,s,nums,d.p&&!s.ph.length,d)}
+    ${linked.length?`<div class="dfs"><span class="muted" style="font-size:.85rem">Correctifs liés (repris dans les travaux préconisés) :</span>${linked.map(i=>`<div class="df"><span>${esc(d.df[i][0])}</span><button type="button" data-act="deldf" data-it="${d.id}" data-i="${i}" aria-label="Retirer ce correctif">${svg('x')}</button></div>`).join('')}</div>`:''}
    </div>`:''}
   </div>`;
 }
-function phBlock(id,s,nums,need){return `<div class="grp"><span>Photos${need?' <span class="need">— à joindre impérativement</span>':''}</span>
-     <div class="phs">${s.ph.map((p,i)=>`<div class="phc"><img src="${p.src}" alt="Photo ${nums[id+':'+i]}">
+// Liste des commentaires pré-rédigés : vers le commentaire du désordre, ou vers celui de la photo i.
+const dfSel=(d,i)=>d.df?`<select data-it="${d.id}" data-k="df" ${i!=null?`data-i="${i}"`:''} aria-label="Insérer un commentaire pré-rédigé"><option value="">+ Insérer un commentaire pré-rédigé…</option>${d.df.map((x,k)=>`<option value="${k}">${esc(x[0])}</option>`).join('')}<option value="autre">Autre (rédiger)</option></select>`:'';
+// Photos ; pour un désordre (d), chaque photo a sa légende et son commentaire.
+function phBlock(id,s,nums,need,d){return `<div class="grp"><span>Photos${need?' <span class="need">— à joindre impérativement</span>':''}</span>
+     <div class="phs">${s.ph.map((p,i)=>`<div class="phc${d?' st':''}"><img src="${p.src}" alt="Photo ${nums[id+':'+i]}">
        <div class="cap"><div class="tools"><b>Photo ${nums[id+':'+i]}</b><button type="button" data-act="delph" data-it="${id}" data-i="${i}">Supprimer</button></div>
-       <textarea data-it="${id}" data-k="cap" data-i="${i}" placeholder="Légende : ce que montre la photo">${esc(p.cap)}</textarea></div></div>`).join('')}
+       ${d?'<span class="lab">Légende</span>':''}<textarea data-it="${id}" data-k="cap" data-i="${i}" aria-label="Légende de la photo ${nums[id+':'+i]}" placeholder="${d?'Ex. : chambre 1, prise murale':'Légende : ce que montre la photo'}">${esc(p.cap)}</textarea>
+       ${d?`<span class="lab">Commentaire</span>${dfSel(d,i)}<textarea id="com_${id}_${i}" data-it="${id}" data-k="com" data-i="${i}" aria-label="Commentaire de la photo ${nums[id+':'+i]}" placeholder="Commentaire (facultatif)">${esc(p.com||'')}</textarea>`:''}</div></div>`).join('')}
       <div class="cams"><label class="btn cam">${svg('cam')}Prendre une photo<input type="file" accept="image/*" capture="environment" data-photo="${id}"></label>
       <label class="btn cam">${svg('plus')}Depuis la galerie<input type="file" accept="image/*" multiple data-photo="${id}"></label></div></div></div>`}
 function topbar(title,sub,back,logo){return `<div class="top">${back?`<button class="btn-icon" data-act="${back}" aria-label="Retour">${svg('back')}</button>`:''}<div class="grow"><h1>${esc(title)}</h1>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>${logo?`<img class="com" src="${logo}" alt="${esc(isPdl(cur)?cur.f.commune:cur.f.dem)}">`:''}</div>`}
@@ -2111,6 +2201,8 @@ function render(){
        <button class="avatar" data-act="go" data-v="profil" aria-label="Mon profil">${ini?esc(ini):svg('admin')}</button></div>
      ${P.nom?'':`<div class="banner">Renseignez votre profil (nom, téléphone, e-mail, signature) : il figure sur chaque rapport. <button data-act="go" data-v="profil">Remplir mon profil</button></div>`}
      ${rap?`<div class="banner">${P.lastBak?'Dernière sauvegarde '+ilya(P.lastBak):'Aucune sauvegarde'} · ${rap.length} dossier${rap.length>1?'s':''} non sauvegardé${rap.length>1?'s':''}. Ils ne sont enregistrés que sur cet appareil. <button data-act="bak">Sauvegarder maintenant</button></div>`:''}
+     ${stoPlein()?`<div class="banner">Espace presque plein (${Math.round(100*STO.u/STO.q)} %). Sauvegardez puis supprimez des dossiers terminés pour pouvoir ajouter des photos. <button data-act="go" data-v="sauvegarde">Voir l’espace utilisé</button></div>`:''}
+     ${STO.p===false&&visits.length?'<div class="banner">Stockage non protégé : le navigateur peut effacer les données si l’appareil manque de place. Installez l’application sur l’écran d’accueil.</div>':''}
      <div class="eyebrow">Constat décence · Permis de louer</div>
      <h1 class="hello">${P.nom?'Bonjour '+esc(P.nom.split(/\s+/)[0]):'Bonjour'}</h1>
      <button class="big primary" data-act="new">${svg('plus')}<span><span class="t">Nouvelle visite</span><span class="d">Démarrer un constat</span></span></button>
@@ -2141,12 +2233,15 @@ function render(){
     const L=[...visits].sort((a,b)=>b.updated-a.updated),n=L.filter(v=>exSel.has(v.id)).length;
     app.innerHTML=`${topbar('Sauvegarde et import','Visites et carnet des mairies','list')}
      <p class="muted">Cochez les dossiers à exporter. La sauvegarde (.json) sert à transférer des dossiers vers un PC ou à les partager avec un collègue. L’import accepte aussi les dossiers (.json) enregistrés avec l’ancien « Simulateur Loc’Avantages ».</p>
+     ${STO.q?`<div class="sto"><div class="eyebrow">Espace de stockage</div><div class="pbar${stoPlein()?' plein':''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(100*STO.u/STO.q)}" aria-label="Espace de stockage utilisé"><span style="width:${Math.max(1,Math.round(100*STO.u/STO.q))}%"></span></div>
+      <div>${tailleTxt(STO.u)} utilisés sur environ ${tailleTxt(STO.q)} disponibles</div>
+      <div class="muted">${STO.p?'Stockage protégé : le navigateur ne supprimera pas les données.':STO.p===false?'Stockage non protégé : installez l’application sur l’écran d’accueil pour éviter un effacement automatique.':''}</div></div>`:''}
      <div class="hint">Pour transférer une sauvegarde vers un téléphone, utilisez Quick Share, le Bluetooth ou un câble USB, pas Outlook, Teams ni OneDrive professionnel : ces applications chiffrent le fichier, qui devient impossible à importer.</div>
      <div class="row" style="margin-bottom:12px"><button data-act="sel" data-k="all">Tout cocher</button><button data-act="sel" data-k="encours">Dossiers en cours</button><button data-act="sel" data-k="nonsauv">Non sauvegardés</button><button data-act="sel" data-k="none">Tout décocher</button></div>
      <div class="items">${L.length?L.map(v=>`<label class="item ${exSel.has(v.id)?'on':''}" style="display:flex;gap:12px;align-items:flex-start;padding:12px 14px;cursor:pointer">
        <input type="checkbox" data-sel="${v.id}" ${exSel.has(v.id)?'checked':''} style="width:24px;height:24px;margin:2px 0 0;accent-color:var(--accent);flex:none">
        <span style="min-width:0"><span class="tag ${isPdl(v)?'pdl':isDeg(v)?'deg':isLoc(v)?'loc':''}">${esc(kind(v))}</span><span style="display:block;font-weight:700;margin-top:4px">${esc(who(v))}</span>
-       <span class="muted" style="display:block;font-size:.9rem">${esc(where(v)||'Adresse non renseignée')}${v.f.dateVis?' · visite le '+esc(frDate(v.f.dateVis)):''}${v.pdfAt?' · terminé':''}${v.num?' · N° '+esc(v.num):''} · ${sauve(v)?'sauvegardé le '+new Date(v.savedAt).toLocaleDateString('fr-FR'):'<b style="color:var(--warn)">non sauvegardé</b>'}</span></span></label>`).join('')
+       <span class="muted" style="display:block;font-size:.9rem">${esc(where(v)||'Adresse non renseignée')}${v.f.dateVis?' · visite le '+esc(frDate(v.f.dateVis)):''}${v.pdfAt?' · terminé':''}${v.num?' · N° '+esc(v.num):''} · ${tailleTxt(JSON.stringify(v).length)} · ${sauve(v)?'sauvegardé le '+new Date(v.savedAt).toLocaleDateString('fr-FR'):'<b style="color:var(--warn)">non sauvegardé</b>'}</span></span></label>`).join('')
       :'<div class="empty">Aucun dossier sur cet appareil.</div>'}</div>
      <label class="chip" style="margin-top:14px"><input type="checkbox" data-selmr ${exMairies?'checked':''}>Inclure le carnet d’adresses (${Object.keys(CARNET.l).length+Object.keys(MAIRIES.l).length})</label>
      <div class="links"><label class="btn">${svg('plus')}<span class="grow">Importer une sauvegarde</span><input type="file" accept=".json,application/json" data-import hidden></label></div>`;
@@ -2208,6 +2303,15 @@ function render(){
   if(isDeg(cur)&&degView(app,bar,bi))return;
   if(isLoc(cur)&&locView(app,bar,bi))return;
   const logo=logoOf(cur),RV=RR(cur),pdl=isPdl(cur);
+  if(view==='avantpdf'){const C=controles(cur),ko=C.filter(c=>c[0]==='ko'),av=C.filter(c=>c[0]==='av');
+    const li=c=>`<div class="ctl ${c[0]}">${svg(c[0]==='ko'?'x':'warn')}<span class="grow">${esc(c[1])}</span>${c[2]?`<button data-act="go" data-v="${c[2]}">Ouvrir</button>`:''}</div>`;
+    app.innerHTML=`${topbar('Avant de générer le rapport',[who(cur),cur.num&&'N° '+cur.num].filter(Boolean).join(' · '),'dash',logo)}
+     ${ko.length?`<h2 class="sec ctlh ko">À corriger (${ko.length})</h2><div class="ctls">${ko.map(li).join('')}</div>`:''}
+     ${av.length?`<h2 class="sec ctlh av">À vérifier (${av.length})</h2><div class="ctls">${av.map(li).join('')}</div>`:''}
+     ${C.length?'':'<div class="empty">Tout est contrôlé.</div>'}
+     <p class="muted">${ko.length?'Vous pouvez générer le PDF quand même : le dossier restera dans les dossiers en cours.':'Ces points ne bloquent pas : le dossier passera dans les dossiers terminés.'}</p>`;
+    bar.hidden=false;bi.innerHTML=`<button data-act="dash">Retour au dossier</button><button class="${ko.length?'':'btn-primary'}" data-act="pdf" data-force="1">${svg('pdf')}${ko.length?'Générer quand même':'Générer le rapport PDF'}</button>`;
+    return}
   if(view==='dash'){
     const tile=(id,n,t,ic,st)=>`<button class="tile" data-act="go" data-v="${id}"><img class="ic" src="${ICO[ic]}" alt=""><span class="num">${n}</span><span class="lbl">${esc(t)}</span>${pills(st)}</button>`;
     const aN=ADM(cur).filter(f=>f[0]!=='h'&&filled(cur.f[f[0]])).length;
@@ -2256,7 +2360,7 @@ function render(){
   app.innerHTML=`${topbar(r.n+'. '+r.t,who(cur),'dash',logo)}
    ${r.pre?`<div class="form">${r.pre.map(field).join('')}</div>`:''}
    ${r.items?`<p class="muted">Pour chaque ligne, cochez le défaut constaté ou « RAS » (rien à signaler).</p><div class="items">${r.items.map(d=>itemHtml(d,nums)).join('')}</div>`:''}
-   ${r.gen?`${manq.length?`<div class="banner">Il reste ${nManq} point${nManq>1?'s':''} à renseigner (défaut ou RAS, type de chauffage, d’eau chaude ou de ventilation) avant de pré-remplir les travaux :
+   ${r.gen?`${manq.length?`<div class="banner">Il reste ${nManq} point${nManq>1?'s':''} à renseigner (défaut ou RAS, commentaire d’un sous-constat, type de chauffage, d’eau chaude ou de ventilation) avant de pré-remplir les travaux :
       <div class="row">${manq.map(([x,ds])=>`<button data-act="go" data-v="${x.id}">Rubrique ${x.n} : ${ds.length} point${ds.length>1?'s':''}</button>`).join('')}</div></div>`:''}
      <div class="row" style="margin-bottom:10px"><button class="btn-primary" data-act="gentrav" ${manq.length?'disabled':''}>${svg('sync')}${filled(cur.f.trav)?'Mettre à jour depuis les désordres':'Pré-remplir depuis les désordres'}</button></div>
      <p class="muted">La liste est générée par thème à partir des désordres cochés et des défauts types. Modifiez-la librement : la mise à jour ajoute seulement les correctifs manquants.</p>
@@ -2587,8 +2691,8 @@ document.addEventListener('input',e=>{
   if(el.dataset.lk&&!['checkbox','radio'].includes(el.type)&&el.tagName!=='SELECT'){locSet(el);save();return locLive()}
   if(el.dataset.gn==='pt'||el.dataset.gn==='motif'){const s=degS(el);s[el.dataset.gn]=el.value;save();return}
   if(el.dataset.f&&!el.dataset.ft){cur.f[el.dataset.f]=el.value;save();if(/^mr/.test(el.dataset.f))memoMairie(cur);return}
-  if(el.dataset.it&&(el.dataset.k==='note'||el.dataset.k==='loc')){it(el.dataset.it)[el.dataset.k]=el.value;save();if(el.nextElementSibling?.classList.contains('wc'))el.nextElementSibling.textContent=motsTxt(el.value)}
-  if(el.dataset.it&&el.dataset.k==='cap'){it(el.dataset.it).ph[+el.dataset.i].cap=el.value;save()}
+  if(el.dataset.it&&el.dataset.k==='note'){it(el.dataset.it)[el.dataset.k]=el.value;save();cmMaj(el.dataset.it);if(el.nextElementSibling?.classList.contains('wc'))el.nextElementSibling.textContent=motsTxt(el.value)}
+  if(el.dataset.it&&(el.dataset.k==='cap'||el.dataset.k==='com')){it(el.dataset.it).ph[+el.dataset.i][el.dataset.k]=el.value;save();cmMaj(el.dataset.it)}
 });
 document.addEventListener('change',async e=>{
   const el=e.target;
@@ -2626,15 +2730,21 @@ document.addEventListener('change',async e=>{
     if(k==='on'||k==='d'||k==='ras'){s[k]=el.checked;if(el.checked&&k!=='d')s[k==='on'?'ras':'on']=false;if(k==='on'&&s.on&&itemOf(el.dataset.it).dm)dmMaj(s);save();return keep()}
     if(['dA','tA','twA','crep','tw'].includes(k)){if(k==='tw'){const i=+el.dataset.i;s.tw=(s.tw||[]).filter(x=>x!==i);if(el.checked)s.tw.push(i);s.tw.sort((a,b)=>a-b)}else s[k]=el.value.trim();
       dmMaj(s);save();return keep()}
-    if(k==='df'){const v=el.value;el.value='';if(v==='')return;const ta=$('#note_'+el.dataset.it);
-      if(v!=='autre'){const i=+v,t=itemOf(el.dataset.it).df[i][0];if(!s.df.includes(i))s.df.push(i);
-        s.note=(s.note.trim()?s.note.replace(/\s+$/,'')+'\n':'')+t+(/[.!?]$/.test(t)?'':'.');ta.value=s.note;save()}
+    // Commentaire pré-rédigé : inséré dans le commentaire du désordre ou de la photo (data-i), correctif lié au désordre.
+    if(k==='df'){const v=el.value;el.value='';if(v==='')return;const pi=el.dataset.i,o=pi===undefined?s:s.ph[+pi],ck=pi===undefined?'note':'com',ta=$(pi===undefined?'#note_'+el.dataset.it:`#com_${el.dataset.it}_${pi}`);
+      if(v!=='autre'){const d=itemOf(el.dataset.it),i=+v,t=d.df[i][0],x=o[ck]||'',oi=dfO(d,i);if(!s.df.includes(i))s.df.push(i);
+        o[ck]=(x.trim()?x.replace(/\s+$/,'')+'\n':'')+t+(/[.!?]$/.test(t)?'':'.');ta.value=o[ck];
+        // Commentaire relié à un sous-constat : la case du sous-constat est cochée.
+        if(oi>=0&&!s.o.includes(oi)){s.o.push(oi);s.o.sort((a,b)=>a-b);const c=document.querySelector(`input[data-it="${el.dataset.it}"][data-k="o"][data-i="${oi}"]`);if(c)c.checked=true}
+        save();cmMaj(el.dataset.it)}
       ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);return}
-    if(k==='o'||k==='t'){const i=+el.dataset.i;s[k]=s[k].filter(x=>x!==i);if(el.checked)s[k].push(i);s[k].sort((a,b)=>a-b);save();return}
+    if(k==='o'||k==='t'){const i=+el.dataset.i;s[k]=s[k].filter(x=>x!==i);if(el.checked)s[k].push(i);s[k].sort((a,b)=>a-b);save();cmMaj(el.dataset.it);return}
   }
   if(el.dataset.photo){
-    const s=it(el.dataset.photo),files=[...el.files];el.value='';
+    const s=it(el.dataset.photo),files=[...el.files],vide=!s.ph.length,d=itemOf(el.dataset.photo);el.value='';
     for(const f of files){try{s.ph.push(await shrink(f))}catch(err){toast('Photo non ajoutée : '+err.message)}}
+    // Première photo d'un désordre : son commentaire devient celui de la photo 1.
+    if(vide&&s.ph.length&&d&&!d.dm&&s.note.trim()){s.ph[0].com=s.note;s.note=''}
     await save(true);keep();toast(files.length>1?files.length+' photos ajoutées':'Photo ajoutée');
   }
 });
@@ -2669,7 +2779,9 @@ document.addEventListener('click',async e=>{
   if(a==='dellgt'){if(!armed(b,'Confirmer la suppression'))return;const id=b.dataset.g;cur.g=cur.g.filter(g=>g.id!==id);
     for(const k of Object.keys(cur.f))if(k.startsWith(id+'_'))delete cur.f[k];for(const k of Object.keys(cur.it))if(k.startsWith(id+':'))delete cur.it[k];save();return keep()}
   if(a==='markdone'){cur.done[b.dataset.r]=!cur.done[b.dataset.r];save();return render()}
-  if(a==='delph'){if(!armed(b,'Confirmer'))return;it(b.dataset.it).ph.splice(+b.dataset.i,1);save();return keep()}
+  if(a==='delph'){if(!armed(b,'Confirmer'))return;const s=it(b.dataset.it),[p]=s.ph.splice(+b.dataset.i,1),d=itemOf(b.dataset.it);
+    // Dernière photo d'un désordre supprimée : son commentaire revient dans celui du désordre.
+    if(!s.ph.length&&d&&!d.dm&&p.com?.trim())s.note=[s.note.trim(),p.com.trim()].filter(Boolean).join('\n');save();return keep()}
   if(a==='dmregen'){const s=it(b.dataset.it);s.note=s.auto=dmTexte(cur,s);save();return keep()}
   if(a==='deldf'){const s=it(b.dataset.it);s.df=s.df.filter(i=>i!==+b.dataset.i);save();return keep()}
   if(a==='clrpsig'){delete P.sig;saveP();return render()}
@@ -2689,7 +2801,11 @@ document.addEventListener('click',async e=>{
   if(a==='ia'){try{await navigator.clipboard.writeText(texteRelecture(cur));toast('Texte copié : collez-le dans Copilot')}catch(err){toast('Copie impossible : '+err.message);return}
     open('https://copilot.microsoft.com/','_blank','noopener');return}
   if(a==='install'){const ev=instEv;instEv=null;render();if(ev){ev.prompt();await ev.userChoice.catch(()=>{})}return}
-  if(a==='pdf'){await save(true);if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur le rapport');view='profil';return go()}await numeroter();const v=cur;carnetMemo(v);return exportPdf(v).then(()=>{if(window.jspdf&&(!isDeg(v)||degFinal(v))){v.pdfAt=Date.now();store.put(v).catch(()=>{})}}).catch(err=>toast('PDF impossible : '+err.message))}
+  if(a==='pdf'){await save(true);if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur le rapport');view='profil';return go()}await numeroter();const v=cur;carnetMemo(v);
+    // Décence et permis de louer : contrôle avant le PDF ; avec des points à corriger, le dossier reste en cours.
+    const C=isDeg(v)||isLoc(v)?[]:controles(v),ko=C.some(c=>c[0]==='ko');
+    if(C.length&&!b.dataset.force){view='avantpdf';return go()}
+    return exportPdf(v).then(()=>{if(!window.jspdf)return;if(isDeg(v)?degFinal(v):!ko){v.pdfAt=Date.now();store.put(v).catch(()=>{})}else if(ko)toast('PDF généré : le dossier reste en cours tant que les points à corriger ne sont pas réglés')}).catch(err=>toast('PDF impossible : '+err.message))}
   if(a==='export')return exportJson();
   if(a==='sel'){exSel.clear();for(const v of visits)if(b.dataset.k==='all'||b.dataset.k==='encours'&&!v.pdfAt||b.dataset.k==='nonsauv'&&!sauve(v))exSel.add(v.id);return keep()}
   if(a==='cbdel'){if(!armed(b,'Confirmer la suppression'))return;delete CARNET.l[b.dataset.k];saveCarnet();cbDL();return keep()}
@@ -2702,13 +2818,13 @@ document.addEventListener('click',async e=>{
 });
 // Suppression en deux temps : le premier appui arme le bouton, le second confirme.
 function armed(b,label){if(b.classList.contains('armed'))return true;b.classList.add('armed');const old=b.textContent;b.textContent=label;setTimeout(()=>{b.classList.remove('armed');b.textContent=old},3000);return false}
-function go(){if(cur)carnetMemo(cur);if(P.nom)numeroter();render();scrollTo(0,0)}
+function go(){if(cur)carnetMemo(cur);if(P.nom)numeroter();render();scrollTo(0,0);majStockage()}
 // Après chaque affichage : suggestions code postal / commune selon les valeurs déjà saisies.
 {const r0=render;render=function(){r0();cpInit()}}
 // Relecture IA : consigne + désordres + travaux, sans donnée personnelle (ni nom, ni adresse).
 function texteRelecture(v){
   const des=RR(v).filter(r=>r.items).flatMap(r=>r.items.filter(d=>v.it[d.id]?.on).map(d=>{const s=v.it[d.id];
-    return `- Rubrique ${r.n}, ${d.t}${s.o.length?' : '+s.o.map(i=>d.o[i]).join(' ; '):''}${s.loc?' (localisation : '+s.loc+')':''}${s.note.trim()?'. Précisions : '+s.note.trim().replace(/\s*\n\s*/g,' '):''}`}));
+    return `- Rubrique ${r.n}, ${d.t}${s.o.length?' : '+s.o.map(i=>d.o[i]).join(' ; '):''}${s.note.trim()?'. Précisions : '+s.note.trim().replace(/\s*\n\s*/g,' '):''}${(ph=>ph.length?'. Photos : '+ph.join(' ; '):'')(s.ph.map(p=>[p.cap,p.com].map(x=>String(x||'').trim().replace(/\s*\n\s*/g,' ')).filter(Boolean).join(' : ')).filter(Boolean))}`}));
   return ['Tu relis la liste de travaux préconisés d’un rapport de visite de logement ('+(isPdl(v)?'permis de louer, autorisation préalable de mise en location':'contrôle de décence, décret n° 2002-120')+').',
     'Corrige l’orthographe et la grammaire, améliore la clarté sans changer le sens technique, et signale les incohérences avec les désordres constatés : désordre sans travaux correspondant, ou travaux sans désordre. N’ajoute pas d’exigence réglementaire non justifiée.',
     'Rends d’abord la liste corrigée, dans la même structure, puis la liste de tes remarques.','',
@@ -3114,8 +3230,8 @@ async function exportPdf(v){
       if(d.ty&&d.tl===MEL){c3.push(gap(1),tx(d.tl+' :',{i:1}));d.ty.forEach((x,i)=>c3.push(cb(s.t.includes(i),x)))}
       if(d.norm&&s.on){const m=normeCAF(f.lNbOcc);if(m)c3.push(tx(`Norme CAF pour ${f.lNbOcc} occupant(s) : ${m} m² minimum. Superficie : ${f.lSurf||'non renseignée'} m².`))}
       if(c3.length)c3.push(gap(1));
-      c3.push(rt([['(3) '],[s.on?[s.loc,s.note].filter(Boolean).join(' - '):'',1]],{c:RED}));
-      if(s.on)s.ph.forEach((p,i)=>{c3.push(gap(1),img(p.src,p.w,p.h,{maxH:62}),rt([[`Photo ${nums[d.id+':'+i]}${p.cap?' : ':''}`],[p.cap,1]],{sz:8,c:MUT}))});
+      c3.push(rt([['(3) '],[s.on?s.note:'',1]],{c:RED}));
+      if(s.on)s.ph.forEach((p,i)=>{c3.push(gap(1),img(p.src,p.w,p.h,{maxH:62}),rt([[`Photo ${nums[d.id+':'+i]}${p.cap?' : ':''}`],[p.cap,1]],{sz:8,c:MUT}));if(p.com?.trim())c3.push(rt([[p.com.trim(),1]],{c:RED}))});
       row([s.on?{items:c1,fill:ROSE}:c1,[tx(d.ref||'',{sz:7.5,c:MUT}),...(d.rsd?[gap(1),tx(d.rsd,{sz:7.5,c:MUT})]:[])],c3,d.d?{items:[cb(s.on&&s.d,'',{cc:RED})],va:'middle'}:[]],IW,{keep:70});
     }
     if(r.id==='r4')row([[tx('Installation de détecteur de fumée :',{b:1}),cbs(yn(f.detect))],[tx('CCH art. R.142-2',{sz:7.5,c:MUT})],[rt([['Nombre de détecteur de fumée : '],[f.detectNb,1]])],[]],IW);
@@ -3509,6 +3625,7 @@ function locPdfChart(doc,cp,x0,y0,w,h,{T,font,ACC,LL,INK,MUT,LINE,SKYT}){
   $('#cpdl').innerHTML=`<datalist id="cp_all">${Object.entries(CP_COM).flatMap(([cp,l])=>l.map(([n])=>`<option value="${esc(n)}" label="${cp}">`)).join('')}</datalist>`;
   render();
   try{await navigator.storage?.persist?.()}catch(e){}
+  majStockage();
   // Mode hors ligne : le service worker garde l'application en cache (impossible si le fichier est ouvert en local).
   if('serviceWorker' in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('sw.js').catch(()=>{});
   setTimeout(verifMaj,3000);addEventListener('online',verifMaj);document.addEventListener('visibilitychange',()=>{if(!document.hidden)verifMaj()});
