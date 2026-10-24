@@ -1199,7 +1199,10 @@ const nomPre=s=>{const w=s.split(' ').filter(Boolean),n=w.filter(x=>/\p{Lu}/u.te
 function thoLigne(txt,entete=THO_ENTETE){
   let L=tsv(String(txt||'')),H=entete,hd=null;const i=L.findIndex(r=>r.some(c=>nrmH(c)==='n° dossier'));
   if(i>=0){H=hd=L[i];L=L.slice(i+1)}
-  const r=L[0];if(!r)return hd?{f:{},H:hd}:null;
+  let r=L[0];if(!r)return hd?{f:{},H:hd}:null;
+  // La ligne copiée peut commencer en colonne A (vide) ou B : on réaligne sur le n° de dossier, sinon sur l'année.
+  for(const[h,re]of[['n° dossier',/^\d{4}-PL-\d+/i],['annee',/^\d{4}$/]]){const jH=H.findIndex(x=>nrmH(x)===h),jR=r.findIndex(x=>re.test(x.trim()));
+    if(jH>=0&&jR>=0){r=jR>=jH?r.slice(jR-jH):[...Array(jH-jR).fill(''),...r];break}}
   const g={};H.forEach((h,j)=>{const k=nrmH(h);if(!(k in g))g[k]=(r[j]||'').replace(/\s+/g,' ').trim()});
   const f={},set=(k,x)=>{if(x)f[k]=x},tel=(p,x)=>set(p+(/^(\+33 ?|0)[67]/.test(x)?'TelP':'TelF'),x),num=x=>(x||'').replace(',','.').match(/\d+(\.\d+)?/)?.[0];
   set('refDos',g['n° dossier']);
@@ -1223,6 +1226,8 @@ function thoLigne(txt,entete=THO_ENTETE){
   const H=[...THO_ENTETE];H[57]='date envoi demande\n rdv soliha';H[58]='date \ncontre-visite';const r2=Array(80).fill('');r2[1]='X-2';r2[40]='13/10/2026';r2[58]='3/1/27';r2[14]='a@b.fr';
   const u=thoLigne(H.map(h=>h.includes('\n')?'"'+h+'"':h).join('\t')+'\r\n'+r2.join('\t'));
   console.assert(u.H.length===THO_ENTETE.length&&u.f.refDos==='X-2'&&u.f.dateDepot==='2026-10-13'&&u.f.cvDateVis==='2027-01-03'&&u.f.typeVis==='Contre-visite'&&u.f.mMail==='a@b.fr'&&!('pNom' in u.f),'thoLigne en-tête');
+  const a=thoLigne('	'+row.join('	')).f,b=thoLigne(row.slice(1).join('	')).f;
+  console.assert(a.refDos==='2026-PL-001'&&a.pNom==='DURAND'&&a.adresse===f.adresse&&b.refDos==='2026-PL-001'&&b.lSurf==='62.5','thoLigne décalage');
   console.assert(thoLigne('')===null,'thoLigne vide')})();
 // Signature du propriétaire ou de son représentant : une par visite.
 const sigKey=v=>isCv(v)?'sigPcv':'sigP';
@@ -2243,7 +2248,7 @@ function audMigre(a){if(a.v>=2)return a;const X=(o,m)=>m[o]??'',fam=e=>String(e.
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.10.24-1757';
+const APP_VER='2026.10.24-1808';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
