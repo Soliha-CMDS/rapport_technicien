@@ -3126,7 +3126,7 @@ console.assert(ERGO_SANTE('anam')&&ERGO_SANTE('b_p1_transf')&&!ERGO_SANTE('noms'
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.10.30-2155';
+const APP_VER='2026.10.30-2220';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -4331,7 +4331,9 @@ function piedPdf(doc,v,type,ml,mr){const n=doc.getNumberOfPages();
   for(let i=1;i<=n;i++){doc.setPage(i);const w=doc.internal.pageSize.getWidth(),h=doc.internal.pageSize.getHeight();
     doc.setDrawColor(214,224,231);doc.setLineWidth(.3);doc.line(ml,h-11.5,w-mr,h-11.5);
     let x=ml;doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(27,109,150);
-    if(v.num){const r=PDFT('N° '+v.num);doc.text(r,x,h-7.8);x+=doc.getTextWidth(r+'   ')}
+    // Permis de louer : référence du dossier de la collectivité (ex. « PL 79 270 26 00031 »), pas le n° de l'application.
+    const num=isPdl(v)?v.f.refDos:v.num;
+    if(num){const r=PDFT('N° '+num);doc.text(r,x,h-7.8);x+=doc.getTextWidth(r+'   ')}
     doc.text(`Page ${i} / ${n}`,w-mr,h-7.8,{align:'right'});
     doc.setFont('helvetica','normal');doc.setTextColor(68,83,95);doc.text(PDFT(`${type} · édité le ${frDate(today())}`),x,h-7.8,{maxWidth:w-mr-25-x});
     doc.setFontSize(6.5);doc.text(PDFT(SOLIHA_ADR+' · contact.deux-sevres@soliha.fr'),ml,h-4.8)}}
