@@ -1,7 +1,7 @@
 {
-  "name": "Constat décence",
-  "short_name": "Constat décence",
-  "description": "Remplir le diagnostic constat décence pendant la visite, avec photos, et générer le rapport PDF.",
+  "name": "SoliTech",
+  "short_name": "SoliTech",
+  "description": "Application terrain des techniciens SOLiHA Charente-Maritime Deux-Sèvres : visites, relevés, photos et rapports PDF, hors ligne.",
   "lang": "fr",
   "start_url": "./",
   "scope": "./",
