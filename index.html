@@ -756,7 +756,7 @@ const LOC_ENGINE = (() => {
     l.push("Département des Deux-Sèvres", "Région Nouvelle-Aquitaine");
     return [...new Set(l)];
   }
-  return { TH, DISP, PRIME, TAX, resoudre, loyers, calcLogement, calcDossier, financeurs, norm, r2 };
+  return { TH, DISP, PRIME, TAX, SANS_PRIME_VACANCE, MELLOIS_SANS_VACANCE, communeDe, resoudre, loyers, calcLogement, calcDossier, financeurs, norm, r2 };
 })();
 // Plafonds de ressources des locataires (revenu fiscal de référence) : Loc 1, Loc 2, Loc 3.
 const LOC_PLAF_RES = [
@@ -781,6 +781,75 @@ const cases=[
  const exp=[["STM",72433,66117,79972,{"Anah":40595,"Commune de Saint-Maixent-l\'École":31838},-1444.12,-50885,[1396,1316]],["AGGLO2B",37250,22750,28750,{"Anah":26250,"Agglo2B":5500,"Commune de Bressuire":5500},15409.4,-12000,[1402]],["MELLOIS",46500,13500,19500,{"Anah":23500,"CC Mellois en Poitou":20000},null,null,[2366]],["VDG",35200,8800,11220,{"Anah":10800,"CC Val de Gâtine":12200,"Commune d\'Ardin":2800,"Pacte des solidarités (2026)":9400},26230.44,2180,[1189]],["NONE",8625,43875,49125,{"Anah":8625},null,null,[0,0]]];
  cases.forEach((d,i)=>{const R=LOC_ENGINE.calcDossier(LOC_DATA,d,x=>Math.round(x)+" €");const got=[R.ctx.key,R.total,R.reste,R.resteTTC,R.parFin,R.comp.ok?R.comp.la.bilan:null,R.comp.ok?R.comp.ll.bilan:null,R.lgs.map(r=>r.impot&&r.impot.montant||0)];
   console.assert(JSON.stringify(got)===JSON.stringify(exp[i]),"Loc'Avantages cas "+(i+1),got)});
+})();
+// MaPrimeRénov' rénovation d'ampleur, propriétaire bailleur en nom propre : comparaison avec Loc'Avantages.
+// Plafonds de ressources 2026 hors Île-de-France (revenu fiscal de référence) : 1 à 5 personnes, puis majoration par personne. À mettre à jour chaque année.
+const MPR = {
+  plaf: [[17363, 22259, 31185], [25393, 32553, 45842], [30540, 39148, 55196], [35676, 45735, 64550], [40835, 52348, 73907]],
+  sup: [5151, 6598, 9357],
+  cats: ["Très modeste (bleu)", "Modeste (jaune)", "Intermédiaire (violet)", "Supérieur (rose)"],
+  taux: [0.8, 0.6, 0.45, 0.1], ecr: [1, 0.9, 0.8, 0.5], depMax: { 2: 30000, 3: 40000 }
+};
+// Catégorie 0 à 3 (bleu à rose), null si le revenu ou le foyer manque.
+function mprCat(rfr, pers) {
+  if (!(rfr >= 0) || !(pers >= 1)) return null;
+  const n = Math.round(pers), p = MPR.plaf[Math.min(n, 5) - 1].map((x, k) => x + Math.max(0, n - 5) * MPR.sup[k]);
+  const i = p.findIndex((x) => rfr <= x);
+  return i < 0 ? 3 : i;
+}
+// lg : logement (nombres normalisés) ; r : son résultat Loc'Avantages ; sans montant éligible saisi, on reprend les travaux du logement.
+function mprLogement(cat, lg, r, ctx, opts, eur) {
+  const tva = opts.tva;
+  const saisi = +lg.mprMontant > 0, ht = saisi ? +lg.mprMontant : r.montantRef || 0, ttc = saisi ? Math.round(ht * (1 + tva)) : r.ttcTravaux || 0;
+  const gain = +lg.mprGain === 3 ? 3 : 2, dep = Math.min(ht, MPR.depMax[gain]), pct = Math.round(MPR.taux[cat] * 100) + " %";
+  const lignes = [{ fin: "Anah", lib: `MaPrimeRénov' – gain de ${gain} classes${gain === 3 ? " ou plus" : ""}`, base: `${pct} × ${eur(dep)} HT (plafond ${eur(MPR.depMax[gain])})`, m: Math.round(MPR.taux[cat] * dep) }];
+  if (lg.vacant && !LOC_ENGINE.SANS_PRIME_VACANCE.includes(ctx.insee)) lignes.push({ fin: "Anah", lib: "Prime de sortie de vacance", base: "Logement vacant depuis plus de 2 ans", m: LOC_ENGINE.PRIME.vacance });
+  // Pacte Mellois 2025-2027 : 1 000 € par logement (très modeste ou modeste). Val de Gâtine : AMO seulement, pas d'aide au propriétaire.
+  if (ctx.key === "MELLOIS" && cat <= 1) lignes.push({ fin: "CC Mellois en Poitou", lib: "Pacte territorial – MaPrimeRénov'", base: "Forfait par logement (ménage très modeste ou modeste)", m: 1000 });
+  // Primes locales de sortie de vacance : mêmes règles qu'en Loc'Avantages (validé par l'utilisateur le 30/10/2026).
+  const vac = (fin, m) => lignes.push({ fin, lib: "Prime de sortie de vacance", base: "Logement vacant depuis plus de 2 ans", m });
+  if (lg.vacant && ctx.key === "MELLOIS" && !LOC_ENGINE.MELLOIS_SANS_VACANCE.includes(ctx.insee)) vac("CC Mellois en Poitou", 5000);
+  if (lg.vacant && ctx.key === "VDG") { vac("CC Val de Gâtine", 2000); if (ctx.renforce) vac(LOC_ENGINE.communeDe(ctx.commune), 1000); if (opts.pacteSol) vac("Pacte des solidarités (2026)", 2000); }
+  let total = lignes.reduce((a, l) => a + l.m, 0);
+  const cap = Math.round(MPR.ecr[cat] * ttc);
+  if (total > cap) { lignes.push({ fin: "Anah", lib: "Écrêtement", base: `Aides limitées à ${Math.round(MPR.ecr[cat] * 100)} % de ${eur(ttc)} TTC`, m: cap - total, ecret: true }); total = cap; }
+  return { ht, ttc, gain, lignes, total };
+}
+// d : dossier normalisé ; R : résultat Loc'Avantages. null hors nom propre ou option non cochée.
+function mprDossier(d, R, eur) {
+  const p = d.proprio;
+  if (p.statut !== "NP" || !p.mprOn) return null;
+  const cat = p.mprCat !== "" && p.mprCat != null ? +p.mprCat : mprCat(parseFloat(p.rfr), parseFloat(p.foyer));
+  if (cat == null) return { cat: null };
+  const lgs = d.logements.map((lg, i) => mprLogement(cat, lg, R.lgs[i], R.ctx, R.opts, eur));
+  const total = lgs.reduce((a, x) => a + x.total, 0);
+  let comp = null;
+  // Même base que la comparaison Loc'Avantages ; loyer libre, sans réduction d'impôt.
+  if (R.comp.ok) {
+    const cp = R.comp, m = { invest: LOC_ENGINE.r2(cp.base - total), aides: total, loyers: cp.ll.loyers, impot: 0, revenu: cp.ll.revenu };
+    m.renta = m.invest > 0 ? m.revenu / m.invest : null;
+    m.retour = m.invest <= 0 ? 0 : m.revenu > 0 ? m.invest / m.revenu : null;
+    m.bilan = LOC_ENGINE.r2(m.revenu * cp.duree - m.invest);
+    comp = m;
+  }
+  return { cat, lgs, total, comp };
+}
+(() => {
+  console.assert(mprCat(17363, 1) === 0 && mprCat(17364, 1) === 1 && mprCat(64550, 4) === 2 && mprCat(64551, 4) === 3, "MPR catégories");
+  console.assert(mprCat(40835 + 2 * 5151, 7) === 0 && mprCat(40836 + 2 * 5151, 7) === 1 && mprCat(NaN, 2) === null, "MPR majoration");
+  const e = (x) => x + " €", ctx = { insee: "79049" };
+  // Très modeste, 3 classes, 45 000 € HT : 80 % × 40 000 = 32 000 + 5 000 vacance, écrêté à 100 % de 49 500 TTC → pas d'écrêtement
+  let r = mprLogement(0, { mprMontant: "45000", mprGain: 3, vacant: true }, {}, ctx, { tva: 0.1 }, e);
+  console.assert(r.total === 37000 && r.lignes.length === 2, "MPR cas 1", r);
+  // Supérieur, 2 classes, 10 000 € HT : 10 % = 1 000 + 5 000 = 6 000, écrêté à 50 % de 11 000 TTC = 5 500
+  r = mprLogement(3, { mprMontant: "10000", mprGain: 2, vacant: true }, {}, ctx, { tva: 0.1 }, e);
+  console.assert(r.total === 5500 && r.lignes[2].m === -500, "MPR cas 2", r);
+  // Mellois : +1 000 € en modeste, rien en intermédiaire
+  console.assert(mprLogement(1, { mprMontant: "20000", mprGain: 2 }, {}, { key: "MELLOIS", insee: "79049" }, { tva: 0.1 }, e).total === 13000, "MPR Mellois modeste");
+  console.assert(mprLogement(2, { mprMontant: "20000", mprGain: 2 }, {}, { key: "MELLOIS", insee: "79049" }, { tva: 0.1 }, e).total === 9000, "MPR Mellois intermédiaire");
+  // Val de Gâtine, périmètre renforcé, vacant, intermédiaire : 45 % × 20 000 = 9 000 + 5 000 + 2 000 + 1 000 + 2 000 = 19 000 (écrêtement 80 % × 22 000 = 17 600)
+  r = mprLogement(2, { mprMontant: "20000", mprGain: 2, vacant: true }, {}, { key: "VDG", renforce: true, commune: "Ardin", insee: "79012" }, { tva: 0.1, pacteSol: true }, e);
+  console.assert(r.total === 17600 && r.lignes.length === 6, "MPR Val de Gâtine vacance", r);
 })();
 
 // Communes par code postal (79 et 17), générée par build.py depuis codes_postaux_79_17.json : ne pas modifier à la main.
@@ -3057,7 +3126,7 @@ console.assert(ERGO_SANTE('anam')&&ERGO_SANTE('b_p1_transf')&&!ERGO_SANTE('noms'
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.10.30-2059';
+const APP_VER='2026.10.30-2155';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -3107,7 +3176,7 @@ function migrate(v){
     // Ancienne saisie : n° et voie du bien séparés, adresse du propriétaire en texte libre.
     if(l.bien&&l.bien.adresse===undefined){l.bien.adresse=[l.bien.numero,l.bien.voie].filter(Boolean).join(' ');delete l.bien.numero;delete l.bien.voie}
     if(l.proprio&&l.proprio.cp===undefined&&l.proprio.ville===undefined){const a=splitAdr(l.proprio.adresse);Object.assign(l.proprio,{adresse:a.adr,cp:a.cp,ville:a.ville})}v.loc={...d,...l,proprio:{...d.proprio,...l.proprio},bien:{...d.bien,...l.bien}};
-    if(!Array.isArray(v.loc.logements)||!v.loc.logements.length)v.loc.logements=[locLg(1)];if(!Array.isArray(v.loc.aidesProjet))v.loc.aidesProjet=[];return v}
+    if(!Array.isArray(v.loc.logements)||!v.loc.logements.length)v.loc.logements=[locLg(1)];v.loc.logements=v.loc.logements.map((x,i)=>({...locLg(i+1),...x}));if(!Array.isArray(v.loc.aidesProjet))v.loc.aidesProjet=[];return v}
   if(isPdl(v)){for(const x of ['p','m'])if(v.f[x+'Cp']===undefined&&v.f[x+'Ville']===undefined){const a=splitAdr(v.f[x+'Adr']);v.f[x+'Adr']=a.adr;v.f[x+'Cp']=a.cp;v.f[x+'Ville']=a.ville}
     if(!COMMUNES[v.f.commune])v.f.commune='Thouars';if(!v.f.typeVis)v.f.typeVis=v.f.cvDateVis?'Contre-visite':'Visite de contrôle'}else if(!COM[v.f.dem])v.f.dem='CAF';
   // Code postal et ville séparés ; bât., entrée, étage et courée regroupés dans l'adresse.
@@ -3698,8 +3767,8 @@ async function shrink(file){
 /* ---------- événements ---------- */
 /* ---------- Simulation Loc'Avantages ---------- */
 // Dossier : v.loc = {proprio, bien, logements, aidesProjet, obs, compDuree}, même structure que le simulateur d'origine.
-const locLg=i=>({nom:'Logement '+i,surface:'',annexes:'',thematique:'TD',loc:2,iml:false,travaux:'',montant:'',ttc:'',loyerLibre:'',vacant:false,gain35:false,passoire:false,rdc:false,montantRdc:'',aidesManu:[]});
-const locVide=()=>({proprio:{nom:'',prenoms:'',email:'',tel:'',adresse:'',cp:'',ville:'',soliact:'',statut:'NP',sci:''},
+const locLg=i=>({nom:'Logement '+i,surface:'',annexes:'',thematique:'TD',loc:2,iml:false,travaux:'',montant:'',ttc:'',loyerLibre:'',vacant:false,gain35:false,passoire:false,rdc:false,montantRdc:'',aidesManu:[],mprMontant:'',mprGain:2});
+const locVide=()=>({proprio:{nom:'',prenoms:'',email:'',tel:'',adresse:'',cp:'',ville:'',soliact:'',statut:'NP',sci:'',mprOn:false,rfr:'',foyer:'',mprCat:''},
  bien:{adresse:'',cp:'',insee:'',communeTxt:'',description:'',ravalement:false,ori:false,pacteSol:true,force:'AUTO',tauxCom:'10',tva:'10',moe:false,moeTaux:'',photo:''},
  logements:[locLg(1)],aidesProjet:[],obs:'',compDuree:9});
 const locEur=x=>Math.round(x).toLocaleString('fr-FR')+' €';
@@ -3709,7 +3778,7 @@ const locNum=x=>(Math.round(x*100)/100).toLocaleString('fr-FR');
 const locNombre=x=>typeof x==='string'&&/^\s*-?\d{1,3}(?:[\s]?\d{3})*(?:,\d+)?\s*$/.test(x)?x.replace(/[\s]/g,'').replace(',','.'):x;
 const locNorm=o=>Array.isArray(o)?o.map(locNorm):o&&typeof o==='object'?Object.fromEntries(Object.entries(o).map(([k,x])=>[k,k==='photo'?x:locNorm(x)])):locNombre(o);
 // Le moteur attend le n° et la voie séparés (périmètre de l'OPAH-RU) : tirés de l'adresse.
-const locR=(v=cur)=>{const d=locNorm(v.loc);Object.assign(d.bien,numVoie(d.bien.adresse));return LOC_ENGINE.calcDossier(LOC_DATA,d,locEur)};
+const locR=(v=cur)=>{const d=locNorm(v.loc);Object.assign(d.bien,numVoie(d.bien.adresse));const R=LOC_ENGINE.calcDossier(LOC_DATA,d,locEur);R.mpr=mprDossier(d,R,locEur);return R};
 const LOC_BYNAME=Object.fromEntries(LOC_DATA.communes.map(c=>[LOC_ENGINE.norm(c[1]),c]));
 const LOC_COURT={STM:'OPAH-RU Saint-Maixent',AGGLO2B:'OPAH Agglo2B',MELLOIS:'Pacte Mellois',VDG:'Pacte Val de Gâtine',NONE:'Anah seule'};
 const locDispNom=ctx=>LOC_ENGINE.DISP[ctx.key].nom+(ctx.key==='AGGLO2B'?` – commune en ${ctx.agglo}`:'')+(ctx.key==='VDG'&&ctx.renforce?' – périmètre renforcé':'');
@@ -3737,11 +3806,15 @@ const locSuTxt=r=>r.S?`Surface utile pour les aides : ${locNum(r.SU)} m²${r.SU>
 const locCmpTxt=R=>{if(R.comp.ok)return 'La comparaison figurera dans le document.';
   const sans=cur.loc.logements.map((l,k)=>+l.loyerLibre>0?null:l.nom||'Logement '+(k+1)).filter(Boolean);
   return (sans.length?'Loyer libre manquant pour : '+sans.join(', '):'Renseignez la commune et la surface de chaque logement')+' : la comparaison n’apparaîtra pas dans le document.'};
+const locMprCatTxt=R=>R.mpr&&R.mpr.cat!=null?'MaPrimeRénov’ '+MPR.cats[R.mpr.cat]+` : ${Math.round(MPR.taux[R.mpr.cat]*100)} % des travaux éligibles, écrêtement à ${Math.round(MPR.ecr[R.mpr.cat]*100)} % du TTC.`:'Renseignez le revenu fiscal de référence et le nombre de personnes, ou choisissez la catégorie.';
+const locMprLg=x=>`<span>MaPrimeRénov’ · ${locEur(x.ht)} HT éligibles${x.lignes.some(l=>l.ecret)?' · écrêtée':''}</span><b>${locEur(x.total)}</b>`;
 // Mise à jour en direct pendant la saisie, sans réafficher l'écran (le champ garde le curseur).
 function locLive(){const R=locR();
   const t=$('#ltot'),r=$('#lrac');if(t)t.textContent=locEur(R.total);if(r)r.textContent=locRac(R);
   R.lgs.forEach((x,i)=>{const e=$('#lres'+i);if(e)e.innerHTML=locResLg(x);const s=$('#lsu'+i);if(s)s.textContent=locSuTxt(x)});
   const c=$('#lcmp');if(c){c.textContent=locCmpTxt(R);c.classList.toggle('warn',!R.comp.ok)}
+  const m=$('#lmprcat');if(m)m.textContent=locMprCatTxt(R);
+  R.mpr?.lgs?.forEach((x,i)=>{const e=$('#lmpr'+i);if(e)e.innerHTML=locMprLg(x)});
   // Encadré du dispositif (rue, numéro) : réaffiché sauf pendant la saisie d'un de ses champs.
   const d=$('#ldisp');if(d&&!d.contains(document.activeElement))d.outerHTML=locDispBox(R)}
 const locBar=(bi,R,btn)=>{bi.innerHTML=`<div class="locsum"><span>Aides estimées</span><b id="ltot">${locEur(R.total)}</b></div><div class="locsum"><span>Reste à charge</span><b id="lrac">${locRac(R)}</b></div>${btn}`};
@@ -3791,7 +3864,12 @@ function locView(app,bar,bi){
     app.innerHTML=`${topbar('Le propriétaire',who(cur),'dash')}<div class="form">
       ${lin('proprio.nom','Nom',{attr:cbAttr('loc.proprio.nom')})}${lin('proprio.prenoms','Prénom(s)')}
       ${lrad('proprio.statut','Statut',[['NP','Nom propre'],['SCI_IR','SCI à l’IR'],['SCI_IS','SCI à l’IS']])}
-      ${sci?lin('proprio.sci','Nom de la SCI',{attr:cbAttr('loc.proprio.sci')}):''}${lin('proprio.soliact','N° dossier Soliact')}
+      ${sci?lin('proprio.sci','Nom de la SCI',{attr:cbAttr('loc.proprio.sci')}):''}
+      ${sci?'':`<div class="field full"><span>MaPrimeRénov’</span><div class="chips">${lchk('proprio.mprOn','Comparer avec MaPrimeRénov’ (loyer libre)')}</div></div>
+       ${p.mprOn?`${lin('proprio.rfr','Revenu fiscal de référence (€)',{im:'decimal'})}${lin('proprio.foyer','Personnes du foyer fiscal',{im:'numeric'})}
+       ${lsel('proprio.mprCat','Catégorie de revenus',[['','Automatique (d’après le revenu)'],...MPR.cats.map((c,k)=>[String(k),c])],1)}
+       <div class="hint full" id="lmprcat">${esc(locMprCatTxt(R))}</div>`:''}`}
+      ${lin('proprio.soliact','N° dossier Soliact')}
       ${lin('proprio.email','E-mail',{type:'email'})}${lin('proprio.tel','Téléphone',{type:'tel'})}
       ${lin('proprio.adresse','Adresse',{full:1})}${(([a,d])=>lin('proprio.cp','Code postal',{attr:a,hint:d}))(cpA('lk_proprio_cp','lk_proprio_ville'))}${(([a,d])=>lin('proprio.ville','Ville',{attr:a,hint:d}))(vA('lk_proprio_ville','lk_proprio_cp'))}</div>`;
     locBar(bi,R,`<button class="btn-primary" data-act="go" data-v="lbien">Continuer</button>`);return true}
@@ -3825,6 +3903,10 @@ function locView(app,bar,bi){
         ${vdg&&lg.rdc?lin(P+'.montantRdc','Montant HT des travaux d’adaptation (€)',{full:1,im:'decimal',ph:'Vide : prime maximale'}):''}
         <div class="field full"><span>Aides complémentaires (forfait)</span>${locAids(P+'.aidesManu',lg.aidesManu,R)}</div>
        </div>
+       ${R.mpr?.lgs?`<div class="form" style="margin:0">
+        ${lin(P+'.mprMontant','Travaux de rénovation énergétique éligibles MaPrimeRénov’ HT (€)',{full:1,im:'decimal',ph:'Vide : travaux estimés HT du logement'})}
+        ${lrad(P+'.mprGain','Gain énergétique visé (MaPrimeRénov’)',[[2,'2 classes (30 000 € HT max.)'],[3,'3 classes ou plus (40 000 € HT max.)']],1)}</div>
+        <div class="lres" id="lmpr${i}">${locMprLg(R.mpr.lgs[i])}</div>`:''}
        <div class="lres" id="lres${i}">${locResLg(r)}</div></div>`}).join('')}</div>
      <button class="big secondary" data-act="laddlg">${svg('plus')}<span><span class="t">Ajouter un logement</span><span class="d">Un bloc par logement du projet</span></span></button>`;
     locBar(bi,R,fini);return true}
@@ -3862,14 +3944,19 @@ function locView(app,bar,bi){
        ${r.notes.map(n=>`<div class="hint warn">${esc(n)}</div>`).join('')}
        <div class="muted">Loyer plafond Loc ${lg.loc} : ${r.niveau?`<b>${locEur2(r.niveau.mensuel)}</b> / mois hors charges (${locEur2(r.niveau.m2)}/m²)`:'commune et surface à renseigner'}<br>
         Réduction d’impôt : ${r.impot?(r.impot.na?esc(r.impot.na):`<b>${locEur(r.impot.montant)}</b> / an (${Math.round(r.impot.taux*100)} % des loyers bruts au plafond)`):'—'}</div></div>`}).join('')}</div>
-     <h2 class="sec">Comparaison avec le loyer libre</h2>
-     ${cp.ok?`<table class="ltab"><thead><tr><th></th><th class="n">Loc’Avantages</th><th class="n">Loyer libre</th></tr></thead><tbody>
-       <tr><td>Investissement du propriétaire</td><td class="n">${locEur(cp.la.invest)}</td><td class="n">${locEur(cp.ll.invest)}</td></tr>
-       <tr><td>Revenu annuel<small>loyers + réduction d’impôt</small></td><td class="n">${locEur(cp.la.revenu)}</td><td class="n">${locEur(cp.ll.revenu)}</td></tr>
-       <tr><td>Rentabilité brute annuelle</td><td class="n">${pc(cp.la.renta)}</td><td class="n">${pc(cp.ll.renta)}</td></tr>
-       <tr><td>Retour sur investissement</td><td class="n">${ans(cp.la.retour)}</td><td class="n">${ans(cp.ll.retour)}</td></tr>
-       <tr><td>Bilan sur ${cp.duree} ans<small>revenus cumulés − investissement</small></td><td class="n">${locEur(cp.la.bilan)}</td><td class="n">${locEur(cp.ll.bilan)}</td></tr></tbody>
-       <tfoot><tr><td>${cp.la.bilan>=cp.ll.bilan?'Gain de Loc’Avantages':'Avantage du loyer libre'} sur ${cp.duree} ans</td><td class="n" colspan="2">${locEur(Math.abs(cp.la.bilan-cp.ll.bilan))}</td></tr></tfoot></table>`
+     <h2 class="sec">${R.mpr?'Comparaison avec le loyer libre et MaPrimeRénov’':'Comparaison avec le loyer libre'}</h2>
+     ${R.mpr?R.mpr.cat==null?`<p class="hint warn">MaPrimeRénov’ : ${esc(locMprCatTxt(R))}</p>`:`<h3>MaPrimeRénov’ (${esc(MPR.cats[R.mpr.cat])})</h3>
+      <table class="ltab"><tbody>${R.mpr.lgs.map((x,i)=>x.lignes.map(l=>`<tr${l.ecret?' class="ecret"':''}><td>${esc(D.logements[i].nom||'Logement '+(i+1))} · ${esc(l.lib)}<small>${esc(l.base)}</small></td><td class="n">${locEur(l.m)}</td></tr>`).join('')).join('')}</tbody>
+       <tfoot><tr><td>Total MaPrimeRénov’</td><td class="n">${locEur(R.mpr.total)}</td></tr></tfoot></table>`:''}
+     ${cp.ok?(()=>{const m=R.mpr?.comp,col=(f,g)=>`<td class="n">${f(cp.la[g])}</td><td class="n">${f(cp.ll[g])}</td>${m?`<td class="n">${f(m[g])}</td>`:''}`;
+      const B=[['Loc’Avantages',cp.la.bilan],['Loyer libre',cp.ll.bilan],...(m?[['MaPrimeRénov’',m.bilan]]:[])].sort((a,b)=>b[1]-a[1]);
+      return `<table class="ltab"><thead><tr><th></th><th class="n">Loc’Avantages</th><th class="n">Loyer libre</th>${m?'<th class="n">MaPrimeRénov’<small>loyer libre</small></th>':''}</tr></thead><tbody>
+       <tr><td>Investissement du propriétaire</td>${col(locEur,'invest')}</tr>
+       <tr><td>Revenu annuel<small>loyers + réduction d’impôt</small></td>${col(locEur,'revenu')}</tr>
+       <tr><td>Rentabilité brute annuelle</td>${col(pc,'renta')}</tr>
+       <tr><td>Retour sur investissement</td>${col(ans,'retour')}</tr>
+       <tr><td>Bilan sur ${cp.duree} ans<small>revenus cumulés − investissement</small></td>${col(locEur,'bilan')}</tr></tbody>
+       <tfoot><tr><td>Meilleur bilan sur ${cp.duree} ans : ${esc(B[0][0])}<small>écart avec ${esc(B[1][0])}</small></td><td class="n" colspan="${m?3:2}">${locEur(B[0][1]-B[1][1])}</td></tr></tfoot></table>`})()
       :`<p class="hint warn">${esc(locCmpTxt(R))}</p>`}`;
     locBar(bi,R,`<button class="btn-primary" data-act="pdf">${svg('pdf')}Générer le PDF</button>`);return true}
   return false;
@@ -4764,20 +4851,30 @@ async function locPdf(v){
      y+=2;need(hh);[[`LOYER PLAFOND LOC ${lg.loc}`,CA],["RÉDUCTION D'IMPÔT ANNUELLE",CB]].forEach(([l,C],k)=>{const x=ML+k*(cw+8);font(7,'bold',ACC);doc.text(T(l),x,y+3);let yy=y+5;
        C.forEach(([t,s])=>{font(s==='b'?9.5:8,s==='b'?'bold':'normal',s==='b'?INK:MUT);doc.text(t,x,yy+LH(s==='b'?9.5:8)*.75);yy+=LH(s==='b'?9.5:8)})});y+=hh+6}});
   /* --- comparaison avec le loyer libre --- */
-  const cp=R.comp;
-  if(cp.ok){sh('Comparaison avec une location en loyer libre',ML,150);
-    const pc=x=>x==null?'—':(x*100).toFixed(1).replace('.',',')+' %',ans=x=>x==null?'—':x.toFixed(1).replace('.',',')+' ans',c1=ML+CW*.54,c2=ML+CW*.77;
-    font(7.5,'bold',ACC);doc.setFillColor(...SKYT);doc.rect(c1-2,y,CW*.23,5.5,'F');doc.text("LOC'AVANTAGES",c2-4,y+4,{align:'right'});font(7.5,'bold',MUT);doc.text('LOYER LIBRE',ML+CW-1.5,y+4,{align:'right'});y+=5.5;hr(y,ACC,.6);
-    const rows=[[`Montant des travaux ${cp.enTTC?'TTC':'HT'}`,'',E(cp.base),E(cp.base)],['Subventions','',E(cp.la.aides),'0 €'],['Investissement du propriétaire','',E(cp.la.invest),E(cp.ll.invest),1],
-      ['Loyers annuels hors charges',"Loc'Avantages au loyer plafond · loyer libre estimé",E(cp.la.loyers),E(cp.ll.loyers)],["Réduction d'impôt annuelle",'',cp.la.impot?E(cp.la.impot):'—','—'],
-      ['Revenu annuel','loyers + réduction d’impôt',E(cp.la.revenu),E(cp.ll.revenu),1],['Rentabilité brute annuelle','',pc(cp.la.renta),pc(cp.ll.renta)],['Retour sur investissement','',ans(cp.la.retour),ans(cp.ll.retour)],
-      [`Bilan sur ${cp.duree} ans`,'revenus cumulés − investissement',E(cp.la.bilan),E(cp.ll.bilan),1]];
-    for(const [l,s,a,bb,st] of rows){const h=LH(9.5)+(s?LH(7.5):0)+3;need(h);doc.setFillColor(...SKYT);doc.rect(c1-2,y,CW*.23,h,'F');font(9.5,st?'bold':'normal',INK);doc.text(T(l),ML+1.5,y+1.5+LH(9.5)*.75);
-      if(s){font(7.5,'normal',MUT);doc.text(T(s),ML+1.5,y+1.5+LH(9.5)+LH(7.5)*.75)}font(9.5,st?'bold':'normal',INK);doc.text(T(a),c2-4,y+1.5+LH(9.5)*.75,{align:'right'});doc.text(T(bb),ML+CW-1.5,y+1.5+LH(9.5)*.75,{align:'right'});y+=h;hr(y)}
-    const ec=cp.la.bilan-cp.ll.bilan;y+=3;need(16);doc.setFillColor(...ACC);doc.rect(ML,y,CW,15,'F');font(9.5,'bold',WHITE);doc.text(T(`${ec>=0?"GAIN DE LOC'AVANTAGES":'AVANTAGE DU LOYER LIBRE'} SUR ${cp.duree} ANS`),ML+6,y+6.5);
-    font(7.5,'normal',[214,232,242]);doc.text('Écart entre les deux bilans',ML+6,y+11);font(17,'bold',WHITE);doc.text(E(Math.abs(ec)),ML+CW-6,y+10,{align:'right'});y+=19;
-    need(84);locPdfChart(doc,cp,ML,y,CW,78,{T,font,ACC,LL,INK,MUT,LINE,SKYT});y+=81;
-    para('Bilan cumulé = revenus cumulés (loyers + réduction d’impôt) − investissement du propriétaire. Hypothèse : loyer conventionné Loc’Avantages et réduction d’impôt maintenus sur toute la période, loyers constants. Comparaison indicative, hors charges, taxe foncière, assurance, vacance locative et imposition des revenus fonciers.',{sz:7.5,c:MUT})}
+  const cp=R.comp,MP=R.mpr,M=MP&&MP.comp;
+  /* --- MaPrimeRénov' (nom propre) --- */
+  if(MP&&MP.cat!=null){sh(`MaPrimeRénov’ : ménage aux revenus ${MPR.cats[MP.cat].toLowerCase()}`,ML,40);
+    for(const [i,x] of MP.lgs.entries())for(const l of x.lignes){const L=lines(`${D.logements[i].nom||'Logement '+(i+1)} · ${l.lib}`,CW*.7,9.5),S=lines(l.base,CW*.7,7.5),h=L.length*LH(9.5)+S.length*LH(7.5)+3;need(h);
+      font(9.5,'normal',l.ecret?ORA:INK);L.forEach((t,k)=>doc.text(t,ML+1.5,y+1.5+LH(9.5)*(k+.75)));font(7.5,'normal',MUT);S.forEach((t,k)=>doc.text(t,ML+1.5,y+1.5+L.length*LH(9.5)+LH(7.5)*(k+.75)));
+      font(9.5,'normal',l.ecret?ORA:INK);doc.text(E(l.m),ML+CW-1.5,y+1.5+LH(9.5)*.75,{align:'right'});y+=h;hr(y)}
+    need(8);font(9.5,'bold',INK);doc.text("Total MaPrimeRénov'",ML+1.5,y+5);doc.text(E(MP.total),ML+CW-1.5,y+5,{align:'right'});y+=8;
+    para(`Taux de ${Math.round(MPR.taux[MP.cat]*100)} % des travaux de rénovation énergétique éligibles HT, plafonnés à 30 000 € (gain de 2 classes) ou 40 000 € (gain de 3 classes ou plus) par logement ; total des aides limité à ${Math.round(MPR.ecr[MP.cat]*100)} % du montant TTC. Avec MaPrimeRénov’, le loyer est libre et il n’y a pas de réduction d’impôt Loc’Avantages.`,{sz:7.5,c:MUT})}
+  if(cp.ok){sh(M?"Comparaison : Loc'Avantages, loyer libre et MaPrimeRénov'":'Comparaison avec une location en loyer libre',ML,150);
+    const pc=x=>x==null?'—':(x*100).toFixed(1).replace('.',',')+' %',ans=x=>x==null?'—':x.toFixed(1).replace('.',',')+' ans',ei=x=>x?E(x):'—';
+    const xs=M?[.64,.82,1]:[.77,1],cw=CW*(M?.18:.23),cx=k=>ML+CW*xs[k]-(k===xs.length-1?1.5:4),c1=ML+CW*xs[0]-cw-2;
+    const V=(f,g)=>[f(cp.la[g]),f(cp.ll[g]),...(M?[f(M[g])]:[])];
+    font(7.5,'bold',ACC);doc.setFillColor(...SKYT);doc.rect(c1,y,cw,5.5,'F');doc.text("LOC'AVANTAGES",cx(0),y+4,{align:'right'});font(7.5,'bold',MUT);doc.text('LOYER LIBRE',cx(1),y+4,{align:'right'});if(M)doc.text(T("MAPRIMERÉNOV'"),cx(2),y+4,{align:'right'});y+=5.5;hr(y,ACC,.6);
+    const rows=[[`Montant des travaux ${cp.enTTC?'TTC':'HT'}`,'',V(()=>E(cp.base))],['Subventions','',V(E,'aides')],['Investissement du propriétaire','',V(E,'invest'),1],
+      ['Loyers annuels hors charges',"Loc'Avantages au loyer plafond · loyer libre estimé",V(E,'loyers')],["Réduction d'impôt annuelle",'',V(ei,'impot')],
+      ['Revenu annuel','loyers + réduction d’impôt',V(E,'revenu'),1],['Rentabilité brute annuelle','',V(pc,'renta')],['Retour sur investissement','',V(ans,'retour')],
+      [`Bilan sur ${cp.duree} ans`,'revenus cumulés − investissement',V(E,'bilan'),1]];
+    for(const [l,s,vals,st] of rows){const h=LH(9.5)+(s?LH(7.5):0)+3;need(h);doc.setFillColor(...SKYT);doc.rect(c1,y,cw,h,'F');font(9.5,st?'bold':'normal',INK);doc.text(T(l),ML+1.5,y+1.5+LH(9.5)*.75);
+      if(s){font(7.5,'normal',MUT);doc.text(T(s),ML+1.5,y+1.5+LH(9.5)+LH(7.5)*.75)}font(9.5,st?'bold':'normal',INK);vals.forEach((t,k)=>doc.text(T(t),cx(k),y+1.5+LH(9.5)*.75,{align:'right'}));y+=h;hr(y)}
+    const B=[["LOC'AVANTAGES",cp.la.bilan],['LOYER LIBRE',cp.ll.bilan],...(M?[["MAPRIMERÉNOV'",M.bilan]]:[])].sort((a,b)=>b[1]-a[1]);
+    y+=3;need(16);doc.setFillColor(...ACC);doc.rect(ML,y,CW,15,'F');font(9.5,'bold',WHITE);doc.text(T(`MEILLEUR BILAN SUR ${cp.duree} ANS : ${B[0][0]}`),ML+6,y+6.5);
+    font(7.5,'normal',[214,232,242]);doc.text(T(`Écart avec ${B[1][0].toLowerCase().replace("maprimerénov'","MaPrimeRénov'").replace("loc'avantages","Loc'Avantages")}`),ML+6,y+11);font(17,'bold',WHITE);doc.text(E(B[0][1]-B[1][1]),ML+CW-6,y+10,{align:'right'});y+=19;
+    need(84);locPdfChart(doc,cp,ML,y,CW,78,{T,font,ACC,LL,INK,MUT,LINE,SKYT},M);y+=81;
+    para(`Bilan cumulé = revenus cumulés (loyers + réduction d’impôt) − investissement du propriétaire. Hypothèse : loyer conventionné Loc’Avantages et réduction d’impôt maintenus sur toute la période, loyers constants.${M?' MaPrimeRénov’ : loyer libre, sans réduction d’impôt ; engagement de location de 6 ans.':''} Comparaison indicative, hors charges, taxe foncière, assurance, vacance locative et imposition des revenus fonciers.`,{sz:7.5,c:MUT})}
   /* --- l'essentiel et prochaines étapes --- */
   {const cw=(CW-8)/2,A=['Vous signez une convention avec l’Anah pour 6 ans minimum.','Le logement est loué nu, en résidence principale, à un ménage sous plafonds de ressources.','Le loyer respecte le plafond du niveau choisi (Loc 1, Loc 2 ou Loc 3) pendant toute la convention.','En contrepartie, vous bénéficiez d’une réduction d’impôt sur le revenu, plus forte en Loc 3 et avec l’intermédiation locative.','Avec l’intermédiation locative, un organisme agréé gère la location pour vous.'],
      B=['Ne commencez pas les travaux avant le dépôt de la demande d’aides.','Faites établir les devis par des entreprises.','Votre conseiller SOLIHA vérifie l’éligibilité et monte le dossier avec vous.','Après accord des financeurs, les travaux peuvent démarrer.'];
@@ -4807,11 +4904,11 @@ async function locPdf(v){
   await offer(nom+'.pdf',doc.output('blob'));
 }
 // Graphique du bilan cumulé (revenus cumulés − investissement), redessiné d'après chartBilan du simulateur.
-function locPdfChart(doc,cp,x0,y0,w,h,{T,font,ACC,LL,INK,MUT,LINE,SKYT}){
-  const la=cp.la,ll=cp.ll,S=cp.duree,fLA=t=>la.revenu*t-la.invest,fLL=t=>ll.revenu*t-ll.invest;
-  const beLA=la.retour==null?Infinity:la.retour,beLL=ll.retour==null?Infinity:ll.retour;
-  let N=Math.max(S+5,12);[beLA,beLL].forEach(t=>{if(isFinite(t))N=Math.max(N,Math.ceil(t)+2)});N=Math.min(N,20);
-  const vals=[fLA(0),fLL(0),fLA(N),fLL(N),fLA(Math.min(S,N)),0],raw=(Math.max(...vals)-Math.min(...vals))/5,pw=Math.pow(10,Math.floor(Math.log10(raw||1))),nn=raw/pw;
+function locPdfChart(doc,cp,x0,y0,w,h,{T,font,ACC,LL,INK,MUT,LINE,SKYT},M){
+  const la=cp.la,ll=cp.ll,S=cp.duree,fLA=t=>la.revenu*t-la.invest,fLL=t=>ll.revenu*t-ll.invest,fM=t=>M.revenu*t-M.invest,MC=[0,122,90];
+  const beLA=la.retour==null?Infinity:la.retour,beLL=ll.retour==null?Infinity:ll.retour,beM=!M||M.retour==null?Infinity:M.retour;
+  let N=Math.max(S+5,12);[beLA,beLL,beM].forEach(t=>{if(isFinite(t))N=Math.max(N,Math.ceil(t)+2)});N=Math.min(N,20);
+  const vals=[fLA(0),fLL(0),fLA(N),fLL(N),fLA(Math.min(S,N)),0,...(M?[fM(0),fM(N)]:[])],raw=(Math.max(...vals)-Math.min(...vals))/5,pw=Math.pow(10,Math.floor(Math.log10(raw||1))),nn=raw/pw;
   const step=(nn<=1?1:nn<=2?2:nn<=2.5?2.5:nn<=5?5:10)*pw,yMin=Math.floor(Math.min(...vals)/step)*step,yMax=Math.ceil(Math.max(...vals)/step)*step;
   const m={l:17,r:32,t:10,b:10},X=t=>x0+m.l+t/N*(w-m.l-m.r),Y=v=>y0+m.t+(1-(v-yMin)/(yMax-yMin))*(h-m.t-m.b);
   const k=v=>Math.round(v/1000).toLocaleString('fr-FR')+' k€',eu=v=>T(locEur(v)),an=t=>t.toFixed(1).replace('.',',')+' ans';
@@ -4824,15 +4921,19 @@ function locPdfChart(doc,cp,x0,y0,w,h,{T,font,ACC,LL,INK,MUT,LINE,SKYT}){
   if(cp.croisement!=null&&cp.croisement>0&&cp.croisement<=N){const xc=X(cp.croisement);ln(MUT,.2,[.6,.9]);doc.line(xc,y0+m.t+12,xc,Y(fLA(cp.croisement))-2);
     font(6.5,'normal',MUT);doc.text(T(`Le loyer libre rattrape Loc'Avantages à ${an(cp.croisement)}`),xc,y0+m.t+11,{align:xc>x0+w-m.r-25?'right':'center'})}
   ln(LL,.7,[2.2,1.6]);doc.line(X(0),Y(fLL(0)),X(N),Y(fLL(N)));
+  if(M){ln(MC,.7,[.8,.8]);doc.line(X(0),Y(fM(0)),X(N),Y(fM(N)))}
   ln(ACC,.7);doc.line(X(0),Y(fLA(0)),X(Math.min(S,N)),Y(fLA(Math.min(S,N))));doc.line(X(Math.min(S,N)),Y(fLA(Math.min(S,N))),X(N),Y(fLA(N)));ln(INK,.2);
   const dot=(x,yy,c,r=1.3)=>{doc.setFillColor(...c);doc.setDrawColor(255,255,255);doc.setLineWidth(.5);doc.circle(x,yy,r,'FD')};
-  if(S<=N){const ya=Y(fLA(S)),yl=Y(fLL(S)),ec=fLA(S)-fLL(S);dot(xs,ya,ACC);dot(xs,yl,LL);
-    font(7,'normal',INK);doc.text(T(`Écart à ${S} ans : ${locEur(Math.abs(ec))} en faveur ${ec>=0?"de Loc'Avantages":'du loyer libre'}`),X(0)+2,y0+m.t+8)}
-  [[beLA,ACC,false],[beLL,LL,true]].forEach(([t,c,below])=>{if(!isFinite(t)||t>N)return;dot(X(t),Y(0),c,1.4);font(7,'bold',c);doc.text(T(`Rentabilisé en ${an(t)}`),X(t)+(below?2.5:-2.5),Y(0)+(below?4.5:-2.5),{align:below?'left':'right'})});
-  let yA=Y(fLA(N)),yL=Y(fLL(N));if(Math.abs(yA-yL)<8){const mid=(yA+yL)/2,up=yA<=yL;yA=mid+(up?-4:4);yL=mid+(up?4:-4)}
-  [[fLA(N),ACC,"Loc'Avantages",yA],[fLL(N),LL,'Loyer libre',yL]].forEach(([val,c,name,yy])=>{dot(X(N),Y(val),c,1);font(7,'bold',INK);doc.text(T(name),X(N)+2.5,yy-.5);font(6.5,'normal',MUT);doc.text(T(`${locEur(val)} à ${N} ans`),X(N)+2.5,yy+2.8)});
+  if(S<=N){const ya=Y(fLA(S)),yl=Y(fLL(S)),ec=fLA(S)-fLL(S);dot(xs,ya,ACC);dot(xs,yl,LL);if(M)dot(xs,Y(fM(S)),MC);
+    font(7,'normal',INK);if(!M)doc.text(T(`Écart à ${S} ans : ${locEur(Math.abs(ec))} en faveur ${ec>=0?"de Loc'Avantages":'du loyer libre'}`),X(0)+2,y0+m.t+8)}
+  [[beLA,ACC,false,0],[beLL,LL,true,0],[beM,MC,true,9]].forEach(([t,c,below,dy])=>{if(!isFinite(t)||t>N)return;dot(X(t),Y(0),c,1.4);font(7,'bold',c);doc.text(T(`Rentabilisé en ${an(t)}`),X(t)+(below?2.5:-2.5),Y(0)+(below?4.5+dy:-2.5),{align:below?'left':'right'})});
+  // Étiquettes de fin de courbe écartées d'au moins 8 mm.
+  const E3=[[fLA(N),ACC,"Loc'Avantages"],[fLL(N),LL,'Loyer libre'],...(M?[[fM(N),MC,"MaPrimeRénov'"]]:[])].map(e=>[...e,Y(e[0])]).sort((a,b)=>a[3]-b[3]);
+  E3.forEach((e,k)=>{if(k&&e[3]-E3[k-1][3]<8)e[3]=E3[k-1][3]+8});
+  E3.forEach(([val,c,name,yy])=>{dot(X(N),Y(val),c,1);font(7,'bold',INK);doc.text(T(name),X(N)+2.5,yy-.5);font(6.5,'normal',MUT);doc.text(T(`${locEur(val)} à ${N} ans`),X(N)+2.5,yy+2.8)});
   ln(ACC,.7);doc.line(x0+m.l,y0+3,x0+m.l+6,y0+3);font(7,'normal',INK);doc.text(T("Loc'Avantages (avec subventions)"),x0+m.l+8,y0+4);
-  ln(LL,.7,[2.2,1.6]);doc.line(x0+m.l+62,y0+3,x0+m.l+68,y0+3);doc.text('Loyer libre (sans subvention)',x0+m.l+70,y0+4);ln(INK,.2);
+  ln(LL,.7,[2.2,1.6]);doc.line(x0+m.l+62,y0+3,x0+m.l+68,y0+3);doc.text('Loyer libre (sans subvention)',x0+m.l+70,y0+4);
+  if(M){ln(MC,.7,[.8,.8]);doc.line(x0+m.l+114,y0+3,x0+m.l+120,y0+3);doc.text(T("MaPrimeRénov' + loyer libre"),x0+m.l+122,y0+4)}ln(INK,.2);
 }
 
 /* ---------- démarrage ---------- */
