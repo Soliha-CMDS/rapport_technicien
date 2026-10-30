@@ -2974,7 +2974,8 @@ async function ergoPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',fo
        else ERGO_L.niv.forEach((n,k)=>{doc.setFillColor(...(val===n?ACC:TINT));doc.roundedRect(x+lw+k*(sw+1.5),yy+1,sw,3.6,1,1,'F')});yy+=rh}
      const o=f[`bo_${p}_${b}`];if(filled(o)){doc.setDrawColor(...LINE);doc.setLineDashPattern([1,1],0);doc.line(x+3,yy+1,x+cw-3,yy+1);doc.setLineDashPattern([],0);yy+=2;font(8,'normal',MUT);lines(o,cw-6,8).forEach(l=>{doc.text(l,x+3,yy+LH(8)*.8);yy+=LH(8)})}};
    const tete=()=>pers.forEach(([,n],i)=>{const x=ML+i*(cw+4);if(two){font(10,'bold',ACC);doc.text(T(n),x,y+3.5)}font(6.5,'normal',MUT);ERGO_L.niv.forEach((t,k)=>doc.text(T(t),x+lw+k*(sw+1.5)+sw/2,y+(two?8:3.5),{align:'center'}))});
-   need(30);tete();y+=two?11:6;
+   // La grille entière tient sur une page : saut de page avant elle si la place manque.
+   need((two?11:6)+ERGO_BILAN.reduce((a,B)=>a+Math.max(...pers.map(([p])=>blocH(p,B)))+3,0));tete();y+=two?11:6;
    for(const B of ERGO_BILAN){const h=Math.max(...pers.map(([p])=>blocH(p,B)));if(y+h>BOT()){page();tete();y+=two?11:6}pers.forEach(([p],i)=>bloc(p,B,ML+i*(cw+4),y,h));y+=h+3}}
 
   /* --- 4. relevé du logement et préconisations : une carte par zone --- */
@@ -3008,7 +3009,8 @@ async function ergoPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',fo
   if(filled(f.at)||filled(f.atTxt)){need(26+((f.at||[]).length+lines(f.atTxt||'',CW(),9.5).length)*LH(9.5));sec(null,'Aides techniques préconisées lors de la visite','Non financées par l’Anah');for(const a of f.at||[])para('• '+a);if(filled(f.atTxt)){y+=1;para(f.atTxt)}y+=4}
 
   /* --- pour rappel et exemples d'aménagements --- */
-  y+=6;need(110);sec(null,'Pour rappel');for(const p of ERGO_TXT.rappel){para(p,{sz:9,c:RED});y+=2}
+  // Tout le chapitre « Pour rappel » (textes, exemples, mention) tient sur la dernière page.
+  y+=6;need(24+ERGO_TXT.rappel.reduce((a,t)=>a+lines(t,CW(),9).length*LH(9)+2,0)+13+Math.ceil(ERGO_IMG.ex.length/3)*62+lines(ERGO_TXT.mention,CW(),8,'italic').length*LH(8));sec(null,'Pour rappel');for(const p of ERGO_TXT.rappel){para(p,{sz:9,c:RED});y+=2}
   y+=4;font(11,'bold',INK);doc.text(T('Exemples d’aménagements'),ML,y+4);y+=9;
   const cw3=(CW()-8)/3;for(let i=0;i<ERGO_IMG.ex.length;i+=3){need(62);const y0=y;
     ERGO_IMG.ex.slice(i,i+3).forEach(([t,src,w0,h0],j)=>{const x=ML+j*(cw3+4),k=Math.min((cw3-4)/w0,46/h0),w=w0*k,h=h0*k;doc.setFillColor(...TINT);doc.roundedRect(x,y0,cw3,50,2,2,'F');
@@ -3032,7 +3034,7 @@ console.assert(ERGO_SANTE('anam')&&ERGO_SANTE('b_p1_transf')&&!ERGO_SANTE('noms'
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.10.30-2018';
+const APP_VER='2026.10.30-2033';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
