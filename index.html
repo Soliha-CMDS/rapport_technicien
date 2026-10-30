@@ -1,4 +1,4 @@
-<!doctype html><html lang="fr"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body><title>Constat décence</title>
+<!doctype html><html lang="fr"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body><title>SoliTech</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -150,6 +150,29 @@ button.armed{background:var(--danger);color:#fff;border-color:var(--danger)}
 .links>*{display:flex;align-items:center;gap:var(--sp-3);width:100%;min-height:52px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;padding:var(--sp-2) var(--sp-1);font-weight:400;justify-content:flex-start;color:var(--fg)}
 .links>* .grow{flex:1;text-align:left}
 .links svg.i{color:var(--muted)}
+.tdb-date{color:var(--muted);margin:-18px 0 var(--sp-4)}
+.tdb-kps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-2);margin-bottom:var(--sp-4)}
+.tdb-kp{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px}.tdb-kp b{display:block;font-size:1.6rem;line-height:1.1}.tdb-kp span{font-size:.85rem;color:var(--muted)}.tdb-kp.warn b{color:var(--warn)}
+.tdb-h{font-size:1.05rem;margin:var(--sp-4) 0 var(--sp-2);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tdb-h .lnk{border:0;background:none;color:var(--accent);padding:0 4px;font-size:.88rem}
+.tdb-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:2px 12px}
+.tdb-ag,.tdb-rp{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px 10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}.tdb-ag:last-child,.tdb-rp:last-child{border-bottom:0}
+.tdb-rp{grid-template-columns:minmax(0,1fr) auto}
+.tdb-q{min-width:48px;text-align:center;line-height:1.1;color:var(--accent-strong)}.tdb-q b{display:block;font-size:1.05rem}.tdb-q small{font-size:.75rem;color:var(--muted);font-weight:700}
+.tdb-w{min-width:0;display:flex;flex-direction:column;gap:1px}.tdb-w b,.tdb-w .muted{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tdb-w .muted{font-size:.85rem}
+.tdb-ap{font-size:.8rem;font-weight:700;color:var(--warn)}
+.tg{align-self:flex-start;font-size:.72rem;font-weight:700;border-radius:6px;padding:1px 7px;background:var(--chip);color:var(--accent-strong);display:inline-flex;align-items:center;gap:5px}
+.tg:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent)}.tg-pdl:before{background:#7a55c2}.tg-deg:before{background:var(--danger)}.tg-aud:before{background:#c98a12}.tg-loc:before,.tg-ergo:before{background:var(--ok)}
+.tdb-pb{grid-column:1/-1;display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--muted)}.tdb-pb i{flex:1;height:6px;border-radius:4px;background:var(--chip);overflow:hidden;display:block}.tdb-pb i b{display:block;height:100%;background:var(--accent)}
+.tdb-vide{margin:10px 0}
+.tdb-types{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-2)}
+.tdb-ty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:96px;padding:10px 4px;text-align:center;font-size:.85rem;line-height:1.15}.tdb-ty img{width:44px;height:44px}
+.tdb-side{display:none}
+@media (min-width:1000px){.wrap.tdbw{max-width:1280px}.tdb{display:grid;grid-template-columns:230px minmax(0,1fr);gap:var(--sp-5);align-items:start}
+ .tdb-side{display:flex;flex-direction:column;gap:4px;position:sticky;top:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:var(--sp-3)}
+ .tdb-nv{margin:8px 0 10px;width:100%;justify-content:center}.tdb-it{border:0;background:none;justify-content:flex-start;display:flex;width:100%;text-align:left;font-weight:700}.tdb-it.on{background:var(--chip);color:var(--accent-strong)}
+ .tdb-kps{grid-template-columns:repeat(4,minmax(0,1fr))}.tdb-cols{display:grid;grid-template-columns:1.1fr 1fr;gap:var(--sp-4)}.tdb-cols .tdb-h{margin-top:0}
+ .tdb-new,.tdb-links,.tdb-main .home-head .avatar{display:none}}
 .offline{margin-top:var(--sp-4);font-size:.85rem;color:var(--ok);display:flex;gap:6px;align-items:center}
 /* Listes de dossiers */
 .case{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:var(--sp-3) var(--sp-4);display:grid;gap:var(--sp-2)}
@@ -3034,7 +3057,7 @@ console.assert(ERGO_SANTE('anam')&&ERGO_SANTE('b_p1_transf')&&!ERGO_SANTE('noms'
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.10.30-2044';
+const APP_VER='2026.10.30-2059';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -3327,30 +3350,56 @@ function caseHtml(v){
     ${isPdl(v)||deg||isAud(v)||isErgo(v)?'':`<button data-act="ctrl" data-id="${v.id}">Créer la visite de contrôle</button>`}
     <button class="btn-danger" data-act="delv" data-id="${v.id}">Supprimer</button></div></div>`;
 }
+/* ---------- tableau de bord de l'accueil (maquettes A téléphone + C tablette validées le 30/10/2026) ---------- */
+// Visites à venir (date de visite aujourd'hui ou plus tard), dossiers à reprendre, chiffres clés, création d'un dossier par type.
+const TDB_TYPES=[['dec','Contrôle décence',()=>ICO.logement],['pdl','Permis de louer',()=>ICO.admin],['deg','Dégradation',()=>ICO_DEG.deg],['aud','Audit énergétique',()=>ICO_DEG.isolation],['ergo','Ergothérapie',()=>ICO.ergo],['loc','Loc’Avantages',()=>ICO.synth]];
+const TDB_LAB={dec:'Décence',pdl:'Permis de louer',deg:'Dégradation',aud:'Audit énergétique',ergo:'Ergothérapie',loc:'Loc’Avantages'};
+const tdbTag=v=>{const t=v.type||'dec';return `<span class="tg tg-${t}">${esc(TDB_LAB[t]||'')}</span>`};
+const tdbNew=([t,l,ic])=>`<button class="tdb-ty" ${t==='deg'?'data-act="go" data-v="degbien"':`data-act="newt" data-t="${t}"`}><img src="${ic()}" alt=""><span>${esc(l)}</span></button>`;
+// Rapport à produire : visite passée, rapport PDF pas encore généré (hors simulation Loc'Avantages).
+const tdbAProduire=v=>!v.pdfAt&&!isLoc(v)&&v.f.dateVis&&v.f.dateVis<today();
+function tdbSide(enc){
+  const it=(v,l,n)=>`<button class="tdb-it${v==='list'?' on':''}" ${v==='list'?'aria-current="page"':`data-act="go" data-v="${v}"`}><span class="grow">${l}</span>${n!=null?`<span class="muted">${n}</span>`:''}</button>`;
+  return `<aside class="tdb-side" aria-label="Menu"><div class="eyebrow">SoliTech</div><button class="btn-primary tdb-nv" data-act="new">${svg('plus')}Nouvelle visite</button>
+   ${it('list','Tableau de bord')}${it('encours','Dossiers en cours',enc)}${it('termines','Dossiers terminés',visits.length-enc)}${it('carnet','Carnet d’adresses',Object.keys(CARNET.l).length+Object.keys(MAIRIES.l).length)}
+   ${it('sauvegarde','Sauvegarde',P.lastBak?ilya(P.lastBak):'jamais')}${it('profil','Mon profil')}
+   ${instEv?`<button class="tdb-it" data-act="install"><span class="grow">Installer l’application</span></button>`:''}</aside>`}
+function tdbHtml(enc){const t=today(),now=new Date(),mois=t.slice(0,7);
+  const AV=visits.filter(v=>!v.pdfAt&&!isLoc(v)&&v.f.dateVis&&v.f.dateVis>=t).sort((a,b)=>(a.f.dateVis+(a.f.heureVis||'')).localeCompare(b.f.dateVis+(b.f.heureVis||''))),auj=AV.filter(v=>v.f.dateVis===t).length;
+  const RP=visits.filter(v=>!v.pdfAt).sort((a,b)=>b.updated-a.updated).slice(0,3),prod=visits.filter(tdbAProduire).length,faits=visits.filter(v=>v.pdfAt&&new Date(v.pdfAt).toISOString().slice(0,7)===mois).length;
+  const quand=v=>{const d=v.f.dateVis,j=new Date(d+'T12:00');return d===t?`<b>${esc(v.f.heureVis||'—')}</b><small>auj.</small>`:`<b>${d.slice(8,10)}/${d.slice(5,7)}</b><small>${j.toLocaleDateString('fr-FR',{weekday:'short'})}</small>`};
+  const kp=(n,l,c)=>`<div class="tdb-kp${c?' '+c:''}"><b>${n}</b><span>${l}</span></div>`;
+  return `<div class="tdb-kps">${kp(auj,auj>1?'visites aujourd’hui':'visite aujourd’hui')}${kp(enc,enc>1?'dossiers en cours':'dossier en cours')}${kp(prod,prod>1?'rapports à produire':'rapport à produire',prod?'warn':'')}${kp(faits,faits>1?'rapports ce mois-ci':'rapport ce mois-ci')}</div>
+   <div class="tdb-cols"><section><h2 class="tdb-h">Aujourd’hui et à venir${AV.length>4?`<button class="lnk" data-act="go" data-v="encours">Tout voir</button>`:''}</h2>
+     <div class="tdb-card">${AV.slice(0,4).map(v=>`<div class="tdb-ag"><div class="tdb-q">${quand(v)}</div><div class="tdb-w">${tdbTag(v)}<b>${esc(who(v))}</b><span class="muted">${esc(where(v)||'')}</span></div><button data-act="open" data-id="${v.id}">Ouvrir</button></div>`).join('')||'<p class="muted tdb-vide">Aucune visite programmée. La date de visite se saisit dans chaque dossier.</p>'}</div></section>
+    <section><h2 class="tdb-h">À reprendre${enc>3?`<button class="lnk" data-act="go" data-v="encours">${enc} en cours</button>`:''}</h2>
+     <div class="tdb-card">${RP.map(v=>{const p=prog(v),pc=Math.round(100*p.f/(p.n||1));return `<div class="tdb-rp"><div class="tdb-w">${tdbTag(v)}<b>${esc(who(v))}</b>${tdbAProduire(v)?'<span class="tdb-ap">Rapport à produire</span>':''}</div><button data-act="open" data-id="${v.id}">Reprendre</button>
+       <div class="tdb-pb"><i><b style="width:${pc}%"></b></i><span>${p.f}/${p.n} ${esc(p.u)}</span></div></div>`}).join('')||'<p class="muted tdb-vide">Aucun dossier en cours.</p>'}</div></section></div>
+   <section class="tdb-new"><h2 class="tdb-h">Nouvelle visite</h2><div class="tdb-types">${TDB_TYPES.map(tdbNew).join('')}</div></section>`}
 function render(){
-  const app=$('#app'),bar=$('#bar'),bi=$('#barin');bar.hidden=true;$('.wrap').classList.remove('plein');
+  const app=$('#app'),bar=$('#bar'),bi=$('#barin');bar.hidden=true;$('.wrap').classList.remove('plein','tdbw');
   if(view==='list'){
     lq='';lt='';const rap=rappelSauv();
     const enc=visits.filter(v=>!v.pdfAt).length,ini=(P.nom||'').split(/\s+/).filter(Boolean).map(x=>x[0]).slice(0,2).join('').toUpperCase();
-    app.innerHTML=`<div class="home-head"><img class="logo" src="${LOGO}" alt="SOLiHA Charente-Maritime Deux-Sèvres">
+    app.innerHTML=`<div class="tdb">${tdbSide(enc)}<div class="tdb-main"><div class="home-head"><img class="logo" src="${LOGO}" alt="SOLiHA Charente-Maritime Deux-Sèvres">
        <button class="avatar" data-act="go" data-v="profil" aria-label="Mon profil">${ini?esc(ini):svg('admin')}</button></div>
      ${P.nom?'':`<div class="banner">Renseignez votre profil (nom, téléphone, e-mail, signature) : il figure sur chaque rapport. <button data-act="go" data-v="profil">Remplir mon profil</button></div>`}
      ${rap?`<div class="banner">${P.lastBak?'Dernière sauvegarde '+ilya(P.lastBak):'Aucune sauvegarde'} · ${rap.length} dossier${rap.length>1?'s':''} non sauvegardé${rap.length>1?'s':''}. Ils ne sont enregistrés que sur cet appareil. <button data-act="bak">Sauvegarder maintenant</button></div>`:''}
      ${stoPlein()?`<div class="banner">Espace presque plein (${Math.round(100*STO.u/STO.q)} %). Sauvegardez puis supprimez des dossiers terminés pour pouvoir ajouter des photos. <button data-act="go" data-v="sauvegarde">Voir l’espace utilisé</button></div>`:''}
      ${STO.p===false&&visits.length?`<div class="banner">Stockage non protégé : le navigateur peut effacer les données si l’appareil manque de place. ${conseilSto()} <button data-act="persist">Réessayer</button></div>`:''}
-     <div class="eyebrow">Constat décence · Permis de louer</div>
-     <h1 class="hello">${P.nom?'Bonjour '+esc(P.nom.split(/\s+/)[0]):'Bonjour'}</h1>
-     <button class="big primary" data-act="new">${svg('plus')}<span><span class="t">Nouvelle visite</span><span class="d">Démarrer un constat</span></span></button>
-     <button class="big secondary" data-act="go" data-v="encours">${svg('folder')}<span><span class="t">Dossiers en cours</span><span class="d">Constats non finalisés</span></span><span class="count" aria-label="${enc} dossier${enc>1?'s':''}">${enc}</span></button>
-     <nav class="links" aria-label="Autres actions">
-      <button data-act="go" data-v="carnet">${svg('building')}<span class="grow">Carnet d’adresses</span><span class="muted">${Object.keys(CARNET.l).length+Object.keys(MAIRIES.l).length}</span>${svg('chev')}</button>
+     <div class="eyebrow">SoliTech</div>
+     <h1 class="hello">${P.nom?'Bonjour '+esc(P.nom.split(/\s+/)[0]):'Bonjour'}</h1><div class="tdb-date">${esc(new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).replace(/^./,c=>c.toUpperCase()))}</div>
+     ${tdbHtml(enc)}
+     <nav class="links tdb-links" aria-label="Autres actions">
       <button data-act="go" data-v="termines">${svg('archive')}<span class="grow">Dossiers terminés</span><span class="muted">${visits.length-enc}</span>${svg('chev')}</button>
+      <button data-act="go" data-v="carnet">${svg('building')}<span class="grow">Carnet d’adresses</span><span class="muted">${Object.keys(CARNET.l).length+Object.keys(MAIRIES.l).length}</span>${svg('chev')}</button>
       <button data-act="go" data-v="sauvegarde">${svg('save')}<span class="grow">Sauvegarde et import</span><span class="muted">${P.lastBak?ilya(P.lastBak):'jamais'}</span>${svg('chev')}</button>
       ${instEv?`<button data-act="install">${svg('inst')}<span class="grow">Installer l’application</span>${svg('chev')}</button>`:''}
      </nav>
      ${iosNonInst?'<p class="muted">Pour installer l’application : Partager, puis « Sur l’écran d’accueil ».</p>':''}
      <div class="offline">${svg('ok')}Fonctionne hors ligne · données enregistrées sur cet appareil</div>
-     <p class="muted ver">Version ${esc(APP_VER)}</p>`;
+     <p class="muted ver">Version ${esc(APP_VER)}</p></div></div>`;
+    $('.wrap').classList.add('tdbw');
     return;
   }
   if(view==='encours'||view==='termines'){
