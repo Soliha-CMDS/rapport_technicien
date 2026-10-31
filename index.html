@@ -2374,7 +2374,7 @@ function audView(app,bar,bi){
       ${tile('au-col','data-c="travaux"','PROPRIÉTAIRE','Travaux déjà réalisés','synthese',[[a.aucunTrav?'Aucun':a.travaux.length?a.travaux.length+' travaux':'À faire',a.aucunTrav||a.travaux.length?'ok':'']])}
      </div>`;
     bi.innerHTML=`<button data-act="au-constat">${svg('plus')}Constat</button><button class="btn-primary" data-act="go" data-v="afiche">Fiche de saisie DPEV5</button>`;return true}
-  if(view==='adossier'){app.innerHTML=`${topbar('Dossier et propriétaire',who(cur),'dash')}<div class="form">${AUD_ADM.map(field).join('')}</div>`;
+  if(view==='adossier'){app.innerHTML=`${topbar('Dossier et propriétaire',who(cur),'dash')}${cbAvert(cur)}<div class="form">${AUD_ADM.map(field).join('')}</div>`;
     bi.innerHTML=`<button class="btn-primary" data-act="dash">Terminé</button>`;return true}
   if(view==='agen'||view==='aenv'){const g=view==='agen',e=g?a.gen:a.env,b=g?'gen':'env';
     app.innerHTML=`${topbar(g?'Le logement':'Environnement du bien',who(cur),'dash')}<div class="form">${(g?AUD_GEN:AUD_ENV).map(x=>audFld(b,e,x)).join('')}${audNote(b,e)}</div>
@@ -3126,7 +3126,7 @@ console.assert(ERGO_SANTE('anam')&&ERGO_SANTE('b_p1_transf')&&!ERGO_SANTE('noms'
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.10.31-2247';
+const APP_VER='2026.10.31-2304';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -3503,17 +3503,19 @@ function render(){
   }
   if(view==='choose'){
     const t=(k,ic,l,d)=>`<button class="tile" data-act="newt" data-t="${k}"><img class="ic" src="${ICO[ic]}" alt=""><span class="lbl">${l}</span><span class="muted">${d}</span></button>`;
-    app.innerHTML=`${topbar('Nouvelle visite','Choisissez le type de visite','list')}
+    const cf=cbNew&&CARNET.l[cbNew],L=cf?cbLogements(cbDossiers(cbNew)):[];
+    app.innerHTML=`${topbar('Nouvelle visite',cf?'Pour '+cbNom(cf):'Choisissez le type de visite',cf?'cbfiche':'list')}
+     ${L.length?`<div class="field full"><span>Logement</span><div class="chips">${[...L.map((l,i)=>[i,lgTxt(l)]),[-1,'Autre logement (à saisir)']].map(([i,t])=>`<label class="chip"><input type="radio" name="cblg" data-cblg="${i}"${cbLgI===i?' checked':''}>${esc(t)}</label>`).join('')}</div></div>`:''}
      <div class="tiles">${t('dec','logement','Contrôle décence','Constat de décence : CAF, DDT 79, mairie, collectivité')}${t('pdl','admin','Permis de louer','Autorisation préalable à la mise en location : Thouars, Saint-Maixent-l’École')}
       <button class="tile" data-act="go" data-v="degbien"><img class="ic" src="${ICO_DEG.deg}" alt=""><span class="lbl">Rapport de dégradation</span><span class="muted">Grilles Anah : maison individuelle ou immeuble collectif</span></button>
       <button class="tile" data-act="newt" data-t="aud"><img class="ic" src="${ICO_DEG.isolation}" alt=""><span class="lbl">Visite audit énergétique</span><span class="muted">Relevé terrain pour l’audit réglementaire (maison individuelle) et fiche de saisie DPEV5</span></button>
       <button class="tile" data-act="newt" data-t="loc"><img class="ic" src="${ICO.synth}" alt=""><span class="lbl">Simulation Loc’Avantages</span><span class="muted">Aides Anah, OPAH et Pactes pour propriétaires bailleurs</span></button>
-      <button class="tile" data-act="newt" data-t="ergo"><img class="ic" src="${ICO.ergo}" alt=""><span class="lbl">Rapport ergothérapeute</span><span class="muted">Diagnostic adaptation et accessibilité (MaPrimeAdapt’)</span></button></div>`;
+      ${cf?'':`<button class="tile" data-act="newt" data-t="ergo"><img class="ic" src="${ICO.ergo}" alt=""><span class="lbl">Rapport ergothérapeute</span><span class="muted">Diagnostic adaptation et accessibilité (MaPrimeAdapt’)</span></button>`}</div>`;
     return;
   }
   if(view==='degbien'){
     const t=(b,l,d)=>`<button class="tile" data-act="newt" data-t="deg" data-b="${b}"><img class="ic" src="${ICO_DEG.deg}" alt=""><span class="lbl">${l}</span><span class="muted">${d}</span></button>`;
-    app.innerHTML=`${topbar('Rapport de dégradation','Quel bien évaluez-vous ?','new')}
+    app.innerHTML=`${topbar('Rapport de dégradation','Quel bien évaluez-vous ?','choose')}
      <div class="tiles">${t('mi','Maison individuelle','1 grille de 35 éléments')}${t('imm','Immeuble collectif','1 grille pour les parties communes (32 éléments) et 1 grille par logement visité (24 éléments)')}</div>
      <p class="muted">Le type de bien ne peut plus être changé ensuite.</p>`;
     return;
@@ -3525,6 +3527,19 @@ function render(){
      <div class="chips" style="margin:10px 0 14px">${[['','Tous'],['prop','Propriétaires'],['mand','Mandataires'],['mairie','Mairies']].map(([k,l])=>`<label class="chip"><input type="radio" name="cbcat" data-cbcat="${k}" ${cbCat===k?'checked':''}>${l}</label>`).join('')}</div>
      <div class="visits" id="cblist">${cbListe()}</div>`;
     bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="${cur?'dash':'list'}">Terminé</button>`;
+    return;
+  }
+  if(view==='cbfiche'){const c=CARNET.l[cbFk];if(!c){view='carnet';return render()}
+    const D=cbDossiers(cbFk),L=cbLogements(D);
+    app.innerHTML=`${topbar(cbNom(c)||'Propriétaire','Fiche propriétaire','carnet')}
+     <div class="disp"><strong>${esc(cbNom(c)||'Sans nom')}</strong><div>${esc(lgTxt(c))||'<span class="muted">Adresse non renseignée</span>'}</div>
+      <div class="muted">${esc([c.telP,c.telF,c.mail].filter(Boolean).join(' · '))}</div><div class="hint">Coordonnées modifiables dans le carnet d’adresses.</div></div>
+     <button class="big" data-act="cbnew">${svg('plus')}<span><span class="t">Nouveau dossier pour ce propriétaire</span><span class="d">Coordonnées${L.length?' et logement':''} repris de la fiche</span></span></button>
+     <h2 class="sec">Ses logements</h2>
+     ${L.length?`<div class="visits">${L.map(l=>`<div class="visit"><div class="name">${esc(lgTxt(l))}</div></div>`).join('')}</div>`:'<p class="muted">Aucun logement dans ses dossiers.</p>'}
+     <h2 class="sec">Ses dossiers (${D.length})</h2>
+     <div class="visits">${D.length?D.map(caseHtml).join(''):'<div class="empty">Aucun dossier sur cet appareil pour ce propriétaire.</div>'}</div>`;
+    bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="go" data-v="carnet">Terminé</button>`;
     return;
   }
   if(view==='courriers'){
@@ -3595,7 +3610,7 @@ function render(){
       ${dbl?`<p class="hint" style="color:var(--danger)">Un autre permis de louer porte déjà le n° ${esc(r.f.refDos)} sur cet appareil.</p>`:''}
       <p class="hint">Les champs remplis dans le tableau remplacent ceux de la visite ; une case vide du tableau n’efface rien.</p>
       <p><button class="btn-primary" data-act="pdlrempl">${dbl?'Remplir quand même':'Remplir la visite'}</button></p>`}</details>`;
-    app.innerHTML=`${topbar('Informations administratives',who(cur),'dash',logo)}${pre}<div class="form">${ADM(cur).map(field).join('')}</div>${isDeg(cur)?degSoNvHint(cur,cur.g[0])+'<h3 style="margin:16px 0 8px">Photo de façade (page de garde, facultative)</h3>'+phBlock('facade',it('facade'),{'facade:0':1},false):''}`;
+    app.innerHTML=`${topbar('Informations administratives',who(cur),'dash',logo)}${pre}${cbAvert(cur)}<div class="form">${ADM(cur).map(field).join('')}</div>${isDeg(cur)?degSoNvHint(cur,cur.g[0])+'<h3 style="margin:16px 0 8px">Photo de façade (page de garde, facultative)</h3>'+phBlock('facade',it('facade'),{'facade:0':1},false):''}`;
     bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="dash">${isDeg(cur)?'Continuer vers la grille':'Continuer vers les rubriques'}</button>`;
     return;
   }
@@ -3866,7 +3881,7 @@ function locView(app,bar,bi){
      </div>`;
     locBar(bi,R,`<button class="btn-primary" data-act="pdf">${svg('pdf')}Générer le PDF</button>`);return true}
   if(view==='lprop'){const p=D.proprio,sci=p.statut!=='NP';
-    app.innerHTML=`${topbar('Le propriétaire',who(cur),'dash')}<div class="form">
+    app.innerHTML=`${topbar('Le propriétaire',who(cur),'dash')}${cbAvert(cur)}<div class="form">
       ${lin('proprio.nom','Nom',{attr:cbAttr('loc.proprio.nom')})}${lin('proprio.prenoms','Prénom(s)')}
       ${lrad('proprio.statut','Statut',[['NP','Nom propre'],['SCI_IR','SCI à l’IR'],['SCI_IS','SCI à l’IS']])}
       ${sci?lin('proprio.sci','Nom de la SCI',{attr:cbAttr('loc.proprio.sci')}):''}
@@ -3975,7 +3990,7 @@ document.addEventListener('input',e=>{
   if(!cur)return;
   if(el.dataset.cpv!==undefined)cpLien(el);
   // Fiche choisie dans les suggestions du champ « Nom » : tout le bloc est rempli.
-  if(el.dataset.cb){const c=Object.values(CARNET.l).find(c=>cbLabel(c)===el.value);if(c){cbFill(cur,CBLOCS.find(b=>b.k===el.dataset.cb),c);save();keep();toast('Coordonnées reprises du carnet d’adresses');return}}
+  if(el.dataset.cb){const [k,c]=Object.entries(CARNET.l).find(([,c])=>cbLabel(c)===el.value)||[];if(c){const bl=CBLOCS.find(b=>b.k===el.dataset.cb);cbFill(cur,bl,c);if(bl.cat==='prop')cur.cb=k;save();keep();toast('Coordonnées reprises du carnet d’adresses');return}}
   if(el.dataset.lcom!==undefined)return locCommune(el.value,false);
   if(el.dataset.lk&&!['checkbox','radio'].includes(el.type)&&el.tagName!=='SELECT'){locSet(el);save();return locLive()}
   if(el.dataset.ak&&!['checkbox','radio'].includes(el.type)&&el.tagName!=='SELECT'){audSet(el);save();return}
@@ -3991,6 +4006,7 @@ document.addEventListener('change',async e=>{
   if(el.dataset.sel){el.checked?exSel.add(el.dataset.sel):exSel.delete(el.dataset.sel);return keep()}
   if(el.dataset.selmr!==undefined){exMairies=el.checked;return}
   if(el.dataset.cbcat!==undefined){cbCat=el.dataset.cbcat;return keep()}
+  if(el.dataset.cblg!==undefined){cbLgI=+el.dataset.cblg;return}
   if(el.dataset.lt!==undefined){lt=el.dataset.lt;return keep()}
   if(el.dataset.psig!==undefined){const f=el.files[0];el.value='';if(!f)return;try{const p=await shrink(f);P.sig={src:p.src,r:p.h/p.w};await saveP();render()}catch(err){toast('Image non importée : '+err.message)}return}
   if(!cur)return;
@@ -4047,7 +4063,11 @@ document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
   if(a.startsWith('au-')&&cur&&isAud(cur))return audAct(a,b);
   if(a.startsWith('er-'))return ergoAct(a,b);
-  if(a==='new'){view='choose';return go()}
+  if(a==='new'){cbNew='';view='choose';return go()}
+  if(a==='cbrepr'){const b=cbBloc(cur),c=CARNET.l[cur.cb];if(b&&c){const d=cbRead(cur,b);for(const [x,y] of Object.entries(c))if(y)d[x]=y;cbFill(cur,b,d);await save(true);keep();toast('Coordonnées reprises de la fiche')}return}
+  if(a==='cbmaj'){const b=cbBloc(cur),e=CARNET.l[cur.cb];if(b&&e){const seul=!('prenom' in b.m(cur,0));for(const [x,y] of Object.entries(cbRead(cur,b)))if(y&&!(x==='nom'&&seul&&e.prenom))e[x]=y;e.maj=today();saveCarnet();cbDL();keep();toast('Fiche du propriétaire mise à jour')}return}
+  if(a==='cbfiche'){cbFk=b.dataset.k;view='cbfiche';return go()}
+  if(a==='cbnew'){cbNew=cbFk;const n=cbLogements(cbDossiers(cbFk)).length;cbLgI=n===1?0:-1;view='choose';return go()}
   if(a==='persist'){let ok=false;try{ok=await navigator.storage?.persist?.()}catch(e){}await majStockage();keep();toast(ok?'Stockage protégé':'Protection refusée par le navigateur : vérifiez le favori, puis réessayez');return}
   if(a==='bak'){exSel.clear();for(const v of visits)if(!sauve(v))exSel.add(v.id);view='sauvegarde';return go()}
   if(a==='maj'){await save(true);setTimeout(()=>location.reload(),500);return}
@@ -4058,7 +4078,13 @@ document.addEventListener('click',async e=>{
   if(a==='ldelph'){cur.loc.bien.photo='';save();return keep()}
   if(a==='pdllire'){pdlTxt=$('#pdlTxt').value;const c=cur.f.commune,r=pdlLigne(pdlTxt,P.tabH?.[c]||PDL_TAB[c]);if(r?.H){(P.tabH||(P.tabH={}))[c]=r.H;saveP()}return keep()}
   if(a==='pdlrempl'){const c=cur.f.commune,r=pdlLigne(pdlTxt,P.tabH?.[c]||PDL_TAB[c]);if(!r)return;Object.assign(cur.f,r.f);pdlTxt='';await save(true);keep();toast('Visite pré-remplie depuis le tableau : vérifiez les informations');return}
-  if(a==='newt'){pdlTxt='';cur=newVisit(b.dataset.t,b.dataset.b);visits.push(cur);if(numDos(cur))saveP();await save(true);view=isLoc(cur)?'lprop':isAud(cur)||isErgo(cur)?'dash':'admin';return go()}
+  if(a==='newt'){pdlTxt='';cur=newVisit(b.dataset.t,b.dataset.b);
+    // Depuis une fiche propriétaire : coordonnées et logement choisi repris.
+    const cf=cbNew&&CARNET.l[cbNew];if(cf){const l=cbLogements(cbDossiers(cbNew))[cbLgI];
+      // Dégradation : un logement à une autre adresse que le propriétaire en fait un bailleur (coordonnées complètes reprises).
+      if(isDeg(cur)&&l&&cbNorm(l.adr)!==cbNorm(cf.adr))cur.f.pStat='Propriétaire bailleur';
+      const bl=cbBloc(cur);if(bl){cbFill(cur,bl,cf);cur.cb=cbNew}if(l)lgVers(cur,l);cbNew=''}
+    visits.push(cur);if(numDos(cur))saveP();await save(true);view=isLoc(cur)?'lprop':isAud(cur)||isErgo(cur)?'dash':'admin';return go()}
   if(a==='open'){cur=visits.find(v=>v.id===b.dataset.id);view='dash';return go()}
   if(a==='ctrl'){const src=visits.find(v=>v.id===b.dataset.id);cur=structuredClone(src);Object.assign(cur,{id:newVisit().id,created:Date.now(),done:{},sig:''});delete cur.num;delete cur.savedAt;delete cur.pdfAt;if(numDos(cur))saveP();cur.f.typeVis='Visite de contrôle';cur.f.dateVis=today();visits.push(cur);await save(true);view='dash';toast('Visite de contrôle créée à partir de la visite initiale');return go()}
   if(a==='delv'){if(!armed(b,'Confirmer la suppression'))return;await store.del(b.dataset.id);visits=visits.filter(v=>v.id!==b.dataset.id);return render()}
@@ -4208,7 +4234,7 @@ async function importJson(el){
     if(nm)saveMairies();
     let nc=0;if(d.carnet&&typeof d.carnet==='object')for(const [k,c] of Object.entries(d.carnet))if(c&&CB_CAT[c.cat]&&!CARNET.l[k]){CARNET.l[k]=c;nc++}
     if(nc){saveCarnet();cbDL()}
-    visits=(await store.all()).map(migrate);if(cur)cur=visits.find(v=>v.id===cur.id)||null;render();
+    visits=(await store.all()).map(migrate);cbLier();if(cur)cur=visits.find(v=>v.id===cur.id)||null;render();
     const pl=(n,a,b)=>n+' '+(n>1?b:a);
     toast([na&&pl(na,'dossier ajouté','dossiers ajoutés'),nu&&pl(nu,'dossier mis à jour','dossiers mis à jour'),ni&&pl(ni,'dossier ignoré (version plus ancienne ou identique)','dossiers ignorés (versions plus anciennes ou identiques)'),nm+nc&&pl(nm+nc,'adresse ajoutée au carnet','adresses ajoutées au carnet')].filter(Boolean).join(' · ')||'Aucun dossier dans ce fichier')}
   catch(e){toast('Import impossible : '+e.message)}
@@ -4221,25 +4247,50 @@ let MAIRIES={id:'mairies',l:{}},mairT=null;
 const mkey=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\b(st|ste)\b/g,m=>m==='st'?'saint':'sainte').replace(/[^a-z0-9]+/g,' ').trim();
 console.assert(mkey('St-Maixent l’École')===mkey('SAINT MAIXENT L\'ECOLE')&&mkey('Trayes')==='trayes','mkey');
 // Carnet d'adresses (propriétaires, mandataires) : fiches par clé cbKey, mémorisées sur cet appareil.
-let CARNET={id:'carnet',l:{}},carT=null,cbQ='',cbCat='';
+let CARNET={id:'carnet',l:{}},carT=null,cbQ='',cbCat='',cbFk='',cbNew='',cbLgI=-1;
 const saveCarnet=()=>{clearTimeout(carT);carT=setTimeout(()=>store.putRec(CARNET).catch(e=>toast('Carnet d’adresses non enregistré : '+e.message)),400)};
 // Listes de suggestions du champ « Nom » (une par catégorie).
 const cbDL=()=>{$('#cbdl').innerHTML=Object.keys(CB_CAT).map(cat=>`<datalist id="cb_${cat}">${Object.values(CARNET.l).filter(c=>c.cat===cat).map(c=>`<option value="${esc(cbLabel(c))}">`).join('')}</datalist>`).join('')};
 // Ajout ou mise à jour automatique, au changement d'écran : une personne avec un nom (ou une société) et une adresse.
+// Dossier lié à sa fiche (v.cb) : seuls les champs vides de la fiche sont complétés ; un écart est signalé dans le dossier (cbEcart).
 function carnetMemo(v){let any=false;
   for(const b of CBLOCS.filter(b=>b.ok(v))){const c=cbRead(v,b);if(!(c.nom||c.soc)||!c.adr)continue;
-    const k=cbKey(c),e=CARNET.l[k]||{cat:c.cat};let ch=!CARNET.l[k];for(const [x,y] of Object.entries(c))if(y&&e[x]!==y){e[x]=y;ch=true}
-    if(ch){e.maj=today();CARNET.l[k]=e;any=true}}
+    const lie=b.cat==='prop'&&v.cb&&CARNET.l[v.cb],k=lie?v.cb:cbKey(c),e=CARNET.l[k]||{cat:c.cat},seul=!('prenom' in b.m(v,0));let ch=!CARNET.l[k];
+    // Dossier à un seul champ nom (dégradation : « DUPONT Marie ») : il ne remplace pas le nom d'une fiche qui a un prénom.
+    for(const [x,y] of Object.entries(c))if(y&&e[x]!==y&&!(x==='nom'&&seul&&e.prenom)&&!(lie&&e[x])){e[x]=y;ch=true}
+    if(ch){e.maj=today();CARNET.l[k]=e;any=true}
+    if(b.cat==='prop'&&v.cb!==k){v.cb=k;store.put(v).catch(()=>{})}}
   if(any){saveCarnet();cbDL()}}
+const cbBloc=v=>CBLOCS.find(b=>b.cat==='prop'&&b.ok(v));
+// Rattache à leur fiche les dossiers sans lien (même nom ou société et même code postal), sans modifier leur date.
+function cbLier(){for(const v of visits){const b=cbBloc(v);if(!b||(v.cb&&CARNET.l[v.cb]))continue;const k=cbKey(cbRead(v,b));if(CARNET.l[k]&&v.cb!==k){v.cb=k;store.put(v).catch(()=>{})}}}
+const CB_F=[['soc','Société ou agence'],['civ','Civilité'],['nom','Nom'],['prenom','Prénom'],['adr','Adresse'],['cp','Code postal'],['ville','Ville'],['telF','Tél. fixe'],['telP','Tél. portable'],['mail','E-mail']];
+// Valeur de la fiche telle que le dossier l'écrirait (nom complet sans champ prénom, portable à défaut du fixe).
+const cbVal=(m,c,x)=>x==='nom'&&!m.prenom&&!m.soc?cbNom(c):x==='telP'&&!m.telF?c.telP||c.telF:c[x];
+// Champs renseignés des deux côtés et différents entre le dossier et sa fiche.
+function cbEcart(v){const b=cbBloc(v),c=v.cb&&CARNET.l[v.cb];if(!b||!c)return [];const d=cbRead(v,b),m=b.m(v,1);
+  return Object.keys(m).filter(x=>d[x]&&cbVal(m,c,x)&&cbNorm(d[x])!==cbNorm(cbVal(m,c,x)))}
+const cbAvert=v=>{const x=cbEcart(v);return x.length?`<div class="hint warn" style="margin-bottom:14px">Coordonnées différentes de la fiche du propriétaire : ${esc(x.map(f=>CB_F.find(y=>y[0]===f)?.[1]||f).join(', '))}.
+  <div class="row" style="margin-top:8px"><button data-act="cbrepr">Reprendre la fiche</button><button data-act="cbmaj">Mettre à jour la fiche</button></div></div>`:''};
 const cbFor=(v,key)=>CBLOCS.find(b=>b.ok(v)&&(m=>m.nom===key||m.soc===key)(b.m(v,1)));
 const cbAttr=k=>(b=>b?` list="cb_${b.cat}" data-cb="${b.k}" autocomplete="off"`:'')(cbFor(cur,k));
+// Fiche propriétaire : ses dossiers (propriétaire du dossier = cette fiche) et les logements de ces dossiers.
+const cbDossiers=k=>visits.filter(v=>v.cb?v.cb===k:(b=>b&&cbKey(cbRead(v,b))===k)(cbBloc(v))).sort((a,b)=>b.updated-a.updated);
+const lgDe=v=>isLoc(v)?{adr:v.loc.bien.adresse||'',cp:v.loc.bien.cp||'',ville:v.loc.bien.communeTxt||''}:{adr:v.f.adresse||'',cp:v.f.cp||'',ville:v.f.ville||''};
+const cbLogements=D=>[...new Map(D.map(lgDe).filter(l=>l.adr.trim()).map(l=>[cbNorm(l.adr+' '+l.cp),l])).values()];
+const lgTxt=l=>[l.adr,[l.cp,l.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+// Reprend un logement dans un nouveau dossier. Permis de louer : seulement dans une commune du dispositif.
+function lgVers(v,l){
+  if(isLoc(v)){const c=LOC_BYNAME[LOC_ENGINE.norm(l.ville)];Object.assign(v.loc.bien,{adresse:l.adr,cp:l.cp,communeTxt:c?c[1]:l.ville,insee:c?String(c[0]):''});return}
+  if(isPdl(v)){const c=Object.keys(COMMUNES).find(k=>cbNorm(COMMUNES[k].ville)===cbNorm(l.ville));if(!c)return;v.f.commune=c}
+  Object.assign(v.f,{adresse:l.adr,cp:l.cp,ville:l.ville})}
 function cbListe(){const q=cbNorm(cbQ),ok=t=>!q||cbNorm(t).includes(q);
   const P=cbCat==='mairie'?[]:Object.entries(CARNET.l).filter(([,c])=>(!cbCat||c.cat===cbCat)&&ok([cbNom(c),c.adr,c.cp,c.ville,c.mail].join(' '))).sort((a,b)=>cbNom(a[1]).localeCompare(cbNom(b[1]),'fr'));
   const M=cbCat&&cbCat!=='mairie'?[]:Object.entries(MAIRIES.l).filter(([,m])=>ok(['Mairie',m.ville,m.adr,m.cp,m.mail].join(' '))).sort((a,b)=>a[1].ville.localeCompare(b[1].ville,'fr'));
   const inp=(a,k,f,l,val)=>`<div class="field"><span>${l}</span><input type="text" ${a}="${esc(k)}" data-${a==='data-cf'?'ck':'mk'}="${f}" value="${esc(val)}"></div>`;
   return [...P.map(([k,c])=>`<div class="visit"><div class="name">${esc(cbNom(c)||'Sans nom')}</div><div class="muted">${CB_CAT[c.cat]}${c.maj?' · mis à jour le '+esc(frDate(c.maj)):''}</div>
      <div class="form" style="margin:0">${[['soc','Société ou agence'],['civ','Civilité'],['nom','Nom'],['prenom','Prénom'],['adr','Adresse'],['cp','Code postal'],['ville','Ville'],['telF','Tél. fixe'],['telP','Tél. portable'],['mail','E-mail']].map(([f,l])=>inp('data-cf',k,f,l,c[f])).join('')}</div>
-     <div class="row"><button class="btn-danger" data-act="cbdel" data-k="${esc(k)}">Supprimer</button></div></div>`),
+     <div class="row">${c.cat==='prop'?`<button class="btn-primary" data-act="cbfiche" data-k="${esc(k)}">Fiche et dossiers</button>`:''}<button class="btn-danger" data-act="cbdel" data-k="${esc(k)}">Supprimer</button></div></div>`),
    ...M.map(([k,m])=>`<div class="visit"><div class="name">Mairie de ${esc(m.ville)}</div><div class="muted">Mairie (courriers de décence)</div>
      <div class="form" style="margin:0">${inp('data-mr',k,'civ','Civilité',m.civ)}${inp('data-mr',k,'adr','Adresse',m.adr)}${inp('data-mr',k,'cp','Code postal',m.cp)}${inp('data-mr',k,'mail','E-mail',m.mail)}</div>
      <div class="row"><button class="btn-danger" data-act="delmairie" data-k="${esc(k)}">Supprimer</button></div></div>`)].join('')||'<div class="empty">Aucune adresse ne correspond.</div>'}
@@ -4949,6 +5000,7 @@ function locPdfChart(doc,cp,x0,y0,w,h,{T,font,ACC,LL,INK,MUT,LINE,SKYT},M){
   try{P=await store.getProfil()}catch(e){}
   try{MAIRIES=await store.getRec('mairies');MAIRIES.l=MAIRIES.l||{}}catch(e){}
   try{CARNET=await store.getRec('carnet');CARNET.l=CARNET.l||{}}catch(e){}
+  cbLier();
   await numeroter();
   cbDL();
   $('#cpdl').innerHTML=`<datalist id="cp_all">${Object.entries(CP_COM).flatMap(([cp,l])=>l.map(([n])=>`<option value="${esc(n)}" label="${cp}">`)).join('')}</datalist>`;
