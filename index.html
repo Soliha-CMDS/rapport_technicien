@@ -3126,7 +3126,7 @@ console.assert(ERGO_SANTE('anam')&&ERGO_SANTE('b_p1_transf')&&!ERGO_SANTE('noms'
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.10.31-2228';
+const APP_VER='2026.10.31-2247';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -4873,7 +4873,8 @@ async function locPdf(v){
       ['Loyers annuels hors charges',"Loc'Avantages au loyer plafond · loyer libre estimé",V(E,'loyers')],["Réduction d'impôt annuelle",'',V(ei,'impot')],
       ['Revenu annuel','loyers + réduction d’impôt',V(E,'revenu'),1],['Rentabilité brute annuelle','',V(pc,'renta')],['Retour sur investissement','',V(ans,'retour')],
       [`Bilan sur ${cp.duree} ans`,'revenus cumulés − investissement',V(E,'bilan'),1]];
-    for(const [l,s,vals,st] of rows){const h=LH(9.5)+(s?LH(7.5):0)+3;need(h);doc.setFillColor(...SKYT);doc.rect(c1,y,cw,h,'F');font(9.5,st?'bold':'normal',INK);doc.text(T(l),ML+1.5,y+1.5+LH(9.5)*.75);
+    for(const [l,s,vals,st] of rows){const h=LH(9.5)+(s?LH(7.5):0)+3;need(h);doc.setFillColor(...SKYT);doc.rect(c1,y+.3,cw,h-.3,'F');// décalé : ne pas recouvrir le trait du dessus
+      font(9.5,st?'bold':'normal',INK);doc.text(T(l),ML+1.5,y+1.5+LH(9.5)*.75);
       if(s){font(7.5,'normal',MUT);doc.text(T(s),ML+1.5,y+1.5+LH(9.5)+LH(7.5)*.75)}font(9.5,st?'bold':'normal',INK);vals.forEach((t,k)=>doc.text(T(t),cx(k),y+1.5+LH(9.5)*.75,{align:'right'}));y+=h;hr(y)}
     const B=[["LOC'AVANTAGES",cp.la.bilan],['LOYER LIBRE',cp.ll.bilan],...(M?[["MAPRIMERÉNOV'",M.bilan]]:[])].sort((a,b)=>b[1]-a[1]);
     y+=3;need(16);doc.setFillColor(...ACC);doc.rect(ML,y,CW,15,'F');font(9.5,'bold',WHITE);doc.text(T(`MEILLEUR BILAN SUR ${cp.duree} ANS : ${B[0][0]}`),ML+6,y+6.5);
