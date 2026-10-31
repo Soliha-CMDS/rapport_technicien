@@ -3126,7 +3126,7 @@ console.assert(ERGO_SANTE('anam')&&ERGO_SANTE('b_p1_transf')&&!ERGO_SANTE('noms'
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.10.30-2220';
+const APP_VER='2026.10.31-2228';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -3806,14 +3806,19 @@ const locSuTxt=r=>r.S?`Surface utile pour les aides : ${locNum(r.SU)} m²${r.SU>
 const locCmpTxt=R=>{if(R.comp.ok)return 'La comparaison figurera dans le document.';
   const sans=cur.loc.logements.map((l,k)=>+l.loyerLibre>0?null:l.nom||'Logement '+(k+1)).filter(Boolean);
   return (sans.length?'Loyer libre manquant pour : '+sans.join(', '):'Renseignez la commune et la surface de chaque logement')+' : la comparaison n’apparaîtra pas dans le document.'};
-const locMprCatTxt=R=>R.mpr&&R.mpr.cat!=null?'MaPrimeRénov’ '+MPR.cats[R.mpr.cat]+` : ${Math.round(MPR.taux[R.mpr.cat]*100)} % des travaux éligibles, écrêtement à ${Math.round(MPR.ecr[R.mpr.cat]*100)} % du TTC.`:'Renseignez le revenu fiscal de référence et le nombre de personnes, ou choisissez la catégorie.';
+const locMprCatTxt=R=>R.mpr&&R.mpr.cat!=null?'MaPrimeRénov’ '+MPR.cats[R.mpr.cat]+` : ${Math.round(MPR.taux[R.mpr.cat]*100)} % des travaux éligibles, écrêtement à ${Math.round(MPR.ecr[R.mpr.cat]*100)} % du TTC.`:'Renseignez le revenu fiscal de référence et le nombre de personnes, ou choisissez la catégorie : sinon MaPrimeRénov’ n’apparaîtra pas dans le document.';
+// Option MaPrimeRénov' (nom propre) : écrans « Le propriétaire » et « Comparaison ».
+const locMprBloc=(p,R)=>`<div class="field full"><span>MaPrimeRénov’</span><div class="chips">${lchk('proprio.mprOn','Comparer avec MaPrimeRénov’ (loyer libre)')}</div></div>
+  ${p.mprOn?`${lin('proprio.rfr','Revenu fiscal de référence (€)',{im:'decimal'})}${lin('proprio.foyer','Personnes du foyer fiscal',{im:'numeric'})}
+  ${lsel('proprio.mprCat','Catégorie de revenus',[['','Automatique (d’après le revenu)'],...MPR.cats.map((c,k)=>[String(k),c])],1)}
+  <div class="hint full${R.mpr&&R.mpr.cat==null?' warn':''}" id="lmprcat">${esc(locMprCatTxt(R))}</div>`:''}`;
 const locMprLg=x=>`<span>MaPrimeRénov’ · ${locEur(x.ht)} HT éligibles${x.lignes.some(l=>l.ecret)?' · écrêtée':''}</span><b>${locEur(x.total)}</b>`;
 // Mise à jour en direct pendant la saisie, sans réafficher l'écran (le champ garde le curseur).
 function locLive(){const R=locR();
   const t=$('#ltot'),r=$('#lrac');if(t)t.textContent=locEur(R.total);if(r)r.textContent=locRac(R);
   R.lgs.forEach((x,i)=>{const e=$('#lres'+i);if(e)e.innerHTML=locResLg(x);const s=$('#lsu'+i);if(s)s.textContent=locSuTxt(x)});
   const c=$('#lcmp');if(c){c.textContent=locCmpTxt(R);c.classList.toggle('warn',!R.comp.ok)}
-  const m=$('#lmprcat');if(m)m.textContent=locMprCatTxt(R);
+  const m=$('#lmprcat');if(m){m.textContent=locMprCatTxt(R);m.classList.toggle('warn',!!R.mpr&&R.mpr.cat==null)}
   R.mpr?.lgs?.forEach((x,i)=>{const e=$('#lmpr'+i);if(e)e.innerHTML=locMprLg(x)});
   // Encadré du dispositif (rue, numéro) : réaffiché sauf pendant la saisie d'un de ses champs.
   const d=$('#ldisp');if(d&&!d.contains(document.activeElement))d.outerHTML=locDispBox(R)}
@@ -3856,7 +3861,7 @@ function locView(app,bar,bi){
       ${tile('lbien','LE BIEN','Adresse et dispositif',ICO.logement,[[D.bien.insee?LOC_COURT[ctx.key]:'Commune à saisir',D.bien.insee?'info':'warn']])}
       ${tile('llg','LOGEMENTS','Logements et travaux',ICO_DEG.organisation,[[nl+' logement'+(nl>1?'s':''),'info'],...(inel?[[inel+' à compléter','warn']]:[])])}
       ${tile('lproj','AIDES AU PROJET','Aides forfaitaires au projet',ICO.trav,[[np?np+' aide'+(np>1?'s':''):'Facultatif',np?'info':'']])}
-      ${tile('lcomp','COMPARAISON','Loyer libre et observations',ICO.comm,[[R.comp.ok?'Prête':'Loyer libre à saisir',R.comp.ok?'ok':'warn']])}
+      ${tile('lcomp','COMPARAISON','Loyer libre et observations',ICO.comm,[[R.comp.ok?'Prête':'Loyer libre à saisir',R.comp.ok?'ok':'warn'],...(R.mpr?[[R.mpr.cat==null?'MaPrimeRénov’ : revenu à saisir':'MaPrimeRénov’',R.mpr.cat==null?'warn':'ok']]:[])])}
       ${tile('lres','RÉSULTAT','Synthèse des aides',ICO.synth,[[locEur(R.total),'info']])}
      </div>`;
     locBar(bi,R,`<button class="btn-primary" data-act="pdf">${svg('pdf')}Générer le PDF</button>`);return true}
@@ -3865,10 +3870,7 @@ function locView(app,bar,bi){
       ${lin('proprio.nom','Nom',{attr:cbAttr('loc.proprio.nom')})}${lin('proprio.prenoms','Prénom(s)')}
       ${lrad('proprio.statut','Statut',[['NP','Nom propre'],['SCI_IR','SCI à l’IR'],['SCI_IS','SCI à l’IS']])}
       ${sci?lin('proprio.sci','Nom de la SCI',{attr:cbAttr('loc.proprio.sci')}):''}
-      ${sci?'':`<div class="field full"><span>MaPrimeRénov’</span><div class="chips">${lchk('proprio.mprOn','Comparer avec MaPrimeRénov’ (loyer libre)')}</div></div>
-       ${p.mprOn?`${lin('proprio.rfr','Revenu fiscal de référence (€)',{im:'decimal'})}${lin('proprio.foyer','Personnes du foyer fiscal',{im:'numeric'})}
-       ${lsel('proprio.mprCat','Catégorie de revenus',[['','Automatique (d’après le revenu)'],...MPR.cats.map((c,k)=>[String(k),c])],1)}
-       <div class="hint full" id="lmprcat">${esc(locMprCatTxt(R))}</div>`:''}`}
+      ${sci?'':locMprBloc(p,R)}
       ${lin('proprio.soliact','N° dossier Soliact')}
       ${lin('proprio.email','E-mail',{type:'email'})}${lin('proprio.tel','Téléphone',{type:'tel'})}
       ${lin('proprio.adresse','Adresse',{full:1})}${(([a,d])=>lin('proprio.cp','Code postal',{attr:a,hint:d}))(cpA('lk_proprio_cp','lk_proprio_ville'))}${(([a,d])=>lin('proprio.ville','Ville',{attr:a,hint:d}))(vA('lk_proprio_ville','lk_proprio_cp'))}</div>`;
@@ -3918,6 +3920,7 @@ function locView(app,bar,bi){
     app.innerHTML=`${topbar('Comparaison et observations',who(cur),'dash')}<div class="form">
       ${lin('compDuree','Durée de comparaison (années)',{im:'numeric'})}
       <div class="hint full ${R.comp.ok?'':'warn'}" id="lcmp">${esc(locCmpTxt(R))}</div>
+      ${D.proprio.statut==='NP'?locMprBloc(D.proprio,R):'<div class="hint full">La comparaison avec MaPrimeRénov’ est réservée aux propriétaires en nom propre.</div>'}
       ${lta('obs','Observations : message au propriétaire (facultatif, repris dans le document)')}</div>`;
     locBar(bi,R,fini);return true}
   if(view==='lres'){
