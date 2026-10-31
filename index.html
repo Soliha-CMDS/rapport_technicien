@@ -132,8 +132,13 @@ button.armed{background:var(--danger);color:#fff;border-color:var(--danger)}
 @media (max-width:480px){.body{padding-left:14px}.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.phc{grid-template-columns:84px 1fr}.phc img{width:84px;height:84px}}
 
 /* Accueil */
-.home-head{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);padding-block:var(--sp-3) var(--sp-4);border-bottom:1px solid var(--line);margin-bottom:var(--sp-5)}
+.home-head{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);background:#1b6d96;border-radius:var(--r);margin-bottom:var(--sp-5)}
+/* Bandeau aux couleurs SOLiHA, identique en mode sombre (blanc sur #1b6d96 : contraste 5,9:1). */
+.home-head .brand{display:flex;align-items:center;gap:var(--sp-3);min-width:0}
+.home-head .appname{color:#fff;font-weight:700;font-size:clamp(1.6rem,7vw,2.2rem);line-height:1.1}
+@media (max-width:480px){.home-head .logo{height:42px}}
 .home-head .logo{height:52px;width:auto;display:block;background:#fff;border-radius:var(--r-sm);padding:4px 6px}
+.home-head .avatar{background:#fff;color:#1b6d96;border-color:#fff}
 .avatar{width:48px;height:48px;border-radius:50%;background:var(--chip);color:var(--accent-strong);font-weight:700;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);padding:0;min-height:0}
 .hello{font-size:1.5rem;font-weight:700;margin:var(--sp-1) 0 var(--sp-5)}
 .big{display:flex;align-items:center;gap:var(--sp-4);width:100%;min-height:84px;padding:var(--sp-4);border-radius:14px;text-align:left;justify-content:flex-start;margin-bottom:var(--sp-3)}
@@ -3126,7 +3131,7 @@ console.assert(ERGO_SANTE('anam')&&ERGO_SANTE('b_p1_transf')&&!ERGO_SANTE('noms'
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.10.31-2304';
+const APP_VER='2026.10.31-2313';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -3450,13 +3455,12 @@ function render(){
   if(view==='list'){
     lq='';lt='';const rap=rappelSauv();
     const enc=visits.filter(v=>!v.pdfAt).length,ini=(P.nom||'').split(/\s+/).filter(Boolean).map(x=>x[0]).slice(0,2).join('').toUpperCase();
-    app.innerHTML=`<div class="tdb">${tdbSide(enc)}<div class="tdb-main"><div class="home-head"><img class="logo" src="${LOGO}" alt="SOLiHA Charente-Maritime Deux-Sèvres">
+    app.innerHTML=`<div class="tdb">${tdbSide(enc)}<div class="tdb-main"><div class="home-head"><div class="brand"><img class="logo" src="${LOGO}" alt="SOLiHA Charente-Maritime Deux-Sèvres"><span class="appname">SoliTech</span></div>
        <button class="avatar" data-act="go" data-v="profil" aria-label="Mon profil">${ini?esc(ini):svg('admin')}</button></div>
      ${P.nom?'':`<div class="banner">Renseignez votre profil (nom, téléphone, e-mail, signature) : il figure sur chaque rapport. <button data-act="go" data-v="profil">Remplir mon profil</button></div>`}
      ${rap?`<div class="banner">${P.lastBak?'Dernière sauvegarde '+ilya(P.lastBak):'Aucune sauvegarde'} · ${rap.length} dossier${rap.length>1?'s':''} non sauvegardé${rap.length>1?'s':''}. Ils ne sont enregistrés que sur cet appareil. <button data-act="bak">Sauvegarder maintenant</button></div>`:''}
      ${stoPlein()?`<div class="banner">Espace presque plein (${Math.round(100*STO.u/STO.q)} %). Sauvegardez puis supprimez des dossiers terminés pour pouvoir ajouter des photos. <button data-act="go" data-v="sauvegarde">Voir l’espace utilisé</button></div>`:''}
      ${STO.p===false&&visits.length?`<div class="banner">Stockage non protégé : le navigateur peut effacer les données si l’appareil manque de place. ${conseilSto()} <button data-act="persist">Réessayer</button></div>`:''}
-     <div class="eyebrow">SoliTech</div>
      <h1 class="hello">${P.nom?'Bonjour '+esc(P.nom.split(/\s+/)[0]):'Bonjour'}</h1><div class="tdb-date">${esc(new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).replace(/^./,c=>c.toUpperCase()))}</div>
      ${tdbHtml(enc)}
      <nav class="links tdb-links" aria-label="Autres actions">
