@@ -162,6 +162,7 @@ button.armed{background:var(--danger);color:#fff;border-color:var(--danger)}
 .hd-act{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}
 .hd-b{display:none;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:999px;background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6);font-size:.9rem;font-weight:700}
 .hd-b svg.i{color:currentColor}.hd-b.warn{background:#fdf1dc;color:#8a5300;border-color:#fdf1dc}
+.tb-sv{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 12px;font-size:.9rem;flex:none}.tb-sv.ok{color:var(--ok);border-color:var(--ok)}
 .tdb-rp .row{flex-wrap:nowrap;margin:0}.tdb-res{margin-bottom:var(--sp-4)}.tdb-q{display:block;margin-bottom:var(--sp-3)}.tdb-q>span{display:block;text-align:left}.tdb-kp b{display:block;font-size:1.6rem;line-height:1.1}.tdb-kp span{font-size:.85rem;color:var(--muted)}.tdb-kp.warn b{color:var(--warn)}
 .tdb-h{font-size:1.05rem;margin:var(--sp-4) 0 var(--sp-2);display:flex;justify-content:space-between;align-items:center;gap:8px}
 .tdb-h .lnk{border:0;background:none;color:var(--accent);padding:0 4px;font-size:.88rem}
@@ -3215,7 +3216,7 @@ console.assert(ERGO_SANTE('anam')&&ERGO_SANTE('b_p1_transf')&&!ERGO_SANTE('noms'
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.01-2122';
+const APP_VER='2026.11.01-2127';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -3477,7 +3478,9 @@ function phBlock(id,s,nums,need,d){return `<div class="grp"><span>Photos${need?'
        ${d?`<span class="lab">Commentaire</span>${dfSel(d,i)}<textarea id="com_${id}_${i}" data-it="${id}" data-k="com" data-i="${i}" aria-label="Commentaire de la photo ${nums[id+':'+i]}" placeholder="Commentaire (facultatif)">${esc(p.com||'')}</textarea>`:''}</div></div>`).join('')}
       <div class="cams"><label class="btn cam">${svg('cam')}Prendre une photo<input type="file" accept="image/*" capture="environment" data-photo="${id}"></label>
       <label class="btn cam">${svg('plus')}Depuis la galerie<input type="file" accept="image/*" multiple data-photo="${id}"></label></div></div></div>`}
-function topbar(title,sub,back,logo){return `<div class="top">${back?`<button class="btn-icon" data-act="${back}" aria-label="Retour">${svg('back')}</button>`:''}<div class="grow"><h1>${esc(title)}</h1>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>${logo?`<img class="com" src="${logo}" alt="${esc(isPdl(cur)?cur.f.commune:cur.f.dem)}">`:''}</div>`}
+// Tableau de bord d'un dossier (retour vers la liste) : bouton « Sauvegarder » (fsSave).
+function topbar(title,sub,back,logo){const sv=cur&&back==='list'&&view==='dash'?`<button class="tb-sv${sauve(cur)?' ok':''}" data-act="fsave">${svg(sauve(cur)?'ok':'save')}<span>${sauve(cur)?'Sauvegardé':'Sauvegarder'}</span></button>`:'';
+  return `<div class="top">${back?`<button class="btn-icon" data-act="${back}" aria-label="Retour">${svg('back')}</button>`:''}<div class="grow"><h1>${esc(title)}</h1>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>${sv}${logo?`<img class="com" src="${logo}" alt="${esc(isPdl(cur)?cur.f.commune:cur.f.dem)}">`:''}</div>`}
 const cpv=v=>[v.f.cp,v.f.ville].filter(Boolean).join(' ');
 const who=v=>isErgo(v)?v.f.noms||'Demandeur non renseigné':isAud(v)?[v.f.pNom,v.f.pPrenom].filter(Boolean).join(' ')||[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Propriétaire non renseigné':isLoc(v)?locWho(v):isDeg(v)?v.f.pNom||[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Propriétaire non renseigné':isPdl(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Logement non renseigné':[v.f.nom,v.f.prenom].filter(Boolean).join(' ')||'Occupant non renseigné';
 const where=v=>isErgo(v)||isAud(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', '):isLoc(v)?locWhere(v):isDeg(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', '):isPdl(v)?(v.f.pNom||v.f.pSoc?'Propriétaire : '+(v.f.pSoc||[v.f.pNom,v.f.pPrenom].filter(Boolean).join(' ')):''):[v.f.adresse,cpv(v)].filter(Boolean).join(', ');
@@ -3499,6 +3502,7 @@ function caseHtml(v){
    ${v.pdfAt?'':progHtml(v)}
    <div class="row"><button class="btn-primary" data-act="open" data-id="${v.id}">${v.pdfAt?'Ouvrir':'Reprendre'}</button>
     ${v.pdfAt?`<button data-act="reopen" data-id="${v.id}">Remettre en cours</button>`:''}
+    <button data-act="fsave" data-id="${v.id}">${sauve(v)?'Sauvegardé ✓':'Sauvegarder'}</button>
     <button class="btn-danger" data-act="delv" data-id="${v.id}">Supprimer</button></div></div>`}
   const deg=isDeg(v),rs=RR(v),manq=rs.reduce((n,r)=>n+(r.items||[]).filter(d=>d.p&&v.it[d.id]?.on&&!v.it[d.id].ph.length).length,0);
   return `<div class="case"><span class="tag ${isPdl(v)?'pdl':deg?'deg':isAud(v)?'aud':''}">${esc(kind(v))}</span>
@@ -3508,6 +3512,7 @@ function caseHtml(v){
    <div class="row"><button class="btn-primary" data-act="open" data-id="${v.id}">${v.pdfAt?'Ouvrir':'Reprendre'}</button>
     ${v.pdfAt?`<button data-act="reopen" data-id="${v.id}">Remettre en cours</button>`:''}
     ${isErgo(v)?`<button data-act="er-dup" data-id="${v.id}">Dupliquer</button>`:''}
+    <button data-act="fsave" data-id="${v.id}">${sauve(v)?'Sauvegardé ✓':'Sauvegarder'}</button>
     ${isPdl(v)||deg||isAud(v)||isErgo(v)?'':`<button data-act="ctrl" data-id="${v.id}">Créer la visite de contrôle</button>`}
     <button class="btn-danger" data-act="delv" data-id="${v.id}">Supprimer</button></div></div>`;
 }
@@ -3666,8 +3671,6 @@ function render(){
         `<div class="field full"><span>${esc(l)}</span><div class="chips" role="radiogroup" aria-label="${esc(l)}">${L.map(o=>`<label class="chip"><input type="radio" name="p_${k}" data-p="${k}" value="${esc(o)}" ${(P[k]||L[0])===o?'checked':''}>${esc(o)}</label>`).join('')}</div></div>`).join('')}
       <div class="field full"><span>Signature : signez au doigt ou importez une image scannée</span><canvas class="pad" id="pad" aria-label="Zone de signature de l'enquêteur"></canvas>
        <div class="row"><button data-act="clrpsig">Effacer</button><label class="btn">Importer une image<input type="file" accept="image/*" data-psig hidden></label></div></div>
-      <div class="field full"><span>Test : enregistrer une sauvegarde dans un dossier de votre choix et l’écraser ensuite</span>
-       <div class="row"><button data-act="fstest">Lancer le test</button></div><div class="hint" id="fsres">${esc(P.fsTest||'Pas encore testé sur cet appareil.')}</div></div>
      </div>`;
     app.insertAdjacentHTML('beforeend',`<p class="muted ver">Version ${esc(APP_VER)}</p>`);
     initPad(P.sig?.src,(src,r)=>{P.sig={src,r};saveP()});
@@ -4239,7 +4242,7 @@ document.addEventListener('click',async e=>{
     if(C.length&&!b.dataset.force){view='avantpdf';return go()}
     return exportPdf(v).then(()=>{if(!window.jspdf)return;if(isDeg(v)?degFinal(v):!ko){v.pdfAt=Date.now();store.put(v).catch(()=>{})}else if(ko)toast('PDF généré : le dossier reste en cours tant que les points à corriger ne sont pas réglés')}).catch(err=>toast('PDF impossible : '+err.message))}
   if(a==='export')return exportJson();
-  if(a==='fstest')return fsTest();
+  if(a==='fsave'){await fsSave(b.dataset.id?visits.find(x=>x.id===b.dataset.id):cur);return keep()}
   if(a==='sel'){exSel.clear();for(const v of visits)if(b.dataset.k==='all'||b.dataset.k==='encours'&&!v.pdfAt||b.dataset.k==='nonsauv'&&!sauve(v))exSel.add(v.id);return keep()}
   if(a==='cbdel'){if(!armed(b,'Confirmer la suppression'))return;delete CARNET.l[b.dataset.k];saveCarnet();cbDL();return keep()}
   if(a==='delmairie'){if(!armed(b,'Confirmer la suppression'))return;delete MAIRIES.l[b.dataset.k];saveMairies();return render()}
@@ -4270,20 +4273,20 @@ addEventListener('beforeinstallprompt',e=>{e.preventDefault();instEv=e;if(view==
 addEventListener('appinstalled',()=>{instEv=null;if(view==='list')render()});
 
 /* ---------- fichiers ---------- */
-// Test (01/11/2026) : l'appareil permet-il d'écrire un fichier choisi par l'utilisateur, de l'écraser, et de garder l'accès d'une session à l'autre ?
-// 1er lancement : choix de l'emplacement, 2 écritures, relecture, accès mémorisé. Lancements suivants (après fermeture de l'application) : réécriture sans choisir.
-async function fsTest(){const res=t=>{P.fsTest=t+' ('+new Date().toLocaleString('fr-FR')+')';saveP();const e=$('#fsres');if(e)e.textContent=P.fsTest};
-  if(!('showSaveFilePicker' in window))return res('Non disponible : ce navigateur ne permet pas d’enregistrer dans un dossier choisi. Le bouton par dossier ne pourra que télécharger un nouveau fichier.');
-  const ecrit=async(h,n)=>{const w=await h.createWritable();await w.write(JSON.stringify({app:'constat-decence',test:n,at:new Date().toISOString()}));await w.close();return JSON.parse(await (await h.getFile()).text()).test===n};
-  try{const r0=await store.getRec('fstest');
-    if(r0.h){let pm=await r0.h.queryPermission({mode:'readwrite'});const avant=pm;if(pm!=='granted')pm=await r0.h.requestPermission({mode:'readwrite'});
-      if(pm!=='granted')return res('Accès refusé au fichier de test enregistré précédemment.');
-      const ok=await ecrit(r0.h,(r0.n||2)+1);await store.putRec({id:'fstest',h:r0.h,n:(r0.n||2)+1});
-      return res(ok?`Réussi : fichier « ${r0.h.name} » réécrit sans choisir l’emplacement (accès ${avant==='granted'?'conservé sans question':'redemandé une fois'}). Test n° ${(r0.n||2)+1}.`:'Échec : le fichier relu ne correspond pas.')}
-    const h=await showSaveFilePicker({suggestedName:'test-solitech.json',types:[{description:'Sauvegarde SoliTech',accept:{'application/json':['.json']}}]});
-    const ok=await ecrit(h,1)&&await ecrit(h,2);let mem=true;try{await store.putRec({id:'fstest',h,n:2})}catch(e){mem=false}
-    res(!ok?'Échec : le fichier relu ne correspond pas.':mem?`Réussi : « ${h.name} » écrit puis écrasé. Fermez complètement l’application, rouvrez-la et relancez le test pour vérifier que l’accès est conservé.`:'Écriture réussie, mais l’accès au fichier ne peut pas être mémorisé : l’emplacement serait redemandé à chaque sauvegarde.')}
-  catch(e){if(e.name==='AbortError')return toast('Test annulé');res('Échec : '+e.message)}}
+// Sauvegarde d'un dossier dans un fichier choisi au 1er appui (<n° du dossier>.json, format de la sauvegarde), écrasé ensuite sans redemander
+// l'emplacement : l'accès au fichier est gardé dans IndexedDB (enregistrement fs:<id>). Android redemande l'autorisation une fois par ouverture.
+// Sans cette possibilité (navigateur ancien), le fichier est téléchargé.
+async function fsSave(v){if(!v)return;const nom=(v.num||slug(who(v))||v.id)+'.json',json=()=>JSON.stringify({app:'constat-decence',v:2,visits:[v]});
+  const fait=n=>{const t=Date.now();v.savedAt=t;store.put(v).catch(()=>{});P.lastBak=t;saveP();toast(n)};
+  if(!('showSaveFilePicker' in window)){offer(nom,new Blob([json()],{type:'application/json'}));return fait('Dossier téléchargé : « '+nom+' »')}
+  try{const r=await store.getRec('fs:'+v.id);let h=r.h;
+    if(h&&await h.queryPermission({mode:'readwrite'})!=='granted'&&await h.requestPermission({mode:'readwrite'})!=='granted')return toast('Accès au fichier refusé : sauvegarde non faite');
+    if(!h){h=await showSaveFilePicker({suggestedName:nom,types:[{description:'Sauvegarde SoliTech',accept:{'application/json':['.json']}}]});await store.putRec({id:'fs:'+v.id,h})}
+    const w=await h.createWritable();await w.write(json());await w.close();fait('Dossier enregistré dans « '+h.name+' »')}
+  catch(e){if(e.name==='AbortError')return;
+    // Fichier déplacé ou supprimé depuis : l'emplacement sera redemandé au prochain appui.
+    if(e.name==='NotFoundError'){await store.putRec({id:'fs:'+v.id});return toast('Fichier introuvable (déplacé ou supprimé) : touchez à nouveau « Sauvegarder » pour choisir l’emplacement')}
+    toast('Sauvegarde impossible : '+e.message)}}
 async function offer(filename,blob){
   const dl=window.claude?await window.claude.use('downloads').catch(()=>null):null;
   if(dl){try{await dl.save({filename,data:blob});toast('Fichier enregistré')}catch(e){if(e.code!=='declined')toast('Enregistrement impossible ('+(e.code||e.message)+')')}return}
