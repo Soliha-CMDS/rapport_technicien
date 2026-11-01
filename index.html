@@ -2544,7 +2544,12 @@ function audMigre3(a){if(a.v>=3)return a;const nt=(e,t)=>e.note=(e.note?e.note+'
 const ERGO_L={
   famille:['Célibataire','Divorcé(e) / Séparé(e)','Veuf / Veuve','Mariés','En concubinage'],
   occupants:['1','2','3','4','5','6 ou plus'],
-  concerne:['Madame','Monsieur','Madame et Monsieur','Enfant à charge','Parent à charge'],
+  concerne:['Madame','Monsieur','Madame et Monsieur','Enfant à charge','Parent à charge','Autre'],
+  // Personne concernée « Autre » (différente du demandeur, PRD § 11.2).
+  civ:['Madame','Monsieur'],
+  lien:['Fils / fille','Petit-fils / petite-fille','Parent','Conjoint(e)','Frère / sœur','Autre'],
+  protec:['Aucune','Curatelle','Tutelle','Habilitation familiale','Sauvegarde de justice'],
+  connexe:['Rénovation énergétique MaPrimeRénov’','OPAH','Autre'],
   pro:['Retraité(e)','En invalidité','En activité'],
   mdph:['Oui','Non','Demande en cours'],
   apa:['Oui','Non','Demande en cours'],
@@ -2558,40 +2563,43 @@ const ERGO_L={
   rep:['non','entrée','cuisine','salon','salle à manger','bureau','chambre(s)','salle de bain','salle d’eau','WC','garage','buanderie'],
   niv:['Indépendant','Supervision','Aide partielle','Aide totale'],
   teleass:['Oui','Non','Prévue'],
+  // Bilan : aides par ligne (PRD § 11.3), qui génèrent l'observation du bloc.
+  aidTech:['Canne simple','Canne avec embout stabilisateur','Déambulateur 2 roues','Déambulateur 4 roues','Fauteuil roulant manuel','Fauteuil roulant électrique','Lève-personne','Autre'],
+  aidHum:['Aidant familial','Aidant professionnel','Organisme'],
 };
 // Grille de bilan fonctionnel : [id du bloc, titre, [[id de ligne, libellé]]]. La téléassistance se coche Oui / Non / Prévue.
 const ERGO_BILAN=[
   ['com','Communication',[['com','Communication'],['tele','Téléassistance']]],
   ['mob','Mobilité',[['transf','Transferts'],['depInt','Déplacements intérieurs'],['depExt','Déplacements extérieurs'],['transp','Utilisation des moyens de transport']]],
-  ['toil','Toilette / Habillage',[['haut','Haut du corps'],['bas','Bas du corps']]],
+  ['toil','Toilette / continence / Habillage',[['haut','Haut du corps'],['bas','Bas du corps']]],
   ['rep','Repas / Traitements',[['prep','Préparation'],['repas','Prise des repas'],['medic','Prise de médicaments']]],
   ['dom','Tâches domestiques',[['courses','Courses'],['menage','Ménage'],['admin','Administratif'],['ext','Entretien des extérieurs']]],
 ];
-// Phrases types, insérées puis modifiables.
+// Phrases types (ergo-phrases.json, version 2 du 01/11/2026), de la plus fréquente à la moins fréquente, insérées puis modifiables.
+// Variables accordées à la personne concernée (ergoPhr) : {Pers}, {Pers_cible}, {nt}, {e}, {s}, {es}, {il}, {objet}, {objet2} ;
+// [ … ] : à compléter (sélectionné après l’insertion). p_<liste> : préconisations types ajoutées comme ligne de la liste.
 const ERGO_PH={
-  demande:[
-    'Madame souhaite adapter sa salle de bain afin de se sécuriser au quotidien.',
-    'Monsieur souhaite adapter sa salle de bain afin de se sécuriser au quotidien.',
-    'Madame et Monsieur souhaitent adapter leur salle de bain principalement pour pallier les difficultés de Monsieur.',
-    'Madame et Monsieur souhaitent adapter leur salle de bain principalement pour pallier les difficultés de Madame.',
-    'Monsieur souhaite adapter l’accès intérieur à son logement pour son retour au domicile à la suite d’une hospitalisation.',
-    'Madame souhaite adapter l’accès intérieur à son logement pour son retour au domicile à la suite d’une hospitalisation.',
-    'Également, il prévoit d’adapter sa salle de bain et ses WC au rez-de-chaussée.',
-    'Ces aménagements sont envisagés afin d’anticiper de potentielles futures difficultés.',
-  ],
-  observation:[
-    'Utilisation d’une canne simple.',
-    'Utilisation d’un déambulateur en intérieur.',
-    'Utilisation d’un fauteuil roulant.',
-    'Passage IDE journalier.',
-    'Aide de sa sœur.',
-    'Aide de son conjoint.',
-    'Aidant professionnel 2 fois par semaine.',
-    'Aide-ménagère.',
-    'Portage des repas.',
-    'Ne conduit plus, dépendant d’une tierce personne.',
-    'Une téléassistance sera prévue à son retour au domicile.',
-  ],
+  demande:["{Pers} souhaite{nt} adapter {objet} afin de pallier les difficultés de {Pers_cible}.", "Souhait d’adapter {objet} en rapport avec les difficultés actuelles.", "Souhait d’adapter {objet} dans un cadre préventif.", "{Pers} souhaite{nt} adapter {objet} afin d’anticiper de potentielles futures difficultés.", "{Pers} souhaite{nt} adapter {objet} afin de se sécuriser au quotidien.", "{Pers} évoque une appréhension lors de la toilette liée à sa baignoire.", "{Pers} souhaite adapter {objet} pour son retour au domicile à la suite d’une hospitalisation.", "Également, {Pers} prévoit d’adapter {objet2}.", "Souhait d’installer un ascenseur dans la maison pour accéder au [deuxième] niveau."],
+  anam:["{Pers} présente [pathologie / antécédent].", "{Pers} est atteint{e} de [ ], entraînant une mobilité réduite de façon importante.", "{Pers} souffre de [ ] entraînant [des troubles de la mobilité / des pertes d’équilibre fréquentes / des troubles de la dextérité].", "/", "{Pers} présente un antécédent de [ ] en [mois année] pour lequel {il} est actuellement en rééducation.", "On note [ ].", "Également, {Pers} [ ].", "Ces troubles ont été à l’origine de nombreuses chutes.", "{Pers} a chuté il y a [quelques mois], entraînant une hospitalisation et renforçant son besoin en aides humaines.", "{Pers} est autonome dans l’ensemble des activités de la vie quotidienne.", "[Son fils] l’aide quotidiennement, avec également la présence de professionnels.", "{Pers} est sous [curatelle / tutelle / habilitation familiale]."],
+  observation:["Pas de difficulté.", "Indépendant{e}{s}.", "Par un aidant professionnel [2 fois / 2 heures] par semaine.", "Ne conduit plus, se déplace avec un proche aidant.", "Non concerné{e}.", "Réalisé{es} par [sa sœur / son fils / Monsieur].", "Avec aide humaine partielle.", "Par un aidant familial.", "Indépendant{e} avec canne simple.", "Conduisent tous les deux.", "Passage IDE [journalier].", "Indépendant{e}{s}, aide ponctuelle de [sa sœur / son fils].", "Indépendant{e}{s} mais plutôt géré par [Madame / Monsieur].", "Une téléassistance sera prévue à son retour au domicile.", "Indépendant{e}{s} avec appui.", "Utilisation d’un déambulateur en intérieur.", "Ne sort pas pour l’heure.", "Conduit son véhicule personnel.", "Ne conduit plus, dépendant{e} d’une tierce personne.", "Indépendant{e} mais évoque des difficultés.", "Aidant professionnel nécessaire. Sera prévu lors du retour au domicile.", "Préparation des repas sera vue au retour au domicile.", "Aide-ménagère probablement prévue au retour au domicile.", "Indépendant{e}{s} mais aide pour les démarches en ligne.", "Aide familiale et aide professionnelle.", "Avec [ADMR / SSIAD / aide à domicile].", "Avec aide technique : [déambulateur 2 roues / déambulateur 4 roues / fauteuil roulant manuel / canne].", "Indépendant{e} en fauteuil roulant manuel.", "Avec aide humaine [et lève-personne].", "Avec aide humaine.", "Indépendant{e} sur petit périmètre.", "Indépendant{e} mais sort peu.", "Par le/la conjoint(e).", "Sous mesure de protection."],
+  ext:["L’accès au logement se fait depuis la rue via un [portail / portillon] donnant sur [une cour bétonnée / une cour en gravier / un chemin bétonné] jusqu’à la porte d’entrée.", "Présence de [une / deux] marche(s) pour accéder au logement.", "Possibilité d’entrer dans le logement de plain-pied via le garage. Il faut ensuite emprunter un escalier intérieur.", "L’accès au logement se fait depuis la route via un chemin de terre amenant à une zone de stationnement. Pour accéder à la maison, il faut emprunter un cheminement en herbe jusqu’à la porte d’entrée.", "L’accès au logement s’effectue depuis la rue via le trottoir.", "L’entrée par la porte principale se fait via [ ] marches puis un escalier extérieur avec [deux] mains courantes.", "Il s’agit de l’entrée privilégiée par {Pers}.", "Un autre accès existe par l’arrière du logement via [un portillon] donnant sur [un escalier carrelé].", "Un cheminement amène au garage, l’autre à la porte d’entrée.", "Présence d’un accès de plain-pied."],
+  menu:["Le logement est entièrement équipé de volets battants.", "Présence [à l’arrière du logement] d’un volet roulant électrique sur la baie vitrée.", "Le logement est équipé de volets roulants électriques."],
+  int:["Présence d’un escalier [quart-tournant / droit / tournant] [avec main courante et nez de marches antidérapants] desservant [l’étage / le sous-sol], où se situent [la chambre et la salle de bain] de {Pers}.", "Les passages au sein du logement sont de [73] cm.", "Présence d’une marche pour [entrer dans le logement / accéder au jardin].", "L’ensemble des pièces de vie se trouve au même niveau.", "Présence d’un escalier desservant les pièces de vie depuis le garage. Celui-ci présente une porte ouvrant sur l’escalier qu’il faudra inverser de sens.", "La salle de bain présente un passage de [60] cm.", "Un ascenseur privatif sera installé dans [le salon] au rez-de-chaussée permettant l’accès à l’étage. L’arrivée se fera dans [la chambre de Monsieur]."],
+  douche:["La salle de bain [se situe à l’étage,] est équipée d’une baignoire encastrée.", "Présence d’un WC [type sanibroyeur] dans cette salle de bain.", "La salle de bain est équipée d’une cabine de douche.", "La salle de bain est équipée d’un receveur extraplat et antidérapant.", "Présence d’un bidet.", "Une salle de bain adaptée sera créée au rez-de-chaussée (à l’emplacement [d’une bibliothèque]).", "Présence d’un receveur avec marche et d’un passage étroit entre le receveur et le meuble vasque.", "Salle de bain au [1er étage / rez-de-chaussée]."],
+  lav:["Présence d’un lavabo sur meuble de rangement.", "Présence d’un lavabo [dans la chambre / dans l’autre salle d’eau].", "Le projet consiste à remplacer le lavabo [sur colonne] par un lavabo PMR.", "Un lavabo PMR sera prévu dans la future salle de bain."],
+  wc:["Présence d’un WC dans la salle de bain [à l’étage / qui sera adaptée]. Un WC se situe également [au rez-de-chaussée / dans la salle d’eau].", "Présence d’un WC avec porte ouvrant sur l’intérieur.", "Présence d’une barre d’appui.", "Un WC surélevé se situe au rez-de-chaussée avec porte ouvrant sur l’extérieur."],
+  autres:["La mise en place d’un visiophone est envisagée afin de sécuriser {Pers} au quotidien."],
+  libre:[],
+  connexe:["Dossier de rénovation énergétique mené en parallèle pour réhabiliter la maison."],
+  croquis:["Le receveur de douche viendra se disposer [en fond de pièce, permettant de maximiser l’espace disponible / à l’emplacement de l’actuelle baignoire].", "Le [WC sanibroyeur / WC] sera remplacé par un WC surélevé afin de faciliter les transferts de {Pers}, avec barre d’appui relevable.", "L’accès à la pièce se fera via une porte coulissante de 83 cm de passage minimum.", "Le receveur ne pourra dépasser [80] cm, [la fenêtre] ne permettant pas plus.", "Un lavabo PMR sera disposé en entrée de pièce afin de ne pas empiéter sur le passage disponible.", "Le bidet sera retiré.", "Le chauffe-eau sera également modifié afin d’être plus adapté à la nouvelle salle de bain.", "La future salle de bain comprendra un receveur extraplat antidérapant, un lavabo PMR ainsi qu’un WC surélevé.", "{Pers} [a / ont] fait adapter [sa / leur] salle de bain en anticipation.", "{Pers} dispose de [barres d’appui / un siège rabattable] qui n’ont pas été installés. Information donnée de la possibilité d’installer ces éléments pour plus de sécurité."],
+  aides:["Lors de la visite est évoquée la mise en place d’aides techniques pour les WC (type rehausseur amovible et barres d’appui).", "La mise en place d’un cheminement lumineux pour la nuit est préconisée afin de sécuriser {Pers}."],
+  anah:["Cet aménagement n’est pas inclus dans le dossier ANAH, le plafond subventionnable étant dépassé.", "Cela ne rentrera pas dans le dossier ANAH.", "(non retenu dans le dossier ANAH)"],
+  p_acc:["Accès adapté aux capacités actuelles, pas d’aménagement à prévoir.", "Pose de main(s) courante(s) extérieure(s) [à l’arrière].", "Création d’un cheminement avec revêtement antidérapant [desservant la porte d’entrée / depuis la zone de stationnement] [avec suppression de la marche].", "Création d’une rampe d’accès réglementaire : pente < 5 %, revêtement antidérapant, largeur 120 cm, pour compenser [les deux marches à l’avant]."],
+  p_menu:["Pose de [nombre] volets roulants motorisés [type solaires].", "Volets adaptés aux capacités actuelles, pas d’adaptation à prévoir.", "Centralisation des commandes (éclairage, volets, TV)."],
+  p_niv:["Installation d’un siège monte-escaliers [pour l’escalier desservant l’étage / du garage].", "Accès adapté aux capacités actuelles, pas d’adaptation à prévoir.", "Installation d’un ascenseur privatif.", "Installation d’un siège monte-escaliers pour l’escalier du garage avec inversion du sens d’ouverture de la porte.", "Pose d’une barre d’appui au niveau de la marche.", "Installation d’un siège monte-escaliers entraînant des travaux induits : remplacement du garde-corps pour optimiser la largeur.", "Création d’un ascenseur adapté.", "Installation de rails au plafond pour optimiser les transferts."],
+  p_pass:["Largeurs de passage adaptées aux capacités actuelles, pas de préconisation."],
+  p_wc:["Pose de WC surélevés ou suspendus [dans la salle de bain à adapter]. Hauteur 45-50 cm.", "WC adapté aux capacités actuelles, pas de préconisation.", "Pose d’un WC lavant.", "Pose de barre(s) d’appui coudée(s)."],
+  p_porte:["Porte adaptée aux capacités actuelles, pas de préconisation.", "Inversion du sens d’ouverture de la porte.", "Pose d’une porte de 83 cm de passage minimum."],
 };
 // Aide à l'éligibilité MaPrimeAdapt' (indicatif) : âge le plus élevé des personnes concernées.
 const ERGO_ELIG=[[70,'ok','Éligible au critère d’âge (70 ans ou plus).'],[60,'warn','Éligible sous condition de GIR (60 à 69 ans).'],[0,'warn','Critère d’éligibilité à vérifier : taux d’incapacité ≥ 50 % ou PCH.']];
@@ -2600,7 +2608,7 @@ const ERGO_ELIG=[[70,'ok','Éligible au critère d’âge (70 ans ou plus).'],[6
    Zone : {k, t (titre du bandeau), s (sous-titre), g (listes : [clé, titre, éléments]) ou bloc (bloc standard), croquis, larg}.
    Élément : [id, libellé, options]. Dans le libellé, {clé:Libellé du champ=valeur par défaut} est un paramètre à saisir,
    « ! » à la fin le rend obligatoire. Options : m = modifie l'aspect extérieur (alerte mairie), off = décoché dans le bloc standard,
-   aucun = « pas d'aménagement à prévoir » (urgence « Aucun » par défaut). */
+   aucun = « pas d'aménagement à prévoir » (urgence « Aucun » par défaut), seul = exclut les autres lignes du bloc (existant adapté). */
 const ERGO_URG=['Prioritaire','Modéré','Préventif','Aucun'];
 const ERGO_MAIRIE='⚠ Modifications soumises à une demande préalable de travaux. Veuillez vous rapprocher de votre mairie ⚠';
 const ERGO_ZONES=[
@@ -2616,7 +2624,8 @@ const ERGO_ZONES=[
     ['men1','Installation d’une porte de garage motorisée ou motorisation de l’existant',{m:1}],
     ['men2','Pose d’un portail motorisé ou motorisation de l’existant',{m:1}],
     ['men3','Pose de {nb:Nombre=} volets roulants motorisés {sol:Type (ex. solaires)=}',{m:1}],
-    ['men4','Pose d’un système de poignées rallongées']]]]},
+    ['men4','Pose d’un système de poignées rallongées'],
+    ['men5','Centralisation des commandes (éclairage, volets, TV)']]]]},
   {k:'int',t:'INTÉRIEUR DU LOGEMENT',s:'Accessibilité générale',larg:1,g:[['niv','Niveaux',[
     ['int0','Accès adapté aux capacités actuelles, pas d’aménagement à prévoir',{aucun:1}],
     ['int1','Installation d’un siège monte-escaliers ({esc:Pour quel escalier=})'],
@@ -2624,13 +2633,17 @@ const ERGO_ZONES=[
     ['int3','Installation d’une plateforme élévatrice'],
     ['int4','Pose de main(s) courante(s)'],
     ['int5','Pose d’une barre d’appui au niveau de la marche'],
-    ['int6','Pose de nez de marches antidérapants / contrastés']]],
+    ['int6','Pose de nez de marches antidérapants / contrastés'],
+    ['int7','Installation d’un siège monte-escaliers entraînant des travaux induits : {tx:Travaux induits=remplacement du garde-corps pour optimiser la largeur}'],
+    ['int8','Création d’un ascenseur adapté'],
+    ['int9','Installation de rails au plafond pour optimiser les transferts']]],
    ['pass','Passages',[
     ['pas0','Passages adaptés aux capacités actuelles, pas d’aménagements à prévoir',{aucun:1}],
     ['pas1','Élargissement des portes à 83 cm minimum'],
     ['pas2','Inversion du sens d’ouverture des portes'],
     ['pas3','Pose de portes coulissantes / à galandage']]]]},
   {k:'douche',t:'SALLE DE BAIN',s:'Espace douche',croquis:1,bloc:[
+    ['d0','Douche existante adaptée aux capacités actuelles, pas de préconisation',{off:1,seul:1,aucun:1}],
     ['d1','Modification éventuelle des arrivées et évacuation des appareils sanitaires'],
     ['d2','Pose d’un receveur extraplat antidérapant, encastré/sans marche si techniquement faisable ou création d’une douche à l’italienne avec revêtement antidérapant. Dimensions : {L:Longueur (cm)=!} × {l:Largeur (cm)=!} cm'],
     ['d3','Pose d’un mitigeur thermostatique ergonomique, fixé à {h:Hauteur (cm)=100} cm'],
@@ -2645,8 +2658,11 @@ const ERGO_ZONES=[
     ['d12','Installation d’une VMC'],
     ['d13','Amélioration de l’éclairage'],
     ['d14','Pose d’une porte coulissante de passage minimum {p:Passage (cm)=83} cm',{off:1}],
-    ['d15','Modification du chauffe-eau',{off:1}]]},
+    ['d15','Modification du chauffe-eau',{off:1}],
+    ['d16','Création de la salle d’eau entraînant la pose de cloisons et d’une porte de 83 cm, chape liquide et isolant pour la pose d’un carrelage antidérapant',{off:1}],
+    ['d17','Pose d’une fenêtre à châssis fixe',{off:1,m:1}]]},
   {k:'lav',t:'SALLE DE BAIN',s:'Espace lavabo',bloc:[
+    ['l0','Lavabo existant PMR adapté aux capacités actuelles, pas de préconisation',{off:1,seul:1,aucun:1}],
     ['l1','Pose d’une vasque PMR suspendue ou sur plan de toilette, avec siphon déporté'],
     ['l2','Pose d’un miroir posé au ras de la vasque avec éclairage adapté'],
     ['l3','Pose d’un meuble sur le côté'],
@@ -2655,12 +2671,14 @@ const ERGO_ZONES=[
     ['wc0','WC adapté aux capacités actuelles, pas d’aménagement à prévoir',{aucun:1}],
     ['wc1','Pose de WC surélevés ou suspendus, hauteur {h:Hauteur (cm)=45 à 50} cm ({emp:Emplacement=})'],
     ['wc2','Pose de WC surélevés ou suspendus avec barre(s) d’appui coudée(s)'],
-    ['wc3','Pose de barre(s) d’appui coudée(s) / relevable']]],
+    ['wc3','Pose de barre(s) d’appui coudée(s) / relevable'],
+    ['wc4','Pose d’un WC lavant']]],
    ['porte','Porte',[
     ['wp0','Porte adaptée, pas d’aménagement à prévoir',{aucun:1}],
     ['wp1','Inversion du sens d’ouverture de la porte'],
     ['wp2','Pose d’une porte coulissante / à galandage'],
-    ['wp3','Élargissement de la porte à 83 cm minimum']]]]},
+    ['wp3','Élargissement de la porte à 83 cm minimum'],
+    ['wp4','Pose d’une porte de 83 cm de passage minimum']]]]},
   {k:'autres',t:'AUTRES ESPACES DU LOGEMENT',s:'Spécificités',g:[['autres','Autres espaces',[
     ['au0','Pas d’aménagements supplémentaires à prévoir',{aucun:1}],
     ['au1','Pose d’un revêtement de sol sûr et non glissant'],
@@ -2671,17 +2689,6 @@ const ERGO_ZONES=[
 ];
 // Zone personnalisée (titre libre) : une seule liste, lignes libres.
 const ERGO_ZLIBRE={k:'libre',t:'',s:'',g:[['libre','Préconisations',[]]]};
-// Phrases types de l'observation de l'existant, par zone, et du croquis de la salle de bain.
-Object.assign(ERGO_PH,{
-  ext:['L’accès au logement s’effectue depuis la rue via le trottoir.','On note la présence d’une marche donnant sur l’entrée du logement.','L’accès au logement s’effectue de plain-pied.'],
-  menu:['Le logement est équipé de volets battants.','Le logement est équipé de volets roulants manuels.','Présence d’un portail manuel.'],
-  int:['Le logement présente un escalier droit desservant l’étage.','Le logement présente un escalier tournant desservant l’étage.','Le logement est de plain-pied.'],
-  douche:['La salle de bain est équipée d’une baignoire.','La salle de bain est équipée d’une baignoire encastrée.','La salle de bain est équipée d’une douche avec un receveur haut.','On note la présence d’un WC dans cette salle de bain.'],
-  lav:['Un lavabo sur meuble de rangement est présent dans la salle de bain.','Un lavabo sur colonne est présent dans la salle de bain.'],
-  wc:['Les WC sont indépendants.','Les WC se situent dans la salle de bain.','Les WC sont à hauteur standard.'],
-  autres:[],libre:[],
-  croquis:['Le receveur de douche viendra se disposer en fond de pièce.','Le WC sanibroyeur sera remplacé par un WC surélevé avec barre d’appui relevable.','Le bidet sera retiré.'],
-});
 // Aides techniques préconisées (non financées par l'Anah).
 const ERGO_AT=['Rehausseur WC amovible','Cadre / barres d’appui WC','Siège de bain / de douche','Planche de bain','Chemin lumineux nocturne','Téléassistance','Barre de lit','Tapis antidérapant'];
 
@@ -2690,6 +2697,10 @@ const ERGO_TXT={
   bailleur:'Accord écrit du bailleur nécessaire pour les travaux.',
   // Pied du tableau de synthèse (guide MaPrimeAdapt' 2026).
   mpa:'MaPrimeAdapt’ : 70 % (revenus très modestes) ou 50 % (revenus modestes) du montant des travaux, plafond 22 000 € HT.',
+  // Bloc « Accompagnateur AMO » et adresse de la page de garde, selon l'agence de « Mon profil » (PRD § 11.1).
+  amo17:['SOLiHA Charente-Maritime Deux-Sèvres : 182 boulevard Émile Delmas - 17000 La Rochelle','Tél. : 05.46.07.49.99 / contact.charentemaritime@soliha.fr',
+    'Association régie par la loi de 1901 - SIRET : 330 533 670 00072 - APE 8899B – https://charentemaritime-deuxsevres.soliha.fr/'],
+  adr17:'SOLIHA 17-79 · 182 boulevard Émile Delmas · 17000 La Rochelle · Tél. 05.46.07.49.99',
   amo:['Siège social : 182 boulevard Emile Delmas - 17 000 La Rochelle','Tél. : 05.46.07.49.99 / contact.charentemaritime@soliha.fr',
     'Agence Deux-Sèvres : 6 route de La Rochelle - 79000 BESSINES','Tél : 05.35.00.16.02 / contact.deuxsevres@soliha.fr',
     'Association régie par la loi de 1901 - SIRET : 330 533 670 00072 - APE 8899B – https://charentemaritime-deuxsevres.soliha.fr/'],
@@ -2701,14 +2712,15 @@ const ERGO_TXT={
 /* ---------- Rapport ergothérapeute (Diagnostic adaptation et accessibilité, MaPrimeAdapt') : lot 1 du 30/10/2026 ----------
    Dossier : v.type='ergo', champs simples dans v.f (même saisie que les autres dossiers : field(), data-f).
    Demandeur : noms, tel, mail, adresse, cp, ville, presents, dateVis, dateDiag, famille, occupants, concerne, naiss1, naiss2,
-   pro, mdph, apa (+apaT), gir (+girT), cmi, autres. Logement : lStatut, lType, lMilieu, lNiv, lPieces, anCons, anAchat, surf,
+   pro, mdph, apa (+apaT), gir (+girT), cmi, autres ; personne « Autre » : autreCiv, autreNom, autreLien ; protec (+protecNom), connexe (+connexeT). Logement : lStatut, lType, lMilieu, lNiv, lPieces, anCons, anAchat, surf,
    rep_<rdc|etage|ss> (+ _ch nombre de chambres, _t texte). Demande : expr, anam, urgent, urgMotif.
-   Bilan : b_<p1|p2>_<ligne>, observations bo_<p1|p2>_<bloc> ; p1 = Madame ou la personne seule, p2 = Monsieur (« Madame et Monsieur »).
+   Bilan : b_<p1|p2>_<ligne> (+ _at, _atT aide technique, _ah, _ahT aide humaine), observations bo_<p1|p2>_<bloc> (+ _g : dernier texte généré) ; p1 = Madame ou la personne seule, p2 = Monsieur (« Madame et Monsieur »).
    Listes et phrases types : ergo-ref.js. */
 const isErgo=v=>v.type==='ergo';
 const ergoDeux=v=>v.f.concerne==='Madame et Monsieur';
 // Personnes concernées : [clé, nom affiché] ; une seule, sauf « Madame et Monsieur ».
-const ergoPers=v=>ergoDeux(v)?[['p1','Madame'],['p2','Monsieur']]:[['p1',v.f.concerne||'Personne concernée']];
+const ergoAutre=v=>v.f.concerne==='Autre';
+const ergoPers=v=>ergoDeux(v)?[['p1','Madame'],['p2','Monsieur']]:[['p1',ergoAutre(v)?[v.f.autreCiv,v.f.autreNom].filter(filled).join(' ')||'Personne concernée':v.f.concerne||'Personne concernée']];
 // Âge en années révolues à une date (AAAA-MM-JJ), ou null.
 function ergoAge(n,d){if(!/^\d{4}-\d{2}-\d{2}$/.test(n||''))return null;const [a,m,j]=n.split('-').map(Number),[A,M,J]=(d||today()).split('-').map(Number);
   const x=A-a-(M<m||M===m&&J<j?1:0);return x>=0&&x<130?x:null}
@@ -2719,7 +2731,7 @@ const ERGO_SANTE=k=>/^(expr|anam|urgent|urgMotif|b_|bo_)/.test(k);
 
 /* --- état des sections : vide / incomplet / complet --- */
 function ergoReq(v,s){const f=v.f;
-  if(s==='edem')return ['noms','adresse','cp','ville','dateVis','dateDiag','famille','occupants','concerne','naiss1',...(ergoDeux(v)?['naiss2']:[]),'pro','mdph','apa','gir'];
+  if(s==='edem')return ['noms','adresse','cp','ville','dateVis','dateDiag','famille','occupants','concerne',...(ergoAutre(v)?['autreCiv','autreNom','autreLien']:[]),'naiss1',...(ergoDeux(v)?['naiss2']:[]),'pro','mdph','apa','gir','protec'];
   if(s==='elog')return ['lStatut','lType','lMilieu','lNiv','lPieces','anCons','surf','rep_rdc'];
   return ['expr',...ergoPers(v).flatMap(([p])=>ERGO_BILAN.flatMap(([,,L])=>L.map(([l])=>`b_${p}_${l}`)))]}
 function ergoEtat(v,s){if(s==='ezones')return ergoEtatZ(v);if(s==='eaides')return filled(v.f.at)||filled(v.f.atTxt)?'complet':'vide';const R=ergoReq(v,s),n=R.filter(k=>filled(v.f[k])).length;return n===0?'vide':n===R.length?'complet':'incomplet'}
@@ -2727,7 +2739,17 @@ const ERGO_SECS=[['edem','1. DEMANDEUR(S)','Informations générales','descripti
 
 /* --- écrans --- */
 let ergoP='p1';
-const ergoIns=(k,L,lab)=>`<select data-ins="${k}" aria-label="${esc(lab)}"><option value="">${esc(lab)}…</option>${L.map((t,i)=>`<option value="${i}">${esc(t)}</option>`).join('')}</select>`;
+// Phrase type accordée à la personne concernée (who : personne de l'onglet du bilan) ; une personne non nommée reste entre crochets.
+function ergoPhr(v,t,who){const c=who||(ergoAutre(v)?v.f.autreCiv:v.f.concerne),deux=c==='Madame et Monsieur',fem=c==='Madame',P=deux||fem||c==='Monsieur'?c:'[Madame / Monsieur]';
+  const V={Pers:P,Pers_cible:deux?'[Madame / Monsieur]':P,nt:deux?'nt':'',e:fem?'e':'',s:deux?'s':'',es:'es',il:deux?'ils':fem?'elle':c==='Monsieur'?'il':'[il / elle]',
+    objet:deux?'[leur salle de bain]':'[sa salle de bain]',objet2:deux?'[leurs WC]':'[ses WC]'};
+  return t.replace(/\{(\w+)\}/g,(m,k)=>V[k]??m)}
+// Après une insertion : le premier [ … ] à partir de « from » est sélectionné, pour être remplacé en tapant.
+function ergoCro(ta,from=0){const i=ta.value.indexOf('[',from),j=i<0?-1:ta.value.indexOf(']',i);ta.focus();
+  if(j>0)ta.setSelectionRange(i,j+1);else ta.setSelectionRange(ta.value.length,ta.value.length)}
+// Personne de l'onglet du bilan (champ bo_p1_… ou bo_p2_…), pour l'accord des observations d'un couple.
+const ergoWho=k=>ergoDeux(cur)&&/^bo_p[12]_/.test(k)?(k[4]==='2'?'Monsieur':'Madame'):null;
+const ergoIns=(k,ph,lab)=>`<select data-ins="${k}" data-ph="${ph}" aria-label="${esc(lab)}"><option value="">${esc(lab)}…</option>${ERGO_PH[ph].map((t,i)=>`<option value="${i}">${esc(ergoPhr(cur,t,ergoWho(k)))}</option>`).join('')}</select>`;
 function ergoView(app,bar,bi){const v=cur,f=v.f;bar.hidden=false;
   const done=`<button class="btn-primary" data-act="dash">Terminé</button>`;
   const el=ergoElig(v),elig=el?`<div class="banner ${el.cls==='ok'?'ok':''}"><span class="grow">MaPrimeAdapt’ (indicatif) : ${esc(el.t)}</span>${el.max>=70&&!filled(f.gir)?'<button data-act="er-gir70">GIR : « Pas nécessaire, plus de 70 ans »</button>':''}</div>`:'';
@@ -2744,13 +2766,15 @@ function ergoView(app,bar,bi){const v=cur,f=v.f;bar.hidden=false;
       ['dateDiag','Diagnostic réalisé le','d',null,f.dateVis&&f.dateDiag&&f.dateDiag<f.dateVis?'⚠ Le diagnostic est antérieur à la visite.':''],
       ['h','Situation'],['famille','Situation familiale','r',ERGO_L.famille],['occupants','Nombre d’occupants','r',ERGO_L.occupants],
       ['concerne','Personne de la famille concernée par la demande','r',ERGO_L.concerne],
-      ['naiss1',p2?'Date de naissance de Madame':'Date de naissance'+(f.concerne?' ('+f.concerne+')':''),'d',null,age(1)],
+      ...(ergoAutre(v)?[['autreCiv','Personne concernée : civilité','r',ERGO_L.civ],['autreNom','Personne concernée : nom et prénom','t'],['autreLien','Lien avec le demandeur','r',ERGO_L.lien]]:[]),
+      ['naiss1',p2?'Date de naissance de Madame':'Date de naissance'+(f.concerne?' ('+p1[1]+')':''),'d',null,age(1)],
       ...(p2?[['naiss2','Date de naissance de Monsieur','d',null,age(2)]]:[]),
-      ['pro','Situation(s) professionnelle(s)','c',ERGO_L.pro],['mdph','MDPH','r',ERGO_L.mdph],
+      ['pro',ergoAutre(v)?'Situation professionnelle de la personne concernée':'Situation(s) professionnelle(s)','c',ERGO_L.pro],['mdph','MDPH','r',ERGO_L.mdph],
       ['apa','APA','r',ERGO_L.apa],['apaT','APA : précision (facultatif)','t',null,'Ex. : Demande à faire au retour à domicile. Remplace le choix dans le rapport.'],
       ['gir','GIR','r',ERGO_L.gir],['girT','GIR : précision (facultatif)','t'],
-      ['cmi','Carte mobilité inclusion','t'],['autres','Autre(s)','ta']];
-    app.innerHTML=`${topbar('1. Demandeur(s)',who(v),'dash')}${elig}<div class="form">${F.map(field).join('')}</div>`;bi.innerHTML=done;return true}
+      ['protec','Mesure de protection juridique','r',ERGO_L.protec],['protecNom','Mandataire (nom)','t',null,'Signataire du dossier Anah.',v=>filled(v.f.protec)&&v.f.protec!=='Aucune'],
+      ['cmi','Carte mobilité inclusion','t'],['connexe','Dossier(s) connexe(s)','c',ERGO_L.connexe],['connexeT','Dossier(s) connexe(s) : commentaire','ta',null,null,v=>filled(v.f.connexe)],['autres','Autre(s)','ta']];
+    app.innerHTML=`${topbar('1. Demandeur(s)',who(v),'dash')}${elig}<div class="form">${F.map(field).join('')}${filled(f.connexe)?ergoIns('connexeT','connexe','Insérer une phrase type'):''}</div>`;bi.innerHTML=done;return true}
   if(view==='elog'){const an=+f.anCons,y=new Date().getFullYear();
     const rep=(k,l)=>{const L=f['rep_'+k]||[];return [['rep_'+k,l,'c',ERGO_L.rep],...(L.includes('chambre(s)')?[['rep_'+k+'_ch',l+' : nombre de chambres','n']]:[]),['rep_'+k+'_t',l+' : autre (texte libre)','t']]};
     const F=[['lStatut','Statut propriété','r',ERGO_L.statut],['lType','Type d’habitation','r',ERGO_L.habitat],['lMilieu','Localisation / milieu','r',ERGO_L.milieu],
@@ -2761,11 +2785,15 @@ function ergoView(app,bar,bi){const v=cur,f=v.f;bar.hidden=false;
      ${f.lStatut==='Locataire(s)'?'<div class="banner warn">Accord écrit du bailleur nécessaire pour les travaux (repris dans le rapport).</div>':''}
      <div class="form">${F.map(field).join('')}</div><p class="muted">Une ligne laissée vide n’apparaîtra pas dans le rapport.</p>`;bi.innerHTML=done;return true}
   if(view==='edde'){const P2=ergoPers(v),p=P2.some(x=>x[0]===ergoP)?ergoP:'p1';
-    const grille=ERGO_BILAN.map(([b,t,L])=>`<h3>${esc(t)}</h3><div class="form">${L.map(([l,lab])=>field([`b_${p}_${l}`,lab,'r',l==='tele'?ERGO_L.teleass:[...ERGO_L.niv,'Non évalué']])).join('')}
-      ${field([`bo_${p}_${b}`,'Observation(s) : '+t,'ta'])}${ergoIns(`bo_${p}_${b}`,ERGO_PH.observation,'Insérer une observation type')}</div>`).join('');
+    // Aides de la ligne (repliées) : elles rédigent l'observation du bloc.
+    const aides=l=>{const k=`b_${p}_${l}_`,n=['at','ah'].reduce((s,x)=>s+(f[k+x]||[]).length,0);
+      return `<div class="field full"><details ${n?'open':''}><summary>Aides${n?' ('+n+')':''}</summary><div class="form">${[[k+'at','Aide technique','c',ERGO_L.aidTech],[k+'atT','Aide technique : précision','t'],
+        [k+'ah','Aide humaine','c',ERGO_L.aidHum],[k+'ahT','Aide humaine : précision','t',null,'Ex. : son fils ; 2 fois par semaine ; ADMR.']].map(field).join('')}</div></details></div>`};
+    const grille=ERGO_BILAN.map(([b,t,L])=>`<h3>${esc(t)}</h3><div class="form">${L.map(([l,lab])=>field([`b_${p}_${l}`,lab,'r',l==='tele'?ERGO_L.teleass:[...ERGO_L.niv,'Non évalué','Non concerné']])+(l==='tele'?'':aides(l))).join('')}
+      ${field([`bo_${p}_${b}`,'Observation(s) : '+t,'ta'])}${ergoIns(`bo_${p}_${b}`,'observation','Insérer une observation type')}</div>`).join('');
     app.innerHTML=`${topbar('3. Demande et bilan',who(v),'dash')}
-     <div class="form">${field(['expr','Expression de la demande','ta'])}${ergoIns('expr',ERGO_PH.demande,'Insérer une phrase type')}
-      ${field(['anam','Anamnèse','ta',null,'Laissée vide, elle apparaîtra « / » dans le rapport.'])}
+     <div class="form">${field(['expr','Expression de la demande','ta'])}${ergoIns('expr','demande','Insérer une phrase type')}
+      ${field(['anam','Anamnèse','ta',null,'Laissée vide, elle apparaîtra « / » dans le rapport.'])}${ergoIns('anam','anam','Insérer une phrase type')}
       ${field(['urgent','Dossier urgent','c',['Dossier urgent']])}${field(['urgMotif','Motif de l’urgence','t',null,null,v=>filled(v.f.urgent)])}</div>
      <h2 class="sec">Bilan fonctionnel</h2>
      ${P2.length>1?`<div class="seg" role="tablist">${P2.map(([k,l])=>`<label class="chip"><input type="radio" name="ergop" data-act="er-p" data-p="${k}" ${k===p?'checked':''}>${esc(l)}</label>`).join('')}</div>`:''}
@@ -2775,12 +2803,24 @@ function ergoView(app,bar,bi){const v=cur,f=v.f;bar.hidden=false;
 /* --- saisie : phrase type, réaffichage des champs calculés, valeurs par défaut --- */
 // Renvoie true si l'événement est traité ici.
 function ergoChg(el){const f=cur.f,k=el.dataset.f;if(ergoChgZ(el))return true;
-  if(el.dataset.ins){const i=el.value;el.value='';if(i==='')return true;const c=el.dataset.ins,t=(c==='expr'?ERGO_PH.demande:ERGO_PH.observation)[+i];
-    f[c]=(filled(f[c])?f[c].replace(/\s+$/,'')+'\n':'')+t;const ta=$('#f_'+c);if(ta){ta.value=f[c];ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}save();return true}
+  if(el.dataset.ins){const i=el.value;el.value='';if(i==='')return true;const c=el.dataset.ins,t=ergoPhr(cur,ERGO_PH[el.dataset.ph][+i],ergoWho(c)),d=filled(f[c])?f[c].replace(/\s+$/,'').length+1:0;
+    f[c]=(d?f[c].replace(/\s+$/,'')+'\n':'')+t;const ta=$('#f_'+c);if(ta){ta.value=f[c];ergoCro(ta,d)}save();return true}
+  // Aides du bilan : valeur enregistrée, puis observation du bloc réécrite si elle n'a pas été retouchée.
+  {const m=/^b_(p[12])_(\w+?)_(at|atT|ah|ahT)$/.exec(k||'');if(m){if(el.dataset.ft==='c'){const a=new Set(f[k]||[]);el.checked?a.add(el.value):a.delete(el.value);f[k]=ERGO_L[m[3]==='at'?'aidTech':'aidHum'].filter(x=>a.has(x))}else f[k]=el.value;
+    const b=ERGO_BILAN.find(x=>x[2].some(y=>y[0]===m[2]))[0],o=`bo_${m[1]}_${b}`,g=ergoObsGen(f,m[1],b);if(!filled(f[o])||f[o]===f[o+'_g'])f[o]=g;f[o+'_g']=g;save();keep();return true}}
   // Maison de plain-pied : la ligne « Étage » passe à « non » si elle est vide.
   if(k==='lType'&&el.value==='Maison de plain-pied'&&!filled(f.rep_etage))f.rep_etage=['non'];
   if(['naiss1','naiss2','dateVis','dateDiag','anCons'].includes(k)){f[k]=el.value;save();keep();return true}
   return false}
+// Observation d'un bloc du bilan rédigée à partir des aides de ses lignes ; les lignes de même texte sont regroupées,
+// nommées sauf si elles couvrent tout le bloc (ex. « Avec aide technique : déambulateur 2 roues. Par un aidant familial (son fils). »).
+function ergoObsGen(f,p,b){const L=ERGO_BILAN.find(x=>x[0]===b)[2].filter(([l])=>l!=='tele'),G=new Map(),min=t=>t.charAt(0).toLowerCase()+t.slice(1);
+  for(const [l,lab] of L){const k=`b_${p}_${l}_`,at=f[k+'at']||[],ah=f[k+'ah']||[],atT=(f[k+'atT']||'').trim(),ahT=(f[k+'ahT']||'').trim(),t=[];
+    const it=[...at.filter(x=>x!=='Autre').map(min),...(at.includes('Autre')&&!atT?['autre']:[])];
+    if(it.length||atT)t.push(`Avec aide technique : ${it.join(', ')}${atT?(it.length?` (${atT})`:atT):''}.`);
+    if(ah.length)t.push(`Par ${ah.map(x=>'un '+min(x)).join(' et ')}${ahT?` (${ahT})`:''}.`);else if(ahT)t.push(`Aide humaine : ${ahT}.`);
+    if(t.length){const s=t.join(' ');G.set(s,[...(G.get(s)||[]),lab])}}
+  return [...G].map(([s,labs])=>labs.length===L.length||L.length===1?s:`${[labs[0],...labs.slice(1).map(min)].join(', ')} : ${min(s)}`).join('\n')}
 async function ergoAct(a,b){
   if(/^er-(z|l|b|ph|d)/.test(a))return ergoActZ(a,b);
   if(a==='er-p'){ergoP=b.dataset.p;return keep()}
@@ -2813,7 +2853,7 @@ const ergoLigneTxt=l=>l.c?ergoLib(ergoItem(l.c)[1],l.p):(l.lib||'').trim();
 // Alerte mairie : un élément choisi modifie l'aspect extérieur.
 const ergoMairie=z=>z.L.some(l=>l.c&&ergoItem(l.c)?.[2]?.m)||!!z.b?.on.some(id=>ergoItem(id)?.[2]?.m);
 // Fiche complète : photo ou observation, préconisations avec urgence (et « travaux retenus » si l'urgence n'est pas « Aucun »).
-const ergoLOk=l=>filled(l.urg)&&(l.urg==='Aucun'||filled(l.ret));
+const ergoLOk=l=>filled(l.urg)&&(l.urg==='Aucun'||ergoSansRet()||filled(l.ret));
 const ergoZTouche=(v,z)=>filled(z.obs)||!!v.it['z:'+z.id]?.ph.length||z.L.length>0||!!z.b?.urg;
 function ergoZOk(v,z){const vu=filled(z.obs)||!!v.it['z:'+z.id]?.ph.length;
   return vu&&(z.b?z.b.on.length>0&&ergoLOk(z.b):z.L.length>0&&z.L.every(l=>ergoLOk(l)&&filled(ergoLigneTxt(l))))}
@@ -2824,16 +2864,20 @@ const ergoZcur=()=>cur.z.find(z=>z.id===ergoZ);
 
 /* --- écrans des zones --- */
 const zIn=(z,p,x,a='')=>`<input type="text" data-zk="${z.id}" data-zp="${p}" value="${esc(x??'')}" ${a}>`;
-const zTa=(z,p,x)=>`<textarea data-zk="${z.id}" data-zp="${p}">${esc(x??'')}</textarea>`;
+const zTa=(z,p,x)=>`<textarea autocapitalize="sentences" data-zk="${z.id}" data-zp="${p}">${esc(x??'')}</textarea>`;
 const zRad=(z,p,x,L,lab)=>`<div class="chips" role="radiogroup" aria-label="${esc(lab)}">${L.map(o=>`<label class="chip"><input type="radio" name="${z.id}.${p}" data-zk="${z.id}" data-zp="${p}" value="${esc(o)}" ${x===o?'checked':''}>${esc(o)}</label>`).join('')}</div>`;
 const zChk=(z,p,on,lab)=>`<label class="chip"><input type="checkbox" data-zk="${z.id}" data-zp="${p}" ${on?'checked':''}>${esc(lab)}</label>`;
-const zIns=(z,p,k)=>`<select data-zins="${z.id}" data-zp="${p}" data-ph="${k}" aria-label="Insérer une phrase type"><option value="">Insérer une phrase type…</option>${ERGO_PH[k].map((t,i)=>`<option value="${i}">${esc(t)}</option>`).join('')}</select>`;
+const zIns=(z,p,k,lab='Insérer une phrase type')=>`<select data-zins="${z.id}" data-zp="${p}" data-ph="${k}" aria-label="${esc(lab)}"><option value="">${esc(lab)}…</option>${ERGO_PH[k].map((t,i)=>`<option value="${i}">${esc(ergoPhr(cur,t))}</option>`).join('')}</select>`;
+// « … adapté(e) aux capacités actuelles, pas de … » : urgence « Aucun » (PRD § 11.4).
+const ergoAdapte=t=>/adapté(?:e|s|es)?[\s,][^.]*pas d/i.test(t||'');
+// Bloc standard réduit à une ligne « existant adapté » (option seul) : les autres lignes sont masquées.
+const ergoBSeul=b=>b.on.length===1&&!!ergoItem(b.on[0])?.[2]?.seul;
 const zFld=(lab,ctl,cls='full',hint='')=>`<div class="field ${cls}"><span>${esc(lab)}</span>${ctl}${hint}</div>`;
 // Urgence, travaux retenus, hors Anah et commentaire : communs aux lignes et au bloc standard.
 const ergoCrit=(z,b,o)=>`<div class="form">${zFld('Critère d’urgence',zRad(z,b+'urg',o.urg,ERGO_URG,'Critère d’urgence'))}
-  ${o.urg&&o.urg!=='Aucun'?zFld('Travaux retenus',zRad(z,b+'ret',o.ret,['Oui','Non'],'Travaux retenus')):''}
+  ${o.urg&&o.urg!=='Aucun'&&!ergoSansRet()?zFld('Travaux retenus',zRad(z,b+'ret',o.ret,['Oui','Non'],'Travaux retenus')):''}
   <div class="field full"><div class="chips">${zChk(z,b+'hors',o.hors,'Non inclus dans le dossier Anah')}</div></div>
-  ${o.hors?zFld('Motif (repris dans le rapport)',zIn(z,b+'motif',o.motif,'placeholder="Ex. : plafond subventionnable dépassé"')):''}
+  ${o.hors?zFld('Motif (repris dans le rapport)',zIn(z,b+'motif',o.motif,'placeholder="Ex. : plafond subventionnable dépassé"')+zIns(z,b+'motif','anah','Insérer un motif type')):''}
   ${zFld('Commentaire (facultatif)',zIn(z,b+'com',o.com))}</div>`;
 const ergoPIn=(z,b,lib,p={})=>{const P=ergoParams(lib);return P.length?`<div class="form">${P.map(([k,l,d,req])=>zFld(l+(req?' (obligatoire)':''),zIn(z,b+k,p[k]??d,/cm|Nombre/.test(l)?'inputmode="decimal"':''),'',req&&!filled(p[k])?'<div class="hint warn">À renseigner.</div>':'')).join('')}</div>`:''};
 const ergoPhNums=id=>Object.fromEntries(it(id).ph.map((_,i)=>[id+':'+i,i+1]));
@@ -2855,14 +2899,15 @@ function ergoViewZ(app,bar,bi){const v=cur,done=`<button class="btn-primary" dat
        ${L.map(([l,i])=>`<div class="erl"><b>${esc(ergoLigneTxt(l)||'Ligne libre')}</b>
          ${l.c?ergoPIn(z,`L.${i}.p.`,ergoItem(l.c)[1],l.p):`<div class="form">${zFld('Préconisation (texte libre)',zTa(z,`L.${i}.lib`,l.lib))}</div>`}
          ${ergoCrit(z,`L.${i}.`,l)}<div class="row"><button class="btn-danger" data-act="er-ldel" data-z="${z.id}" data-i="${i}">Retirer la ligne</button></div></div>`).join('')}
-       <div class="row"><button data-act="er-ladd" data-z="${z.id}" data-g="${g}">${svg('plus')}Ligne libre</button></div>`};
-    const bloc=()=>{const b=z.b;return `<p class="muted">Bloc standard : cochez ou décochez chaque ligne. Le bloc porte un seul critère d’urgence.</p>
-      ${d.bloc.map(([id,lib])=>{const on=b.on.includes(id);return `<div class="erl${on?'':' off'}"><label class="chip erb"><input type="checkbox" data-zb="${z.id}" value="${id}" ${on?'checked':''}>${esc(ergoLib(lib,b.p[id]))}</label>${on?ergoPIn(z,`b.p.${id}.`,lib,b.p[id]):''}</div>`}).join('')}
+       <div class="row"><button data-act="er-ladd" data-z="${z.id}" data-g="${g}">${svg('plus')}Ligne libre</button>${ERGO_PH['p_'+g]?.length?zIns(z,'L','p_'+g,'+ Préconisation type'):''}</div>`};
+    const bloc=()=>{const b=z.b,seul=ergoBSeul(b);return `<p class="muted">${seul?'Existant adapté : le bloc standard est masqué. Décochez la ligne pour le retrouver.':'Bloc standard : cochez ou décochez chaque ligne. Le bloc porte un seul critère d’urgence.'}</p>
+      ${d.bloc.filter(x=>!seul||x[2]?.seul).map(([id,lib])=>{const on=b.on.includes(id);return `<div class="erl${on?'':' off'}"><label class="chip erb"><input type="checkbox" data-zb="${z.id}" value="${id}" ${on?'checked':''}>${esc(ergoLib(lib,b.p[id]))}</label>${on?ergoPIn(z,`b.p.${id}.`,lib,b.p[id]):''}</div>`}).join('')}
       <div class="row"><button data-act="er-bstd" data-z="${z.id}">Rétablir le bloc standard</button></div>${ergoCrit(z,'b.',b)}`};
     app.innerHTML=`${topbar(ergoZTitre(z),who(v),'er-zback')}
      <div class="chips">${zChk(z,'actif',z.actif,'Zone présente dans le rapport')}</div>
      ${z.k==='libre'?`<div class="form">${zFld('Titre de la zone',zIn(z,'t',z.t))}</div>`:''}
      <h2 class="sec">Observation de l’existant</h2>${phBlock(pid,it(pid),ergoPhNums(pid),false)}
+     ${it(pid).ph.length&&!filled(z.obs)&&ERGO_PH[z.k]?.length?`<div class="banner"><span class="grow">Photos sans observation : ajouter « ${esc(ergoPhr(v,ERGO_PH[z.k][0]))} » ?</span><button data-act="er-zobs" data-z="${z.id}">Ajouter</button></div>`:''}
      <div class="form">${zFld('Observation de l’existant',zTa(z,'obs',z.obs))}${ERGO_PH[z.k]?.length?zIns(z,'obs',z.k):''}
       ${d.larg?zFld('Largeur des passages (cm)',zIn(z,'larg',z.larg,'inputmode="decimal"'),'','<div class="hint">Reprise dans le rapport : « Les passages intérieurs sont de … cm. »</div>'):''}</div>
      <h2 class="sec">Préconisations</h2>${d.bloc?bloc():d.g.map(grp).join('')}
@@ -2878,26 +2923,41 @@ function ergoViewZ(app,bar,bi){const v=cur,done=`<button class="btn-primary" dat
     initPad(null,u=>ergoDessin=u);
     bi.innerHTML=`<button data-act="er-zret">Annuler</button><button class="btn-primary" data-act="er-dsave">Ajouter le croquis</button>`;return true}
   if(view==='eaides'){app.innerHTML=`${topbar('5. Aides techniques',who(v),'dash')}<p class="muted">Préconisées lors de la visite, non financées par l’Anah. Laissée vide, cette partie n’apparaîtra pas dans le rapport.</p>
-     <div class="form">${[['at','Aides techniques préconisées','c',ERGO_AT],['atTxt','Précisions','ta']].map(field).join('')}</div>`;bi.innerHTML=done;return true}
+     <div class="form">${[['at','Aides techniques préconisées','c',ERGO_AT],['atTxt','Précisions','ta']].map(field).join('')}${ergoIns('atTxt','aides','Insérer une phrase type')}</div>`;bi.innerHTML=done;return true}
   return false}
 
 /* --- saisie des zones --- */
-function zSet(el){const z=cur.z.find(x=>x.id===el.dataset.zk),ks=el.dataset.zp.split('.'),k=ks.pop();let o=z;for(const x of ks)o=o[x]??(o[x]={});
-  o[k]=el.type==='checkbox'?el.checked:el.value}
-// Événement input : texte des zones enregistré sans réaffichage.
-function ergoInp(el){if(!el.dataset.zk||['checkbox','radio'].includes(el.type))return false;zSet(el);save();return true}
+const zObj=(z,p)=>{const ks=p.split('.'),k=ks.pop();let o=z;for(const x of ks)o=o[x]??(o[x]={});return [o,k]};
+function zSet(el){const [o,k]=zObj(cur.z.find(x=>x.id===el.dataset.zk),el.dataset.zp);o[k]=el.type==='checkbox'?el.checked:el.value}
+// Événement input : texte des zones enregistré sans réaffichage ; une ligne libre « … adaptée …, pas de … » passe en « Aucun ».
+// Apostrophe oubliée (PRD § 11.6) : « d / l / j / n / qu + espace + voyelle » et « s il » → apostrophe, pendant la frappe.
+// Une majuscule n'est corrigée qu'en début de phrase (« barre en L avec appui ») ; rien après un chiffre (« 200 l avec »).
+const ergoApos=t=>t.replace(/(?<![\p{L}\d’'])(?<!\d )(d|l|j|n|qu|s(?= ils?(?!\p{L}))) (?=[aeiouyhàâäéèêëîïôöûüœæ])/giu,(m,w,o,str)=>{
+  const pre=str.slice(0,o).trimEnd();return w[0]!==w[0].toLowerCase()&&pre&&!/[.!?…:]$/.test(pre)?m:w+'’'});
+// Le remplacement garde la longueur du texte : le curseur ne bouge pas.
+function ergoAposEl(el){if(el.tagName!=='TEXTAREA'&&el.type!=='text')return;const n=ergoApos(el.value);if(n===el.value)return;const a=el.selectionStart,b=el.selectionEnd;el.value=n;el.setSelectionRange(a,b)}
+function ergoInp(el){ergoAposEl(el);if(!el.dataset.zk||['checkbox','radio'].includes(el.type))return false;zSet(el);
+  const m=/^L\.(\d+)\.lib$/.exec(el.dataset.zp);if(m&&ergoAdapte(el.value)){const l=cur.z.find(x=>x.id===el.dataset.zk).L[+m[1]];
+    if(l.urg!=='Aucun'){l.urg='Aucun';l.ret='';const r=document.querySelector(`input[name="${el.dataset.zk}.L.${m[1]}.urg"][value="Aucun"]`);if(r)r.checked=true}}
+  save();return true}
 function ergoChgZ(el){
   if(el.dataset.zk){if(['checkbox','radio'].includes(el.type)){zSet(el);save();keep()}return true}
-  if(el.dataset.zins){const i=el.value;el.value='';if(i==='')return true;const z=cur.z.find(x=>x.id===el.dataset.zins),p=el.dataset.zp,t=ERGO_PH[el.dataset.ph][+i];
-    z[p]=(filled(z[p])?z[p].replace(/\s+$/,'')+'\n':'')+t;save();keep();return true}
+  if(el.dataset.zins){const i=el.value;el.value='';if(i==='')return true;const z=cur.z.find(x=>x.id===el.dataset.zins),t=ergoPhr(cur,ERGO_PH[el.dataset.ph][+i]);let p=el.dataset.zp,d=0;
+    // Préconisation type : nouvelle ligne libre de la liste (data-ph = p_<liste>).
+    if(p==='L'){z.L.push({id:ergoId(),g:el.dataset.ph.slice(2),lib:t,p:{},urg:ergoAdapte(t)?'Aucun':'',ret:'',hors:false,motif:'',com:''});p=`L.${z.L.length-1}.lib`}
+    else{const [o,k]=zObj(z,p);if(/motif$/.test(p))o[k]=t;else{d=filled(o[k])?o[k].replace(/\s+$/,'').length+1:0;o[k]=(d?o[k].replace(/\s+$/,'')+'\n':'')+t}}
+    save();keep();const ta=document.querySelector(`[data-zk="${z.id}"][data-zp="${p}"]`);if(ta)ergoCro(ta,d);return true}
   if(el.dataset.zc){const z=cur.z.find(x=>x.id===el.dataset.zc),id=el.value;z.L=z.L.filter(l=>l.c!==id);
     if(el.checked)z.L.push({id:ergoId(),g:el.dataset.g,c:id,p:{},urg:ergoItem(id)[2]?.aucun?'Aucun':'',ret:'',hors:false,motif:'',com:''});save();keep();return true}
-  if(el.dataset.zb){const b=cur.z.find(x=>x.id===el.dataset.zb).b,id=el.value;b.on=b.on.filter(x=>x!==id);if(el.checked)b.on.push(id);
+  if(el.dataset.zb){const b=cur.z.find(x=>x.id===el.dataset.zb).b,id=el.value;b.on=b.on.filter(x=>x!==id);
+    if(el.checked){if(ergoItem(id)[2]?.seul){b.on=[];b.urg='Aucun';b.ret=''}else b.on=b.on.filter(x=>!ergoItem(x)[2]?.seul);b.on.push(id)}
+    else if(ergoItem(id)[2]?.seul&&!b.on.length){b.on=ergoBlocStd(ergoZDef(ergoZcur()));b.urg=''}  // « existant adapté » décoché : retour au bloc standard
     const ord=ergoZDef(ergoZcur()).bloc.map(x=>x[0]);b.on.sort((a,c)=>ord.indexOf(a)-ord.indexOf(c));save();keep();return true}
   return false}
 async function ergoActZ(a,b){const z=()=>cur.z.find(x=>x.id===b.dataset.z);
   if(a==='er-zopen'){ergoZ=b.dataset.z;view='ezone';return go()}
   if(a==='er-zback'){view='ezones';return go()}
+  if(a==='er-zobs'){const s=z();s.obs=ergoPhr(cur,ERGO_PH[s.k][0]);save();keep();const ta=document.querySelector(`[data-zk="${s.id}"][data-zp="obs"]`);if(ta)ergoCro(ta);return}
   if(a==='er-zret'){view='ezone';return go()}
   // Copie d'une zone (deux salles de bain…) : préconisations reprises, observation, photos et croquis vides.
   if(a==='er-zdup'){const s=z(),c=structuredClone(s),i=cur.z.indexOf(s);Object.assign(c,{id:ergoId(),obs:'',croqTxt:'',n:Math.max(1,...cur.z.filter(x=>x.k===s.k&&(x.k!=='libre'||x.t===s.t)).map(x=>x.n||1))+1});
@@ -2920,17 +2980,22 @@ async function ergoActZ(a,b){const z=()=>cur.z.find(x=>x.id===b.dataset.z);
 const ergoUrgOrd=u=>{const i=ERGO_URG.indexOf(u);return i<0?ERGO_URG.length:i};
 function ergoSynth(v){const R=[];
   for(const z of v.z.filter(z=>z.actif)){const zt=ergoZTitre(z);
-    if(z.b){const n=z.b.on.length;if(n)R.push({z:zt,t:`Bloc standard (${n} ligne${n>1?'s':''})`,o:z.b})}
+    if(z.b){const n=z.b.on.length;if(n)R.push({z:zt,t:ergoBSeul(z.b)?ergoLib(ergoItem(z.b.on[0])[1]):`Bloc standard (${n} ligne${n>1?'s':''})`,o:z.b})}
     else for(const l of z.L)R.push({z:zt,t:ergoLigneTxt(l)||'Ligne libre à compléter',o:l})}
   return R.sort((a,b)=>ergoUrgOrd(a.o.urg)-ergoUrgOrd(b.o.urg))}
-const ergoRetenu=o=>o.ret==='Oui'&&o.urg!=='Aucun';
-const ergoRet=o=>o.urg==='Aucun'?'—':o.ret||'?';
+// Réglages de « Mon profil » : agence (bloc AMO) et colonne « Travaux retenus » ; sans elle, toute préconisation urgente compte comme retenue.
+const ergoAg17=()=>P.agence==='Charente-Maritime (17)';
+const ergoSansRet=()=>P.ergoRet==='Non';
+const ergoRetenu=o=>ergoSansRet()?filled(o.urg)&&o.urg!=='Aucun':o.ret==='Oui'&&o.urg!=='Aucun';
+const ergoRet=o=>o.urg==='Aucun'||ergoSansRet()?'—':o.ret||'?';
 const ergoAnah=o=>o.hors?'Non inclus':ergoRetenu(o)?'Inclus':'—';
 // Contrôles : 'ko' bloque le rapport, 'av' est à vérifier ; la vue 'ezone:<id>' ouvre la zone.
 function ergoControles(v){const f=v.f,L=[],add=(n,t,vw)=>L.push([n,t,vw]);
   if(!filled(f.noms))add('ko','Nom du demandeur manquant','edem');
   if(!filled(f.adresse))add('ko','Adresse du logement manquante','edem');
   if(!f.dateVis)add('ko','Date de visite manquante','edem');
+  if(!filled(f.presents))add('ko','Personnes présentes lors de la visite non renseignées','edem');
+  if(!filled(P.nom))add('ko','Profil de l’ergothérapeute vide (Mon profil) : nom et coordonnées figurent sur le rapport','profil');
   for(const z of v.z.filter(z=>z.actif)){const zt=ergoZTitre(z),go='ezone:'+z.id,miss=[];
     if(z.b)for(const id of z.b.on)for(const [k,l,,req] of ergoParams(ergoItem(id)[1]))if(req&&!filled(z.b.p[id]?.[k]))miss.push(id==='d2'?'dimensions du receveur':l);
     for(const l of z.L)if(l.c)for(const [k,lab,,req] of ergoParams(ergoItem(l.c)[1]))if(req&&!filled(l.p[k]))miss.push(lab.toLowerCase());
@@ -2938,7 +3003,7 @@ function ergoControles(v){const f=v.f,L=[],add=(n,t,vw)=>L.push([n,t,vw]);
     const O=z.b?(z.b.on.length?[z.b]:[]):z.L;
     if(!O.length)add('av',`${zt} : aucune préconisation (désactivez la zone si elle ne concerne pas le logement)`,go);
     if(O.some(o=>!filled(o.urg)))add('av',`${zt} : préconisation sans critère d’urgence`,go);
-    if(O.some(o=>filled(o.urg)&&o.urg!=='Aucun'&&!filled(o.ret)))add('av',`${zt} : « Travaux retenus » non renseigné`,go);
+    if(!ergoSansRet()&&O.some(o=>filled(o.urg)&&o.urg!=='Aucun'&&!filled(o.ret)))add('av',`${zt} : « Travaux retenus » non renseigné`,go);
     if(z.L.some(l=>!l.c&&!filled(l.lib)))add('av',`${zt} : ligne libre vide`,go);
     if(!filled(z.obs)&&!v.it['z:'+z.id]?.ph.length)add('av',`${zt} : ni photo ni observation`,go)}
   if(filled(f.expr)&&!ergoSynth(v).some(r=>ergoRetenu(r.o)))add('av','Aucune préconisation retenue alors que la demande est renseignée : à confirmer','ezones');
@@ -2947,6 +3012,7 @@ function ergoControles(v){const f=v.f,L=[],add=(n,t,vw)=>L.push([n,t,vw]);
   if(f.anCons&&(+f.anCons<1700||+f.anCons>new Date().getFullYear()))add('av','Année de construction peu plausible','elog');
   const mk=/Choisissez un élément|Cliquez ou appuyez ici/i,tx=[...Object.values(f).flat(),...v.z.flatMap(z=>[z.t,z.obs,z.croqTxt,...z.L.flatMap(l=>[l.lib,l.com,l.motif,...Object.values(l.p||{})])])];
   if(tx.some(x=>typeof x==='string'&&mk.test(x)))add('av','Un texte contient encore un marqueur du modèle Word (« Choisissez un élément »…)',null);
+  if([...tx,...v.z.flatMap(z=>[z.b?.motif,z.b?.com])].some(x=>typeof x==='string'&&/\[[^\]\n]*\]/.test(x)))add('av','Un texte contient encore des crochets [ … ] à compléter',null);
   if(!P.sig)add('av','Signature absente (Mon profil) : elle figure sur la page de garde','profil');
   return L}
 const ergoCtlLi=c=>`<div class="ctl ${c[0]}">${svg(c[0]==='ko'?'x':'warn')}<span class="grow">${esc(c[1])}</span>${c[2]?(c[2].startsWith('ezone:')?`<button data-act="er-zopen" data-z="${c[2].slice(6)}">Ouvrir</button>`:`<button data-act="go" data-v="${c[2]}">Ouvrir</button>`):''}</div>`;
@@ -2971,7 +3037,8 @@ const ERGO_URGC={Prioritaire:[[180,35,24],[251,233,231]],'Modéré':[[138,83,0],
 async function ergoPdfImg(p,mx=1000){const im=await loadImg(p.src),k=Math.min(1,mx/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement('canvas');
   c.width=Math.round(im.naturalWidth*k);c.height=Math.round(im.naturalHeight*k);const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0,c.width,c.height);
   return {src:c.toDataURL('image/jpeg',.7),w:c.width,h:c.height,cap:p.cap}}
-const ergoDateN=d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'')?new Date(d+'T12:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):'';
+// Date du rapport en toutes lettres ; j : avec le jour de la semaine (« jeudi 9 avril 2026 ») pour la visite et le diagnostic.
+const ergoDateN=(d,j)=>/^\d{4}-\d{2}-\d{2}$/.test(d||'')?new Date(d+'T12:00').toLocaleDateString('fr-FR',{...(j?{weekday:'long'}:{}),day:'numeric',month:'long',year:'numeric'}):'';
 function ergoRepTxt(f,k){const L=f['rep_'+k]||[];if(L.includes('non'))return 'non';
   return [...L.map(x=>x==='chambre(s)'&&filled(f['rep_'+k+'_ch'])?f['rep_'+k+'_ch']+' chambre(s)':x),f['rep_'+k+'_t']].filter(filled).join(', ')}
 // Observation de la zone, avec la largeur des passages si elle n'y figure pas déjà.
@@ -3014,15 +3081,15 @@ async function ergoPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',fo
     font(15,'bold',WHITE);NL.forEach(l=>{doc.text(l,ML+6,yy+LH(15)*.78);yy+=LH(15)});font(8.5,'normal',[219,234,243]);AL.forEach(l=>{doc.text(l,ML+6,yy+LH(8.5)*.8);yy+=LH(8.5)});y+=h+8}
   font(9,'bold',ACC);doc.text(T('DIAGNOSTIC ADAPTATION ET ACCESSIBILITÉ'),ML,y);y+=3;font(22,'bold',INK);doc.text(T('Rapport d’ergothérapie'),ML,y+LH(22)*.8);y+=LH(22)+1;
   {const ages=pers.map(([,n],i)=>{const a=ergoAge(f['naiss'+(i+1)],f.dateVis);return n+(a!==null?`, ${a} ans`:'')}).join(' et ');
-   const L=lines([f.dateVis&&'Visite du '+ergoDateN(f.dateVis),f.dateDiag&&'diagnostic du '+ergoDateN(f.dateDiag),f.concerne&&'personne concernée : '+ages].filter(Boolean).join(' · '),CW(),10);
+   const L=lines([f.dateVis&&'Visite du '+ergoDateN(f.dateVis,1),f.dateDiag&&'diagnostic du '+ergoDateN(f.dateDiag,1),f.concerne&&'personne concernée : '+ages].filter(Boolean).join(' · '),CW(),10);
    font(10,'normal',MUT);L.forEach(l=>{doc.text(l,ML,y+4);y+=LH(10)});y+=6}
   // Photo du logement (1re photo de la zone Extérieur) sur 2/3 et encadré des préconisations retenues sur 1/3 ; sans photo, l'encadré prend toute la largeur.
   {const ze=Z.find(z=>z.k==='ext'),p0=ze&&v.it['z:'+ze.id]?.ph[0],fa=p0?await ergoPdfImg(p0,1400):null,hy=y,hh=70,bw=fa?(CW()-4)/3:CW(),bx=ML+CW()-bw;
    if(fa){const aw=CW()-bw-4,s=Math.min(aw/fa.w,hh/fa.h);doc.addImage(fa.src,'JPEG',ML+(aw-fa.w*s)/2,hy+(hh-fa.h*s)/2,fa.w*s,fa.h*s,undefined,'FAST')}
-   doc.setFillColor(...TINT);doc.roundedRect(bx,hy,bw,hh,3,3,'F');const px=bx+5,pw=bw-10;let yy=hy+7;font(7,'bold',MUT);doc.text(T('PRÉCONISATIONS RETENUES'),px,yy);yy+=4;
+   doc.setFillColor(...TINT);doc.roundedRect(bx,hy,bw,hh,3,3,'F');const px=bx+5,pw=bw-10;let yy=hy+7;font(7,'bold',MUT);doc.text(T(ergoSansRet()?'PRÉCONISATIONS':'PRÉCONISATIONS RETENUES'),px,yy);yy+=4;
    const nb=u=>S.filter(r=>r.o.urg===u&&ergoRetenu(r.o)).length,non=S.filter(r=>filled(r.o.urg)&&r.o.urg!=='Aucun'&&!ergoRetenu(r.o)).length;
    for(const u of ['Prioritaire','Modéré','Préventif']){pill(u,px,yy,ERGO_URGC[u]);font(13,'bold',INK);doc.text(String(nb(u)),px+pw,yy+4.4,{align:'right'});yy+=7.5}
-   font(8.5,'normal',MUT);doc.text('Non retenues',px,yy+3.6);font(13,'bold',MUT);doc.text(String(non),px+pw,yy+4.4,{align:'right'});
+   if(!ergoSansRet()){font(8.5,'normal',MUT);doc.text('Non retenues',px,yy+3.6);font(13,'bold',MUT);doc.text(String(non),px+pw,yy+4.4,{align:'right'})}
    const el=ergoElig(v);let yb=hy+hh-4;
    if(el){const t=el.max>=70?'Éligible au critère d’âge':el.max>=60?'Éligible sous condition de GIR':'Critère d’éligibilité à vérifier';yb-=5.4;pill(t,px,yb,el.cls==='ok'?OK:WARN,7.5);yb-=1.5}
    if(urgent){yb-=7;doc.setFillColor(...RED);doc.roundedRect(px,yb,pw,6.5,1.4,1.4,'F');font(8,'bold',WHITE);doc.text('DOSSIER URGENT',px+pw/2,yb+4.4,{align:'center'})}
@@ -3033,18 +3100,18 @@ async function ergoPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',fo
    if(P.sig){const r=P.sig.r||.5,sw=Math.min(42,(h-8)/r),sh=sw*r;doc.addImage(P.sig.src,fmt(P.sig.src),ML+CW()-5-sw,y+(h-sh)/2,sw,sh,undefined,'FAST')}y+=h+8}
   {const nph=Z.reduce((n,z)=>n+(v.it['z:'+z.id]?.ph.length||0),0),meta=[['Logement',[f.lType,f.lPieces].filter(filled).join(' · ')],['Construction',[f.anCons,filled(f.surf)&&f.surf+' m²'].filter(filled).join(' · ')],['Zones relevées',`${Z.length} zone${Z.length>1?'s':''} · ${nph} photo${nph>1?'s':''}`]];
    meta.forEach(([l,val],i)=>{const x=ML+i*CW()/3;font(7.5,'bold',MUT);doc.text(T(l.toUpperCase()),x,y);font(10,'normal',INK);lines(val||'—',CW()/3-4,10).forEach((t,k)=>doc.text(t,x,y+5+k*LH(10)))})}
-  font(8,'normal',MUT);doc.text(T(SOLIHA_ADR),ML,BOT()-2);
+  font(8,'normal',MUT);doc.text(T(ergoAg17()?ERGO_TXT.adr17:SOLIHA_ADR),ML,BOT()-2);
 
   /* --- synthèse des préconisations --- */
   page();sec(null,'Synthèse des préconisations','Toutes les préconisations, de la plus urgente à la moins urgente');
   if(S.length){const cnt=ERGO_URG.map(u=>[u,S.filter(r=>r.o.urg===u).length]),mx=Math.max(1,...cnt.map(c=>c[1]));
     for(const [u,n] of cnt){font(9,'normal',INK);doc.text(T(u),ML,y+3.4);doc.setFillColor(...LINE);doc.roundedRect(ML+26,y+1.2,CW()-36,2.8,1.4,1.4,'F');
       if(n){doc.setFillColor(...ERGO_URGC[u][0]);doc.roundedRect(ML+26,y+1.2,Math.max(2.8,(CW()-36)*n/mx),2.8,1.4,1.4,'F')}font(9,'bold',INK);doc.text(String(n),ML+CW(),y+3.4,{align:'right'});y+=6}
-    y+=3;const ws=[CW()*.25,CW()*.43,CW()*.13,CW()*.09,CW()*.1],xs=ws.map((_,i)=>ML+ws.slice(0,i).reduce((a,b)=>a+b,0));
-    const tete=()=>{font(7,'bold',MUT);['ZONE','PRÉCONISATION','URGENCE','RETENU','ANAH'].forEach((t,i)=>doc.text(T(t),xs[i]+1,y+3.5));doc.setDrawColor(...INK);doc.setLineWidth(.3);doc.line(ML,y+5,ML+CW(),y+5);y+=6};tete();
+    y+=3;const sr=ergoSansRet(),ws=sr?[CW()*.25,CW()*.52,CW()*.13,0,CW()*.1]:[CW()*.25,CW()*.43,CW()*.13,CW()*.09,CW()*.1],xs=ws.map((_,i)=>ML+ws.slice(0,i).reduce((a,b)=>a+b,0));
+    const tete=()=>{font(7,'bold',MUT);['ZONE','PRÉCONISATION','URGENCE',sr?'':'RETENU','ANAH'].forEach((t,i)=>t&&doc.text(T(t),xs[i]+1,y+3.5));doc.setDrawColor(...INK);doc.setLineWidth(.3);doc.line(ML,y+5,ML+CW(),y+5);y+=6};tete();
     for(const r of S){const a=lines(r.z,ws[0]-3,8.5),b=lines(r.t,ws[1]-3,8.5),h=Math.max(a.length,b.length)*LH(8.5)+3;if(y+h>BOT()){page();tete()}
       font(8.5,'normal',INK);a.forEach((t,i)=>doc.text(t,xs[0]+1,y+1.5+LH(8.5)*(i+.75)));font(8.5,'normal',INK);b.forEach((t,i)=>doc.text(t,xs[1]+1,y+1.5+LH(8.5)*(i+.75)));
-      if(r.o.urg)pill(r.o.urg,xs[2]+1,y+1,ERGO_URGC[r.o.urg]||ERGO_URGC.Aucun,7);font(8.5,'normal',INK);doc.text(T(ergoRet(r.o)),xs[3]+1,y+1.5+LH(8.5)*.75);
+      if(r.o.urg)pill(r.o.urg,xs[2]+1,y+1,ERGO_URGC[r.o.urg]||ERGO_URGC.Aucun,7);if(!sr){font(8.5,'normal',INK);doc.text(T(ergoRet(r.o)),xs[3]+1,y+1.5+LH(8.5)*.75)}
       font(8.5,r.o.hors?'bold':'normal',r.o.hors?RED:INK);doc.text(T(ergoAnah(r.o)),xs[4]+1,y+1.5+LH(8.5)*.75);doc.setDrawColor(...LINE);doc.setLineWidth(.25);doc.line(ML,y+h,ML+CW(),y+h);y+=h}
     y+=3;para(ERGO_TXT.mpa,{sz:8.5,st:'italic',c:MUT})}else para('Aucune préconisation.',{c:MUT});
   y+=6;
@@ -3053,9 +3120,10 @@ async function ergoPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',fo
   sec('1','Demandeur(s)','Informations générales');
   const naiss=pers.map(([,n],i)=>{const d=f['naiss'+(i+1)],a=ergoAge(d,f.dateVis);return d?(pers.length>1?n+' : ':'')+ergoDateN(d)+(a!==null?` (${a} ans)`:''):''}).filter(Boolean).join('\n');
   kv([['Nom(s) / prénom(s)',f.noms],['Coordonnées',[f.tel,f.mail].filter(filled).join(' · ')],['Adresse du logement',[f.adresse,cpv(v)].filter(filled).join(', ')],['Personnes présentes',f.presents],
-    ['Visite / diagnostic',[f.dateVis&&ergoDateN(f.dateVis),f.dateDiag&&ergoDateN(f.dateDiag)].filter(Boolean).join(' / ')],['Situation familiale',f.famille],['Nombre d’occupants',f.occupants],
-    ['Personne concernée',f.concerne],[pers.length>1?'Dates de naissance':'Date de naissance',naiss],['Situation(s) professionnelle(s)',(f.pro||[]).join(', ')],
-    ['MDPH',f.mdph],['APA',f.apaT||f.apa],['GIR',f.girT||f.gir],...(filled(f.cmi)?[['Carte mobilité inclusion',f.cmi]]:[]),...(filled(f.autres)?[['Autre(s)',f.autres]]:[])]);
+    ['Visite / diagnostic',[f.dateVis&&ergoDateN(f.dateVis,1),f.dateDiag&&ergoDateN(f.dateDiag,1)].filter(Boolean).join(' / ')],['Situation familiale',f.famille],['Nombre d’occupants',f.occupants],
+    ['Personne concernée',ergoAutre(v)?[pers[0][1],f.autreLien&&'('+f.autreLien.toLowerCase()+' du demandeur)'].filter(filled).join(' '):f.concerne],[pers.length>1?'Dates de naissance':'Date de naissance',naiss],['Situation(s) professionnelle(s)',(f.pro||[]).join(', ')],
+    ['MDPH',f.mdph],['APA',f.apaT||f.apa],['GIR',f.girT||f.gir],...(filled(f.protec)?[['Mesure de protection',f.protec+(f.protec!=='Aucune'&&filled(f.protecNom)?' – mandataire : '+f.protecNom:'')]]:[]),
+    ...(filled(f.cmi)?[['Carte mobilité inclusion',f.cmi]]:[]),...(filled(f.connexe)?[['Dossier(s) connexe(s)',[(f.connexe||[]).join(', '),f.connexeT].filter(filled).join(' – ')]]:[]),...(filled(f.autres)?[['Autre(s)',f.autres]]:[])]);
   y+=8;sec('2','Logement','Informations générales');
   kv([['Statut propriété',f.lStatut],['Type d’habitation',f.lType],['Localisation / milieu',f.lMilieu],['Niveaux ou étages',f.lNiv],['Nombre de pièces',f.lPieces],
     ['Construction / achat',[f.anCons,f.anAchat].filter(filled).join(' / ')],['Surface habitable',filled(f.surf)?f.surf+' m²':''],['Répartition – RDC',ergoRepTxt(f,'rdc')],['Répartition – Étage',ergoRepTxt(f,'etage')],['Répartition – Sous-sol',ergoRepTxt(f,'ss')]].filter(r=>filled(r[1])));
@@ -3070,7 +3138,7 @@ async function ergoPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',fo
    const blocH=(p,[b,,L])=>{const o=f[`bo_${p}_${b}`];return 9+L.length*rh+(filled(o)?3+lines(o,cw-6,8).length*LH(8):0)+2};
    const bloc=(p,[b,t,L],x,y0,h)=>{doc.setDrawColor(...LINE);doc.setLineWidth(.35);doc.roundedRect(x,y0,cw,h,2,2);font(9,'bold',INK);doc.text(T(t),x+3,y0+5.5);let yy=y0+8;
      for(const [l,lb] of L){font(8,'normal',INK);doc.text(lines(lb,lw-4,8)[0],x+3,yy+3.6);const val=f[`b_${p}_${l}`];
-       if(l==='tele'){font(8,'bold',INK);doc.text(T(val||'—'),x+lw,yy+3.6)}
+       if(l==='tele'){font(8,'bold',INK);doc.text(T(val||'—'),x+lw,yy+3.6)}else if(val&&!ERGO_L.niv.includes(val)){font(8,'italic',MUT);doc.text(T(val),x+lw,yy+3.6)}
        else ERGO_L.niv.forEach((n,k)=>{doc.setFillColor(...(val===n?ACC:TINT));doc.roundedRect(x+lw+k*(sw+1.5),yy+1,sw,3.6,1,1,'F')});yy+=rh}
      const o=f[`bo_${p}_${b}`];if(filled(o)){doc.setDrawColor(...LINE);doc.setLineDashPattern([1,1],0);doc.line(x+3,yy+1,x+cw-3,yy+1);doc.setLineDashPattern([],0);yy+=2;font(8,'normal',MUT);lines(o,cw-6,8).forEach(l=>{doc.text(l,x+3,yy+LH(8)*.8);yy+=LH(8)})}};
    const tete=()=>pers.forEach(([,n],i)=>{const x=ML+i*(cw+4);if(two){font(10,'bold',ACC);doc.text(T(n),x,y+3.5)}font(6.5,'normal',MUT);ERGO_L.niv.forEach((t,k)=>doc.text(T(t),x+lw+k*(sw+1.5)+sw/2,y+(two?8:3.5),{align:'center'}))});
@@ -3083,7 +3151,7 @@ async function ergoPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',fo
   const tw=CW()-6-46;
   const prec=(head,txt,o,puces)=>{const L=puces?txt.flatMap(t=>lines('• '+t,tw,8.5)):lines(txt,tw,8.5),C=filled(o.com)?lines(o.com,tw,8,'italic'):[],
       M=o.hors?lines('Non inclus dans le dossier Anah'+(filled(o.motif)?' : '+o.motif:'')+'.',tw,8):[],
-      tags=[o.urg&&[o.urg,ERGO_URGC[o.urg]||ERGO_URGC.Aucun],o.urg&&o.urg!=='Aucun'&&[o.ret==='Oui'?'Retenu':o.ret==='Non'?'Non retenu':'À préciser',o.ret==='Oui'?OK:ERGO_URGC.Aucun],o.hors&&['Hors Anah',ERGO_URGC.Prioritaire]].filter(Boolean);
+      tags=[o.urg&&[o.urg,ERGO_URGC[o.urg]||ERGO_URGC.Aucun],o.urg&&o.urg!=='Aucun'&&!ergoSansRet()&&[o.ret==='Oui'?'Retenu':o.ret==='Non'?'Non retenu':'À préciser',o.ret==='Oui'?OK:ERGO_URGC.Aucun],o.hors&&['Hors Anah',ERGO_URGC.Prioritaire]].filter(Boolean);
     need(Math.min(40,(head?LH(9):0)+LH(8.5)*Math.min(3,L.length)+4,tags.length*6.6+2));
     doc.setDrawColor(...LINE);doc.setLineWidth(.25);doc.line(ML+3,y,ML+CW()-3,y);const y0=y;let yy=y+1.5;
     if(head){font(9,'bold',INK);doc.text(T(head),ML+3,yy+LH(9)*.75);yy+=LH(9)+.5}
@@ -3098,14 +3166,14 @@ async function ergoPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',fo
     font(10.5,'bold',INK);TL.forEach((l,i)=>doc.text(l,ML+3,y+3+LH(10.5)*(i+.75)));if(um)pill(um,ML+CW()-3-pillW(um),y+3,ERGO_URGC[um]);y+=4+TL.length*LH(10.5)+2;
     if(ph.length)photos(ph);
     lab('OBSERVATION DE L’EXISTANT');const obs=ergoObsTxt(z);para(filled(obs)?obs:'/');y+=2;
-    if(z.b&&z.b.on.length)prec('Bloc standard',z.b.on.map(id=>ergoLib(ergoItem(id)[1],z.b.p[id])),z.b,true);else for(const l of z.L)prec('',ergoLigneTxt(l)||'Ligne libre',l);
+    if(z.b&&ergoBSeul(z.b))prec('',ergoLib(ergoItem(z.b.on[0])[1]),z.b);else if(z.b&&z.b.on.length)prec('Bloc standard',z.b.on.map(id=>ergoLib(ergoItem(id)[1],z.b.p[id])),z.b,true);else for(const l of z.L)prec('',ergoLigneTxt(l)||'Ligne libre',l);
     if(ergoMairie(z)&&!z.mairieOff){y+=1;alerte(ERGO_MAIRIE)}
     if(d.croquis){const cp=it('zc:'+z.id).ph;if(cp.length||filled(z.croqTxt)){y+=2;need(cp.length?62:14);lab('CROQUIS ET OBSERVATIONS COMPLÉMENTAIRES');const C=[];for(const p of cp)C.push(await ergoPdfImg(p));photos(C,80);para(filled(z.croqTxt)?z.croqTxt:'/')}}
     y+=2;cadre(y);carte=null;y+=5}
 
   /* --- accompagnateur AMO, aides techniques --- */
   // Titre gardé avec son contenu (AMO, aides techniques).
-  y+=3;need(24+ERGO_TXT.amo.length*LH(9)*1.6);sec(null,'Accompagnateur AMO','Assistant à maîtrise d’ouvrage');for(const l of ERGO_TXT.amo)para(l,{sz:9});y+=6;
+  y+=3;const amo=ergoAg17()?ERGO_TXT.amo17:ERGO_TXT.amo;need(24+amo.length*LH(9)*1.6);sec(null,'Accompagnateur AMO','Assistant à maîtrise d’ouvrage');for(const l of amo)para(l,{sz:9});y+=6;
   if(filled(f.at)||filled(f.atTxt)){need(26+((f.at||[]).length+lines(f.atTxt||'',CW(),9.5).length)*LH(9.5));sec(null,'Aides techniques préconisées lors de la visite','Non financées par l’Anah');for(const a of f.at||[])para('• '+a);if(filled(f.atTxt)){y+=1;para(f.atTxt)}y+=4}
 
   /* --- pour rappel et exemples d'aménagements --- */
@@ -3119,7 +3187,7 @@ async function ergoPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',fo
 
   /* --- bandeau latéral et pied de page communs --- */
   const n=doc.getNumberOfPages();for(let i=1;i<=n;i++){doc.setPage(i);doc.setFillColor(...ACC);doc.rect(0,0,6.3,doc.internal.pageSize.getHeight(),'F')}
-  piedPdf(doc,v,'Rapport d’ergothérapie',ML,MR);
+  piedPdf(doc,v,'Rapport d’ergothérapie',ML,MR,ergoAg17()?ERGO_TXT.adr17+' · contact.charentemaritime@soliha.fr':null);
   await offer(`${preNum(v)}Rapport_ergotherapeute_${slug(f.noms)||'demandeur'}_${f.dateVis||today()}.pdf`,doc.output('blob'))}
 
 // Auto-tests, après le chargement du script (filled() est déclaré plus loin dans l'application).
@@ -3130,11 +3198,21 @@ console.assert(ergoElig({f:{concerne:'Monsieur',naiss1:'1943-02-08',dateVis:'202
 console.assert(ergoLib(ergoItem('d2')[1],{L:'120',l:'90'}).endsWith('Dimensions : 120 × 90 cm')&&ergoLib(ergoItem('men3')[1])==='Pose de volets roulants motorisés'
   &&ergoLib(ergoItem('d3')[1])==='Pose d’un mitigeur thermostatique ergonomique, fixé à 100 cm'&&ergoParams(ergoItem('d2')[1]).every(p=>p[3])
   &&ergoMairie({L:[{c:'men3'}]})&&!ergoMairie({L:[{c:'men4'}]})&&ergoMairie({L:[],b:{on:['d10']}}),'ASSERT FAIL ergoLib');
+console.assert(ergoPhr({f:{concerne:'Madame et Monsieur'}},'{Pers} souhaite{nt} adapter {objet}. Indépendant{e}{s}.')==='Madame et Monsieur souhaitent adapter [leur salle de bain]. Indépendants.'
+  &&ergoPhr({f:{concerne:'Madame et Monsieur'}},'Indépendant{e}{s}, {il}.','Madame')==='Indépendante, elle.'&&ergoPhr({f:{}},'{Pers} est atteint{e}.')==='[Madame / Monsieur] est atteint.','ASSERT FAIL ergoPhr');
+console.assert(ergoAdapte('Porte adaptée aux capacités actuelles, pas de préconisation.')&&ergoAdapte('Volets adaptés aux capacités actuelles, pas d’adaptation à prévoir.')&&!ergoAdapte('Pose d’une porte adaptée.')
+  &&ERGO_ZONES.flatMap(d=>d.bloc||d.g.flatMap(g=>g[2])).filter(x=>x[2]?.aucun).every(x=>ergoAdapte(x[1])||/^Pas d/.test(x[1])),'ASSERT FAIL ergoAdapte');
+console.assert(ergoObsGen({b_p1_transf_at:['Déambulateur 2 roues'],b_p1_transf_ah:['Aidant familial'],b_p1_transf_ahT:'son fils',b_p1_depInt_at:['Déambulateur 2 roues'],b_p1_depInt_ah:['Aidant familial'],b_p1_depInt_ahT:'son fils'},'p1','mob')
+  ==='Transferts, déplacements intérieurs : avec aide technique : déambulateur 2 roues. Par un aidant familial (son fils).'
+  &&ergoObsGen({b_p1_haut_ah:['Organisme'],b_p1_haut_ahT:'ADMR',b_p1_bas_ah:['Organisme'],b_p1_bas_ahT:'ADMR'},'p1','toil')==='Par un organisme (ADMR).'&&ergoObsGen({},'p1','rep')==='','ASSERT FAIL ergoObsGen');
+console.assert(ergoApos('Difficultés d installer, il n y a pas l eau qu il faut, s il pleut.')==='Difficultés d’installer, il n’y a pas l’eau qu’il faut, s’il pleut.'
+  &&ergoApos('D abord. L entrée')==='D’abord. L’entrée'&&ergoApos('Barre en T ou L avec appui, ballon de 200 l avec 1 m au sol.')==='Barre en T ou L avec appui, ballon de 200 l avec 1 m au sol.'
+  &&ergoApos('l, d ')==='l, d ','ASSERT FAIL ergoApos');
 console.assert(ERGO_SANTE('anam')&&ERGO_SANTE('b_p1_transf')&&!ERGO_SANTE('noms')&&!ERGO_SANTE('lType'),'ASSERT FAIL ERGO_SANTE');});
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.01-1845';
+const APP_VER='2026.11.01-1948';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -3340,7 +3418,7 @@ function field([k,label,type,opts,hint,cond]){
     ctl=`<div class="chips" role="group" aria-label="${esc(label)}">${opts.map(o=>{const ch=type==='r'?v===o:(v||[]).includes(o);
       return `<label class="chip"><input type="${type==='r'?'radio':'checkbox'}" name="${k}" data-f="${k}" data-ft="${type}" value="${esc(o)}" ${ch?'checked':''}>${esc(k==='dem'?COM[o].label:o)}</label>`}).join('')}</div>`;
   }else if(type==='dl')ctl=`<input id="f_${k}" type="text" list="dl_${k}" data-f="${k}" value="${esc(v)}"><datalist id="dl_${k}">${[...new Set([...opts,...(P.ops||[])])].map(o=>`<option value="${esc(o)}">`).join('')}</datalist>`;
-  else if(type==='ta')ctl=`<textarea id="f_${k}" data-f="${k}" ${k==='trav'||k.endsWith('_trav')?'class="big"':''}>${esc(v)}</textarea>`;
+  else if(type==='ta')ctl=`<textarea id="f_${k}" data-f="${k}" autocapitalize="sentences" ${k==='trav'||k.endsWith('_trav')?'class="big"':''}>${esc(v)}</textarea>`;
   else{const t={t:'text',n:'number',d:'date',tm:'time',tel:'tel',email:'email'}[type];
     ctl=`<input id="f_${k}" type="${t}" data-f="${k}" value="${esc(v)}" ${type==='n'?'inputmode="decimal" step="any"':''}${type==='t'?cbAttr(k):''}${(CPF[k]?cpA('f_'+k,'f_'+CPF[k]):VCP[k]?vA('f_'+k,'f_'+VCP[k]):[''])[0]}>${(CPF[k]?cpA('f_'+k,''):VCP[k]?vA('f_'+k,''):['',''])[1]}`}
   return `<div class="field ${full?'full':''}"><span>${esc(label)}</span>${ctl}${hint?`<div class="hint">${esc(hint)}</div>`:''}</div>`;
@@ -3569,6 +3647,8 @@ function render(){
       <div class="field"><span>Qualité (ex. : technicien habitat)</span><input id="p_qual" type="text" data-p="qual" value="${esc(P.qual)}"></div>
       <div class="field"><span>Téléphone</span><input id="p_tel" type="tel" data-p="tel" value="${esc(P.tel)}"></div>
       <div class="field"><span>E-mail</span><input id="p_mail" type="email" data-p="mail" value="${esc(P.mail)}"></div>
+      ${[['agence','Agence (rapport ergothérapeute : bloc « Accompagnateur AMO »)',['Deux-Sèvres (79)','Charente-Maritime (17)']],['ergoRet','Rapport ergothérapeute : colonne « Travaux retenus »',['Oui','Non']]].map(([k,l,L])=>
+        `<div class="field full"><span>${esc(l)}</span><div class="chips" role="radiogroup" aria-label="${esc(l)}">${L.map(o=>`<label class="chip"><input type="radio" name="p_${k}" data-p="${k}" value="${esc(o)}" ${(P[k]||L[0])===o?'checked':''}>${esc(o)}</label>`).join('')}</div></div>`).join('')}
       <div class="field full"><span>Signature : signez au doigt ou importez une image scannée</span><canvas class="pad" id="pad" aria-label="Zone de signature de l'enquêteur"></canvas>
        <div class="row"><button data-act="clrpsig">Effacer</button><label class="btn">Importer une image<input type="file" accept="image/*" data-psig hidden></label></div></div>
      </div>`;
@@ -4386,7 +4466,8 @@ async function envoyerLettre(v,k){
 /* ---------- PDF : tableaux au format de la fiche ---------- */
 const ORTHI="« Les informations collectées sur le logement peuvent faire l’objet d’un traitement informatique par la caisse d’allocations familiales ou dans le cadre de l’outil de repérage et de traitement de l’habitat indigne (ORTHI). Ces informations peuvent être transmises aux institutions compétentes en matière d’habitat indigne : agence régionale de santé, collectivités territoriales, Fonds de solidarité logement et être utilisées aux fins d’études, d’enquêtes et de sondages. Vous pouvez exercer votre droit d’accès et de rectification auprès du directeur de la Caf (demande formulée par courrier postal accompagnée d’une preuve d’identité) et dans le cadre d’ORTHI auprès du préfet du département où se situe le logement selon les modalités prévues par l'article 5 de l'arrêté du 30 septembre 2011 portant création d'un traitement de données à caractère personnel relatif à l'habitat indigne et non décent. »";
 // Pied de page commun à tous les rapports : n° de dossier, type de rapport, date d'édition, coordonnées de l'agence, pagination.
-function piedPdf(doc,v,type,ml,mr){const n=doc.getNumberOfPages();
+// adr : adresse de pied de page (rapport ergothérapeute de l'agence 17) ; par défaut, l'agence de Bessines.
+function piedPdf(doc,v,type,ml,mr,adr){const n=doc.getNumberOfPages();
   for(let i=1;i<=n;i++){doc.setPage(i);const w=doc.internal.pageSize.getWidth(),h=doc.internal.pageSize.getHeight();
     doc.setDrawColor(214,224,231);doc.setLineWidth(.3);doc.line(ml,h-11.5,w-mr,h-11.5);
     let x=ml;doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(27,109,150);
@@ -4395,7 +4476,7 @@ function piedPdf(doc,v,type,ml,mr){const n=doc.getNumberOfPages();
     if(num){const r=PDFT('N° '+num);doc.text(r,x,h-7.8);x+=doc.getTextWidth(r+'   ')}
     doc.text(`Page ${i} / ${n}`,w-mr,h-7.8,{align:'right'});
     doc.setFont('helvetica','normal');doc.setTextColor(68,83,95);doc.text(PDFT(`${type} · édité le ${frDate(today())}`),x,h-7.8,{maxWidth:w-mr-25-x});
-    doc.setFontSize(6.5);doc.text(PDFT(SOLIHA_ADR+' · contact.deux-sevres@soliha.fr'),ml,h-4.8)}}
+    doc.setFontSize(6.5);doc.text(PDFT(adr||SOLIHA_ADR+' · contact.deux-sevres@soliha.fr'),ml,h-4.8)}}
 const preNum=v=>v.num?v.num+'_':'';
 async function exportPdf(v){
   if(!window.jspdf){toast("Le module PDF n'est pas chargé : ouvrez l'application une fois avec internet.");return}
