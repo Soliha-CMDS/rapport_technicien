@@ -3134,7 +3134,7 @@ console.assert(ERGO_SANTE('anam')&&ERGO_SANTE('b_p1_transf')&&!ERGO_SANTE('noms'
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.01-1733';
+const APP_VER='2026.11.01-1845';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -3712,7 +3712,6 @@ function elHtml(v,g,e,nums){
      <textarea data-it="${iid}" data-k="note" aria-label="Commentaire : ${esc(e.t)}" placeholder="Constat, localisation, travaux à prévoir (100 mots environ)">${esc(x.note)}</textarea><div class="wc muted">${motsTxt(x.note)}</div>
      ${phBlock(iid,x,nums,(s.h===2||s.h===3)&&!x.ph.length)}
     </div></details>
-   <div class="row"><button data-act="ras" ${d}>RAS</button></div>
   </div></div>`}
 // Tableau de bord, grille par chapitre et descriptif d'un logement. Renvoie false pour les écrans communs (informations, profil…).
 function degView(app,bar,bi){
@@ -4100,7 +4099,6 @@ document.addEventListener('click',async e=>{
   if(a==='dash'){view='dash';return go()}
   if(a==='go'){view=b.dataset.v;if(b.dataset.g)gId=b.dataset.g;return go()}
   if(a==='grille'){gId=b.dataset.g;gPart=b.dataset.p||'I';view='grille';return go()}
-  if(a==='ras'){const s=degS(b),e=GRILLES[gOf(b.dataset.g).k].els.find(x=>x.id===b.dataset.e),x=it(b.dataset.g+':'+e.id);s.h=0;if(e.a)s.a=0;if(!x.note.trim())x.note='RAS';save();return keep()}
   if(a==='degtrav'){const g=gOf(b.dataset.g),L=degTravaux(cur,g);if(!L.length){toast('Aucun élément noté de 1 à 3 : rien à pré-remplir');return}
     const m=degFusion(cur.f[g.id+'_trav'],L);cur.f[g.id+'_trav']=m.txt;save();keep();toast(m.added?`${m.added} ligne${m.added>1?'s':''} ajoutée${m.added>1?'s':''}`:'Liste déjà à jour');return}
   if(a==='degia'){try{await navigator.clipboard.writeText(texteRelectureDeg(cur,gOf(b.dataset.g)));toast('Texte copié : collez-le dans Copilot')}catch(err){toast('Copie impossible : '+err.message);return}
@@ -4691,8 +4689,8 @@ async function degPdf(v){
   const kv=(rows,lw=50)=>{for(const [l,val] of rows){const a=lines(l,lw-4,9,'bold'),b=lines(val==null||val===''?'—':String(val),CW()-lw-4,9.5),h=Math.max(a.length,b.length)*LH(9.5)+3;need(h);
     doc.setDrawColor(...LINE);doc.setLineWidth(.25);doc.line(ML,y+h,ML+CW(),y+h);
     font(9,'bold',MUT);a.forEach((x,i)=>doc.text(x,ML+1,y+1.5+LH(9.5)*(i+.75)));font(9.5,'normal',INK);b.forEach((x,i)=>doc.text(x,ML+lw,y+1.5+LH(9.5)*(i+.75)));y+=h}};
-  // Photos deux par ligne, légendées.
-  const phH=(p,cw)=>Math.min(48,cw*p.h/p.w);
+  // Photos deux par ligne, légendées ; une photo en portrait monte jusqu'à 85 mm pour rester lisible.
+  const phH=(p,cw)=>Math.min(p.h>p.w?85:48,cw*p.h/p.w);
   const photos=(list,x0,w)=>{const cw=(w-4)/2;for(let i=0;i<list.length;i+=2){const row=list.slice(i,i+2),hs=row.map(p=>phH(p,cw));need(Math.max(...hs)+7);
     row.forEach((p,k)=>{const ih=hs[k],iw=ih*p.w/p.h,xx=x0+k*(cw+4);doc.addImage(p.src,fmt(p.src),xx+(cw-iw)/2,y,iw,ih,undefined,'FAST');font(7.5,'italic',MUT);doc.text(lines(`Photo ${p.n}${p.cap?' – '+p.cap:''}`,cw,7.5,'italic')[0],xx,y+ih+3.8)});
     y+=Math.max(...hs)+7}};
