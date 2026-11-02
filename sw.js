@@ -1,7 +1,7 @@
 // Garde l'application en cache pour qu'elle s'ouvre sans réseau.
 // Avec réseau, la dernière version est toujours chargée (sans passer par le cache du navigateur) :
 // une nouvelle version déposée sur le serveur s'affiche dès l'ouverture. Sans réseau, la copie en cache est utilisée.
-const CACHE='constat-decence-v2';
+const CACHE='constat-decence-v3';
 const FILES=['./','index.html','jspdf.umd.min.js','manifest.webmanifest','icon-192.png','icon-512.png'];
 const WAIT=4000; // réseau trop lent : on se rabat sur la copie en cache au bout de 4 s
 
