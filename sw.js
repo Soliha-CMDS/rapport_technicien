@@ -1,7 +1,8 @@
 // Garde l'application en cache pour qu'elle s'ouvre sans réseau.
 // Avec réseau, la dernière version est toujours chargée (sans passer par le cache du navigateur) :
 // une nouvelle version déposée sur le serveur s'affiche dès l'ouverture. Sans réseau, la copie en cache est utilisée.
-const CACHE='constat-decence-v3';
+// « no-cache » : le navigateur demande au serveur si le fichier a changé (ETag) et ne le retélécharge que dans ce cas.
+const CACHE='constat-decence-v4';
 const FILES=['./','index.html','jspdf.umd.min.js','manifest.webmanifest','icon-192.png','icon-512.png'];
 const WAIT=4000; // réseau trop lent : on se rabat sur la copie en cache au bout de 4 s
 
@@ -12,7 +13,7 @@ self.addEventListener('fetch',e=>{
   if(req.method!=='GET'||new URL(req.url).origin!==location.origin)return;
   const key=req.mode==='navigate'?'index.html':req;
   e.respondWith(caches.open(CACHE).then(async c=>{
-    const net=fetch(req.mode==='navigate'?'index.html':req.url,{cache:'no-store'}).then(r=>{if(r.ok){c.put(key,r.clone());return r}throw new Error(r.status)});
+    const net=fetch(req.mode==='navigate'?'index.html':req.url,{cache:'no-cache'}).then(r=>{if(r.ok){c.put(key,r.clone());return r}throw new Error(r.status)});
     const hit=await c.match(key,{ignoreSearch:true});
     if(!hit)return net.catch(()=>fetch(req));
     // Le réseau d'abord ; en cas d'échec ou de lenteur, la copie en cache.
