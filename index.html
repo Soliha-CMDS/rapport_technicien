@@ -1261,6 +1261,12 @@ const isPdl=v=>v.type==='pdl';
 const isDeg=v=>v.type==='deg';
 const isLoc=v=>v.type==='loc';
 // Adresse saisie d'un seul tenant (« 12 rue X, 79000 Niort », ou sur plusieurs lignes) : code postal et ville détachés en fin de texte.
+// Photo requise, sauf si les sous-constats cochés ne constatent qu'une absence (on ne photographie pas ce qui manque).
+const phReq=(d,s)=>!!d.p&&!(s?.o?.length&&s.o.every(i=>/^absence/i.test(d.o?.[i]||'')));
+// Prénom dans « Nom et prénom » : les mots qui ne sont pas en majuscules, sinon le dernier mot.
+function prenom(n){const w=String(n||'').trim().split(/\s+/),p=w.filter(x=>x!==x.toUpperCase());return p.length&&p.length<w.length?p.join(' '):w[w.length-1]}
+console.assert(prenom('MARQUART Jason')==='Jason'&&prenom('Jason MARQUART')==='Jason'&&prenom('DE LA TOUR Jean-Pierre')==='Jean-Pierre'&&prenom('Marquart Jason')==='Jason'&&prenom('Jason')==='Jason','ASSERT FAIL prenom');
+console.assert(phReq(ITEMS.plomb,{o:[3]})===false&&phReq(ITEMS.plomb,{o:[0,3]})&&phReq(ITEMS.plomb,{o:[]})&&phReq(ITEMS.eau,{o:[0]})===false&&!phReq(ITEMS.diagmaj,{o:[]}),'ASSERT FAIL phReq');
 function splitAdr(s){const t=String(s||'').trim(),m=/^([\s\S]*?)[\s,]*\b(\d{5})\s+([^,\n\d][^,\n]*?)\s*$/.exec(t);
   const adr=x=>x.split(/\s*\n\s*/).filter(Boolean).join(', ').replace(/[\s,]+$/,'');
   return m?{adr:adr(m[1]),cp:m[2],ville:m[3]}:{adr:adr(t),cp:'',ville:''}}
@@ -2807,7 +2813,8 @@ function ergoChg(el){const f=cur.f,k=el.dataset.f;if(ergoChgZ(el))return true;
     const b=ERGO_BILAN.find(x=>x[2].some(y=>y[0]===m[2]))[0],o=`bo_${m[1]}_${b}`,g=ergoObsGen(f,m[1],b);if(!filled(f[o])||f[o]===f[o+'_g'])f[o]=g;f[o+'_g']=g;save();keep();return true}}
   // Maison de plain-pied : la ligne « Étage » passe à « non » si elle est vide.
   if(k==='lType'&&el.value==='Maison de plain-pied'&&!filled(f.rep_etage))f.rep_etage=['non'];
-  if(['naiss1','naiss2','dateVis','dateDiag','anCons'].includes(k)){f[k]=el.value;save();keep();return true}
+  // Date : pas de réaffichage tant que l'année n'est pas complète (« 0002 » en tapant « 2026 »), sinon le champ perd la main.
+  if(['naiss1','naiss2','dateVis','dateDiag','anCons'].includes(k)){f[k]=el.value;save();if(el.type!=='date'||!el.value||el.value>='1900')keep();return true}
   return false}
 // Observation d'un bloc du bilan rédigée à partir des aides de ses lignes ; les lignes de même texte sont regroupées,
 // nommées sauf si elles couvrent tout le bloc (ex. « Avec aide technique : déambulateur 2 roues. Par un aidant familial (son fils). »).
@@ -2982,7 +2989,7 @@ async function ergoActZ(a,b){const z=()=>cur.z.find(x=>x.id===b.dataset.z);
 const ergoUrgOrd=u=>{const i=ERGO_URG.indexOf(u);return i<0?ERGO_URG.length:i};
 function ergoSynth(v){const R=[];
   for(const z of v.z.filter(z=>z.actif)){const zt=ergoZTitre(z);
-    if(z.b){const n=z.b.on.length;if(n)R.push({z:zt,t:ergoBSeul(z.b)?ergoLib(ergoItem(z.b.on[0])[1]):`Bloc standard (${n} ligne${n>1?'s':''})`,o:z.b})}
+    if(z.b){const n=z.b.on.length;if(n)R.push({z:zt,t:ergoBSeul(z.b)?ergoLib(ergoItem(z.b.on[0])[1]):`${n} préconisation${n>1?'s':''}`,o:z.b})}
     else for(const l of z.L)R.push({z:zt,t:ergoLigneTxt(l)||'Ligne libre à compléter',o:l})}
   return R.sort((a,b)=>ergoUrgOrd(a.o.urg)-ergoUrgOrd(b.o.urg))}
 // Réglages de « Mon profil » : agence (bloc AMO) et colonne « Travaux retenus » ; sans elle, toute préconisation urgente compte comme retenue.
@@ -3164,13 +3171,15 @@ async function ergoPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',fo
     // Étiquettes à droite de la première ligne (sur la page où la préconisation commence).
     const pg=doc.getCurrentPageInfo().pageNumber;let ty=y0+1.5;if(yy<y0)doc.setPage(pg-1);for(const [t,c] of tags){pill(t,ML+CW()-3-pillW(t,7.5),ty,c,7.5);ty+=6.6}doc.setPage(pg);
     y=Math.max(yy+1.5,yy<y0?0:ty+1)};
-  for(const z of Z){const d=ergoZDef(z),O=z.b?(z.b.on.length?[z.b]:[]):z.L,um=ergoUrgMax(O),ph=[];for(const p of it('z:'+z.id).ph)ph.push(await ergoPdfImg(p));
+  // Salle de bain (douche, lavabo) : commence sur une nouvelle page, et la zone suivante aussi.
+  const sdb=z=>z&&['douche','lav'].includes(z.k);
+  for(const [i,z] of Z.entries()){if(sdb(z)!==sdb(Z[i-1])&&i&&y>15)page();const d=ergoZDef(z),O=z.b?(z.b.on.length?[z.b]:[]):z.L,um=ergoUrgMax(O),ph=[];for(const p of it('z:'+z.id).ph)ph.push(await ergoPdfImg(p));
     const titre=z.k==='libre'?(z.t||'Zone personnalisée')+(z.n?' ('+z.n+')':''):[d.t.charAt(0)+d.t.slice(1).toLowerCase(),d.s].filter(Boolean).join(' – ')+(z.n?' ('+z.n+')':'');
     const TL=lines(titre,CW()-40,10.5,'bold');need(TL.length*LH(10.5)+(ph.length?Math.min(48,(CW()-10)/2*ph[0].h/ph[0].w)+12:20));carte=y;
     font(10.5,'bold',INK);TL.forEach((l,i)=>doc.text(l,ML+3,y+3+LH(10.5)*(i+.75)));if(um)pill(um,ML+CW()-3-pillW(um),y+3,ERGO_URGC[um]);y+=4+TL.length*LH(10.5)+2;
     if(ph.length)photos(ph);
     lab('OBSERVATION DE L’EXISTANT');const obs=ergoObsTxt(z);para(filled(obs)?obs:'/');y+=2;
-    if(z.b&&ergoBSeul(z.b))prec('',ergoLib(ergoItem(z.b.on[0])[1]),z.b);else if(z.b&&z.b.on.length)prec('Bloc standard',z.b.on.map(id=>ergoLib(ergoItem(id)[1],z.b.p[id])),z.b,true);else for(const l of z.L)prec('',ergoLigneTxt(l)||'Ligne libre',l);
+    if(z.b&&ergoBSeul(z.b))prec('',ergoLib(ergoItem(z.b.on[0])[1]),z.b);else if(z.b&&z.b.on.length)prec('',z.b.on.map(id=>ergoLib(ergoItem(id)[1],z.b.p[id])),z.b,true);else for(const l of z.L)prec('',ergoLigneTxt(l)||'Ligne libre',l);
     if(ergoMairie(z)&&!z.mairieOff){y+=1;alerte(ERGO_MAIRIE)}
     if(d.croquis){const cp=it('zc:'+z.id).ph;if(cp.length||filled(z.croqTxt)){y+=2;need(cp.length?62:14);lab('CROQUIS ET OBSERVATIONS COMPLÉMENTAIRES');const C=[];for(const p of cp)C.push(await ergoPdfImg(p));photos(C,80);para(filled(z.croqTxt)?z.croqTxt:'/')}}
     y+=2;cadre(y);carte=null;y+=5}
@@ -3223,7 +3232,7 @@ console.assert(ERGO_SANTE('anam')&&ERGO_SANTE('b_p1_transf')&&!ERGO_SANTE('noms'
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.02-1115';
+const APP_VER='2026.11.03-1933';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -3339,7 +3348,7 @@ function controles(v){
   if(!P.sig)add('ko','Signature de l’enquêteur absente (Mon profil)','profil');
   if(!f.dateVis)add('ko','Date de visite manquante','admin');
   if(!filled(f.adresse))add('ko','Adresse du logement manquante','admin');
-  for(const r of RR(v)){const n=(r.items||[]).filter(d=>d.p&&v.it[d.id]?.on&&!v.it[d.id].ph.length).length;if(n)add('av',`Rubrique ${r.n} : ${sg(n,'photo requise manquante','photos requises manquantes')}`,r.id)}
+  for(const r of RR(v)){const n=(r.items||[]).filter(d=>phReq(d,v.it[d.id])&&v.it[d.id]?.on&&!v.it[d.id].ph.length).length;if(n)add('av',`Rubrique ${r.n} : ${sg(n,'photo requise manquante','photos requises manquantes')}`,r.id)}
   if(bl.length&&filled(f.trav)){const n=fusionTravaux(f.trav,bl).added;if(n)add('av',`Liste de travaux pas à jour : ${sg(n,'correctif manquant','correctifs manquants')}`,gen?.id)}
   if(pdl){if(!filled(f.pNom)&&!filled(f.pSoc))add('av','Nom du propriétaire manquant','admin');if(!f[sigKey(v)])add('av','Signature du propriétaire absente','synth')}
   else{if(!filled(f.nom))add('av','Nom de l’occupant manquant','admin');if(!filled(f.refDos))add('av','Référence du dossier vide','admin')}
@@ -3385,7 +3394,7 @@ function phNums(r,v=cur){const m={};let n=0;for(const id of phIds(r,v))v.it[id].
 const filled=x=>Array.isArray(x)?x.length>0:x!==undefined&&x!==null&&String(x).trim()!=='';
 function rstat(r,v=cur){
   if(r.items){const on=r.items.filter(i=>v.it[i.id]?.on);
-    const dg=on.some(i=>v.it[i.id].d),miss=on.filter(i=>i.p&&!v.it[i.id].ph.length).length;
+    const dg=on.some(i=>v.it[i.id].d),miss=on.filter(i=>phReq(i,v.it[i.id])&&!v.it[i.id].ph.length).length;
     const p=[];
     const rest=r.items.filter(i=>!v.it[i.id]?.on&&!v.it[i.id]?.ras).length;
     if(on.length)p.push([`${on.length} désordre${on.length>1?'s':''}`,'info']);else if(!rest)p.push(['RAS','ok']);
@@ -3455,7 +3464,7 @@ function itemHtml(d,nums){
   const linked=s.df.filter(i=>d.df?.[i]?.[1]);
   return `<div class="item ${s.on?'on':''} ${s.on&&s.d?'dg':''} ${s.ras?'ras':''}" id="it_${d.id}">
    <div class="head"><label class="hl"><input type="checkbox" data-it="${d.id}" data-k="on" ${s.on?'checked':''} aria-label="Défaut : ${esc(d.t)}">
-    <div class="t">${esc(d.t)}<div class="meta">${d.ref?`<span class="ref">${esc(d.ref)}</span>`:''}${d.rsd?`<span class="ref">${esc(d.rsd)}</span>`:''}${d.p?`<span class="ref">Photo requise</span>`:''}${s.on&&s.ph.length?`<span class="ref">${s.ph.length} photo${s.ph.length>1?'s':''}</span>`:''}</div></div></label>
+    <div class="t">${esc(d.t)}<div class="meta">${d.ref?`<span class="ref">${esc(d.ref)}</span>`:''}${d.rsd?`<span class="ref">${esc(d.rsd)}</span>`:''}${phReq(d,s)?`<span class="ref">Photo requise</span>`:''}${s.on&&s.ph.length?`<span class="ref">${s.ph.length} photo${s.ph.length>1?'s':''}</span>`:''}</div></div></label>
     <label class="rasl"><input type="checkbox" data-it="${d.id}" data-k="ras" ${s.ras?'checked':''} aria-label="RAS : ${esc(d.t)}">RAS</label></div>
    ${d.norm&&!s.on?`<div class="body">${norm}</div>`:''}
    ${s.on?`<div class="body">
@@ -3470,7 +3479,7 @@ function itemHtml(d,nums){
      ${dfSel(d)}
      <textarea id="note_${d.id}" data-it="${d.id}" data-k="note" aria-label="Commentaire" placeholder="Ex. : prise arrachée de son support">${esc(s.note)}</textarea>
      ${d.dm?'':'<span class="muted" style="font-size:.85rem">Dès qu’une photo est ajoutée, ce commentaire devient celui de la photo 1.</span>'}</div>`:''}
-    ${phBlock(d.id,s,nums,d.p&&!s.ph.length,d)}
+    ${phBlock(d.id,s,nums,phReq(d,s)&&!s.ph.length,d)}
     ${linked.length?`<div class="dfs"><span class="muted" style="font-size:.85rem">Correctifs liés (repris dans les travaux préconisés) :</span>${linked.map(i=>`<div class="df"><span>${esc(d.df[i][0])}</span><button type="button" data-act="deldf" data-it="${d.id}" data-i="${i}" aria-label="Retirer ce correctif">${svg('x')}</button></div>`).join('')}</div>`:''}
    </div>`:''}
   </div>`;
@@ -3511,7 +3520,7 @@ function caseHtml(v){
     ${v.pdfAt?`<button data-act="reopen" data-id="${v.id}">Remettre en cours</button>`:''}
     <button data-act="fsave" data-id="${v.id}">${sauve(v)?'Sauvegardé ✓':'Sauvegarder'}</button>
     <button class="btn-danger" data-act="delv" data-id="${v.id}">Supprimer</button></div></div>`}
-  const deg=isDeg(v),rs=RR(v),manq=rs.reduce((n,r)=>n+(r.items||[]).filter(d=>d.p&&v.it[d.id]?.on&&!v.it[d.id].ph.length).length,0);
+  const deg=isDeg(v),rs=RR(v),manq=rs.reduce((n,r)=>n+(r.items||[]).filter(d=>phReq(d,v.it[d.id])&&v.it[d.id]?.on&&!v.it[d.id].ph.length).length,0);
   return `<div class="case"><span class="tag ${isPdl(v)?'pdl':deg?'deg':isAud(v)?'aud':''}">${esc(kind(v))}</span>
    <div><div class="name">${esc(who(v))}</div><div class="muted">${esc(where(v)||'Adresse non renseignée')}</div>${v.num?`<div class="dnum">N° ${esc(v.num)}</div>`:''}</div>
    <div class="meta"><span>${[v.f.dateVis&&'Visite le '+esc(frDate(v.f.dateVis)),v.pdfAt&&'Rapport du '+new Date(v.pdfAt).toLocaleDateString('fr-FR'),manq&&`<b style="color:var(--danger)">${manq} photo${manq>1?'s':''} manquante${manq>1?'s':''}</b>`].filter(Boolean).join(' · ')}</span></div>
@@ -3567,7 +3576,7 @@ function render(){
      ${rap?`<div class="banner tdb-bak">${P.lastBak?'Dernière sauvegarde '+ilya(P.lastBak):'Aucune sauvegarde'} · ${rap.length} dossier${rap.length>1?'s':''} non sauvegardé${rap.length>1?'s':''}. Ils ne sont enregistrés que sur cet appareil. <button data-act="bak">Sauvegarder maintenant</button></div>`:''}
      ${stoPlein()?`<div class="banner">Espace presque plein (${Math.round(100*STO.u/STO.q)} %). Sauvegardez puis supprimez des dossiers terminés pour pouvoir ajouter des photos. <button data-act="go" data-v="sauvegarde">Voir l’espace utilisé</button></div>`:''}
      ${STO.p===false&&visits.length?`<div class="banner">Stockage non protégé : le navigateur peut effacer les données si l’appareil manque de place. ${conseilSto()} <button data-act="persist">Réessayer</button></div>`:''}
-     <h1 class="hello">${P.nom?'Bonjour '+esc(P.nom.split(/\s+/)[0]):'Bonjour'}</h1><div class="tdb-date">${esc(new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).replace(/^./,c=>c.toUpperCase()))}</div>
+     <h1 class="hello">${P.nom?'Bonjour '+esc(prenom(P.nom)):'Bonjour'}</h1><div class="tdb-date">${esc(new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).replace(/^./,c=>c.toUpperCase()))}</div>
      ${visits.length?`<div class="field tdb-q"><span>Rechercher un dossier</span><input type="text" id="hq" enterkeyhint="search" value="${esc(hq)}" placeholder="Nom, adresse, ville, n° de dossier…" autocomplete="off"></div><div id="hres">${tdbCherche()}</div>`:''}
      ${tdbHtml(enc)}
      <nav class="links tdb-links" aria-label="Autres actions">
@@ -3627,7 +3636,7 @@ function render(){
   }
   if(view==='degbien'){
     const t=(b,l,d)=>`<button class="tile" data-act="newt" data-t="deg" data-b="${b}"><img class="ic" src="${ICO_DEG.deg}" alt=""><span class="lbl">${l}</span><span class="muted">${d}</span></button>`;
-    app.innerHTML=`${topbar('Rapport de dégradation','Quel bien évaluez-vous ?','choose')}
+    app.innerHTML=`${topbar('Rapport de dégradation','Quel bien évaluez-vous ?',degDe==='list'?'list':'choose')}
      <div class="tiles">${t('mi','Maison individuelle','1 grille de 35 éléments')}${t('imm','Immeuble collectif','1 grille pour les parties communes (32 éléments) et 1 grille par logement visité (24 éléments)')}</div>
      <p class="muted">Le type de bien ne peut plus être changé ensuite.</p>`;
     return;
@@ -4206,7 +4215,8 @@ document.addEventListener('click',async e=>{
   if(a==='reopen'){const v=visits.find(x=>x.id===b.dataset.id);delete v.pdfAt;await store.put(v);toast('Dossier remis en cours');return render()}
   if(a==='dash'){view='dash';return go()}
   if(a==='lfx'){lf='';return keep()}
-  if(a==='go'){view=b.dataset.v;lf=b.dataset.lf||'';if(b.dataset.g)gId=b.dataset.g;return go()}
+  if(a==='choose'){view='choose';return go()}
+  if(a==='go'){if(b.dataset.v==='degbien')degDe=view;view=b.dataset.v;lf=b.dataset.lf||'';if(b.dataset.g)gId=b.dataset.g;return go()}
   if(a==='grille'){gId=b.dataset.g;gPart=b.dataset.p||'I';view='grille';return go()}
   if(a==='degtrav'){const g=gOf(b.dataset.g),L=degTravaux(cur,g);if(!L.length){toast('Aucun élément noté de 1 à 3 : rien à pré-remplir');return}
     const m=degFusion(cur.f[g.id+'_trav'],L);cur.f[g.id+'_trav']=m.txt;save();keep();toast(m.added?`${m.added} ligne${m.added>1?'s':''} ajoutée${m.added>1?'s':''}`:'Liste déjà à jour');return}
@@ -4376,7 +4386,7 @@ let MAIRIES={id:'mairies',l:{}},mairT=null;
 const mkey=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\b(st|ste)\b/g,m=>m==='st'?'saint':'sainte').replace(/[^a-z0-9]+/g,' ').trim();
 console.assert(mkey('St-Maixent l’École')===mkey('SAINT MAIXENT L\'ECOLE')&&mkey('Trayes')==='trayes','mkey');
 // Carnet d'adresses (propriétaires, mandataires) : fiches par clé cbKey, mémorisées sur cet appareil.
-let CARNET={id:'carnet',l:{}},carT=null,cbQ='',cbCat='',cbFk='',cbNew='',cbLgI=-1;
+let CARNET={id:'carnet',l:{}},carT=null,cbQ='',cbCat='',cbFk='',cbNew='',cbLgI=-1,degDe='choose';
 const saveCarnet=()=>{clearTimeout(carT);carT=setTimeout(()=>store.putRec(CARNET).catch(e=>toast('Carnet d’adresses non enregistré : '+e.message)),400)};
 // Listes de suggestions du champ « Nom » (une par catégorie).
 const cbDL=()=>{$('#cbdl').innerHTML=Object.keys(CB_CAT).map(cat=>`<datalist id="cb_${cat}">${Object.values(CARNET.l).filter(c=>c.cat===cat).map(c=>`<option value="${esc(cbLabel(c))}">`).join('')}</datalist>`).join('')};
@@ -4496,7 +4506,7 @@ async function zipLettres(v){const files=[];for(const l of lettres(v))files.push
 async function envoyerLettre(v,k){
   const l=lettres(v).find(x=>x.k===k),blob=await letterPdf(v,l),name=l.file+'.pdf';
   const sujet=`Visite de contrôle décence ${[v.f.adresse,v.f.ville].filter(Boolean).join(' ')}`;
-  const corps=`Bonjour,\n\nVeuillez trouver ci-joint le courrier d’information concernant la visite de contrôle de décence citée en objet.\n\nCordialement,\n${P.nom||''}`;
+  const corps=`Bonjour,\n\nVeuillez trouver ci-joint le courrier d’information concernant la visite de contrôle de décence citée en objet.\n`;
   const file=new File([blob],name,{type:'application/pdf'});
   if(matchMedia('(pointer:coarse)').matches&&navigator.canShare?.({files:[file]})){
     if(l.mail)try{await navigator.clipboard.writeText(l.mail);toast('Adresse copiée : collez-la comme destinataire')}catch(e){}
