@@ -334,6 +334,7 @@ label.chip.erb{border-radius:10px;width:100%;align-items:flex-start}.erpad{heigh
 .annsw span{display:inline-block;width:16px;height:16px;border-radius:50%;border:1px solid var(--line);margin-right:6px;vertical-align:-3px}.annsw.on{outline:3px solid var(--accent);outline-offset:1px}
 .annc{display:block;max-width:100%;touch-action:none;border-radius:8px;background:#000;margin:4px auto}
 .phc .tools{flex-wrap:wrap}
+.tg-fin:before{background:#2e7d4f}
 
 </style>
 
@@ -3261,9 +3262,163 @@ console.assert(ergoApos('Difficultés d installer, il n y a pas l eau qu il faut
   &&ergoApos('l, d ')==='l, d ','ASSERT FAIL ergoApos');
 console.assert(ERGO_SANTE('anam')&&ERGO_SANTE('b_p1_transf')&&!ERGO_SANTE('noms')&&!ERGO_SANTE('lType'),'ASSERT FAIL ERGO_SANTE');});
 
+/* ========== Visite de fin de travaux (v.type='fin', n° FIN-…) ==========
+   v.f : pNom, adresse, cp, ville (repris du dossier d'origine), srcId, srcNum, srcKind, dateVis, presents, entreprises, concl, obs.
+   v.t : [{id, cat, sous, lib, st, conf, com, z}] une ligne par travail ; photos après travaux dans v.it['t:'+id] ;
+   z = zone du rapport ergothérapeute d'origine (ses photos sont reprises en « avant » dans le PDF). */
+const isFin=v=>v.type==='fin';
+const FIN_ST=['Réalisé','Partiel','Non réalisé','Sans objet'];
+const FIN_STC={'Réalisé':[[46,125,79],[225,242,231]],'Partiel':[[138,83,0],[253,241,220]],'Non réalisé':[[180,35,24],[251,233,231]],'Sans objet':[[68,83,95],[236,240,243]]};
+const FIN_CONCL=['Travaux conformes','Travaux réalisés avec réserves','Travaux non conformes'];
+const FIN_ADM=[['h','Visite'],['dateVis','Date de la visite de fin de travaux','d'],['presents','Personnes présentes','ta'],['entreprises','Entreprises, devis et factures vus','ta'],
+  ['h','Logement'],['pNom','Propriétaire','t'],['adresse','Adresse','t'],['cp','Code postal','t'],['ville','Ville','t']];
+const finLn=(cat,sous,lib,z)=>({id:Math.random().toString(36).slice(2,8),cat:cat||'',sous:sous||'',lib,st:'',conf:false,com:'',...(z?{z}:{})});
+// Texte de travaux (décence, permis de louer, synthèse d'une grille) en lignes : « 1. Titre » = catégorie, « • » ou « - » = un travail,
+// « ◦ » = détail du travail précédent, qui devient l'intitulé de son groupe. Avec des catégories, ce qui les précède (phrase d'introduction) est ignoré.
+function finLignes(txt,cat0){const L=String(txt||'').split('\n'),hasCat=L.some(l=>/^\d+\.\s+\S/.test(l.trim())),R=[];let cat=cat0||'',vu=!hasCat,par=null;
+  for(const raw of L){const l=raw.trim();if(!l)continue;let m=/^\d+\.\s+(.+)$/.exec(l);
+    if(m){cat=m[1];vu=true;par=null;continue}
+    if(!vu)continue;
+    if((m=/^◦\s*(.+)$/.exec(l))){if(par?.row){R.splice(R.indexOf(par.row),1);par.row=null}R.push(finLn(cat,par?.t,m[1]));continue}
+    const t=l.replace(/^[•·*\-–]\s*/,'');const row=finLn(cat,'',t);R.push(row);par={t:t.replace(/\s*:$/,''),row}}
+  return R}
+// Lignes et coordonnées reprises d'un dossier : travaux préconisés (décence, permis de louer), synthèse des grilles (dégradation),
+// préconisations retenues zone par zone (ergothérapeute ; une ligne par élément d'un bloc standard).
+function finDepuis(s){const f=s.f,nm=isErgo(s)?f.noms:isDeg(s)?f.pNom:isPdl(s)&&f.pSoc?f.pSoc:[f.pNom,f.pPrenom].filter(x=>String(x||'').trim()).join(' ');
+  const t=isErgo(s)?s.z.filter(z=>z.actif).flatMap(z=>{const d=ergoZDef(z),c=z.k==='libre'?(z.t||'Zone personnalisée')+(z.n?' ('+z.n+')':''):[d.t.charAt(0)+d.t.slice(1).toLowerCase(),d.s].filter(Boolean).join(' – ')+(z.n?' ('+z.n+')':'');
+      if(z.b)return ergoRetenu(z.b)?(ergoBSeul(z.b)?[z.b.on[0]]:z.b.on).map(id=>finLn(c,'',ergoLib(ergoItem(id)[1],z.b.p[id]),z.id)):[];
+      return z.L.filter(ergoRetenu).map(l=>finLn(c,'',ergoLigneTxt(l)||'Ligne libre',z.id))})
+    :isDeg(s)?s.g.flatMap(g=>finLignes(f[g.id+'_trav'],gNom(s,g))):finLignes(f.trav);
+  return {f:{pNom:nm||'',adresse:f.adresse||'',cp:f.cp||'',ville:f.ville||'',srcId:s.id,srcNum:s.num||'',srcKind:kind(s)},t}}
+const finNums=v=>{const m={};let n=0;for(const l of v.t)for(const i of (v.it['t:'+l.id]?.ph||[]).keys())m['t:'+l.id+':'+i]=++n;return m};
+const finSrc=v=>visits.find(x=>x.id===v.f.srcId);
+function finControles(v){const L=[],add=(n,t,vw)=>L.push([n,t,vw]),f=v.f,sg=(n,a,b)=>n+' '+(n>1?b:a);
+  if(!v.t.length)add('ko','Aucun travail à vérifier','ftrav');
+  const ns=v.t.filter(l=>!l.st).length;if(ns)add('ko',sg(ns,'travail sans statut','travaux sans statut'),'ftrav');
+  if(!f.dateVis)add('ko','Date de visite manquante','fadm');if(!filled(f.adresse))add('ko','Adresse du logement manquante','fadm');
+  if(!f.concl)add('ko','Conclusion non renseignée','fconc');if(!P.nom)add('ko','Profil sans nom (Mon profil)','profil');
+  const nc=v.t.filter(l=>['Partiel','Non réalisé'].includes(l.st)&&!filled(l.com)).length;if(nc)add('av',sg(nc,'travail partiel ou non réalisé sans commentaire','travaux partiels ou non réalisés sans commentaire'),'ftrav');
+  const np=v.t.filter(l=>l.st==='Réalisé'&&!(v.it['t:'+l.id]?.ph||[]).length).length;if(np)add('av',sg(np,'travail réalisé sans photo','travaux réalisés sans photo'),'ftrav');
+  if(f.concl==='Travaux conformes'&&v.t.some(l=>['Partiel','Non réalisé'].includes(l.st)))add('av','Conclusion « conformes » alors que des travaux sont partiels ou non réalisés','fconc');
+  if(!P.sig)add('av','Signature du technicien absente (Mon profil)','profil');
+  return L}
+const finCompte=v=>Object.fromEntries(FIN_ST.map(s=>[s,v.t.filter(l=>l.st===s).length]));
+const finNb=(s,n)=>`${n} ${s.toLowerCase()}${n>1&&s!=='Sans objet'?'s':''}`;
+
+/* --- écrans --- */
+function finView(app,bar,bi){const v=cur,f=v.f;bar.hidden=false;
+  if(view==='dash'){const C=finCompte(v),nb=v.t.filter(l=>l.st).length,ctl=finControles(v),ko=ctl.filter(c=>c[0]==='ko').length;
+    const tile=(id,n,t,ic,st)=>`<button class="tile" data-act="go" data-v="${id}"><img class="ic" src="${ic}" alt=""><span class="num">${n}</span><span class="lbl">${esc(t)}</span>${pills(st)}</button>`;
+    app.innerHTML=`${topbar(who(v),kind(v),'list')}${progHtml(v,1)}
+     ${f.srcNum||f.srcKind?`<p class="muted">Dossier d’origine : ${esc([f.srcKind,f.srcNum].filter(Boolean).join(' · '))}</p>`:''}
+     <div class="tiles">${tile('fadm','INFOS','Visite et logement',ICO.admin,[[f.dateVis?frDate(f.dateVis):'À faire',f.dateVis?'info':'']])}
+      ${tile('ftrav','TRAVAUX','Travaux à vérifier',ICO.trav,[[`${nb} / ${v.t.length} vérifiés`,nb===v.t.length&&v.t.length?'ok':'warn'],...(C['Non réalisé']?[[C['Non réalisé']+' non réalisé(s)','danger']]:[])])}
+      ${tile('fconc','CONCLUSION','Conclusion',ICO.synth,[[f.concl||'À faire',f.concl==='Travaux conformes'?'ok':f.concl?'warn':'']])}</div>
+     ${ko?`<p class="hint warn">${ko} point${ko>1?'s':''} à corriger avant le rapport.</p>`:''}`;
+    bi.innerHTML=`<button data-act="list">Terminé</button><button class="btn-primary" data-act="pdf">${svg('pdf')}Rapport PDF</button>`;return true}
+  if(view==='fadm'){app.innerHTML=`${topbar('Visite et logement',who(v),'dash')}<div class="form">${FIN_ADM.map(field).join('')}</div>`;cpInit();
+    bi.innerHTML=`<button class="btn-primary" data-act="dash">Terminé</button>`;return true}
+  if(view==='fconc'){app.innerHTML=`${topbar('Conclusion',who(v),'dash')}
+     <p class="muted">${Object.entries(finCompte(v)).filter(([,n])=>n).map(([s,n])=>finNb(s,n)).join(' · ')||'Aucun travail vérifié.'}</p>
+     <div class="form">${[['concl','Conclusion de la visite','r',FIN_CONCL],['obs','Observations (réserves, travaux restant à faire)','ta']].map(field).join('')}</div>`;
+    bi.innerHTML=`<button class="btn-primary" data-act="dash">Terminé</button>`;return true}
+  if(view==='ftrav'){const nums=finNums(v),cats=[...new Set(v.t.map(l=>l.cat))];
+    const ln=l=>`<div class="card" style="margin:10px 0"><div class="field full"><span>${l.sous?esc(l.sous):'Travail'}</span><textarea data-tl="${l.id}" data-tk="lib" aria-label="Intitulé du travail">${esc(l.lib)}</textarea></div>
+      <div class="chips" role="radiogroup" aria-label="Statut">${FIN_ST.map(s=>`<label class="chip"><input type="radio" name="st_${l.id}" data-tl="${l.id}" data-tk="st" value="${s}" ${l.st===s?'checked':''}>${s}</label>`).join('')}</div>
+      <label class="chip" style="margin-top:8px"><input type="checkbox" data-tl="${l.id}" data-tk="conf" ${l.conf?'checked':''}>Conforme au devis / à la facture</label>
+      <div class="field full" style="margin-top:8px"><span>Commentaire${['Partiel','Non réalisé'].includes(l.st)?' (à préciser)':''}</span><textarea data-tl="${l.id}" data-tk="com" autocapitalize="sentences">${esc(l.com)}</textarea></div>
+      ${phBlock('t:'+l.id,it('t:'+l.id),nums,false)}
+      <div class="row"><button class="btn-danger" data-act="fi-del" data-id="${l.id}">Supprimer ce travail</button></div></div>`;
+    app.innerHTML=`${topbar('Travaux à vérifier',who(v),'dash')}
+     <p class="muted">Pour chaque travail : statut, conformité au devis ou à la facture, commentaire et photos après travaux.</p>
+     ${cats.map(c=>`${c?`<h2 class="sec">${esc(c)}</h2>`:''}${v.t.filter(l=>l.cat===c).map(ln).join('')}`).join('')||'<p class="muted">Aucun travail repris : ajoutez-les ci-dessous.</p>'}
+     <div class="row"><button data-act="fi-add">${svg('plus')}Ajouter un travail</button></div>`;
+    bi.innerHTML=`<button class="btn-primary" data-act="dash">Terminé</button>`;return true}
+  return false}
+function finLigne(el){return cur.t.find(l=>l.id===el.dataset.tl)}
+// Saisie d'un texte de ligne (frappe) ; statut et conformité au changement (réaffichage : alertes et pastilles).
+function finInp(el){if(!el.dataset.tl||['radio','checkbox'].includes(el.type))return false;const l=finLigne(el);if(l){l[el.dataset.tk]=el.value;save()}return true}
+function finChg(el){if(!el.dataset.tl)return false;const l=finLigne(el);if(!l)return true;
+  if(el.dataset.tk==='st')l.st=el.value;else if(el.dataset.tk==='conf')l.conf=el.checked;else return true;save();keep();return true}
+async function finAct(a,b){
+  if(a==='fi-new'){const s=visits.find(x=>x.id===b.dataset.id);if(!s)return;const d=finDepuis(s);
+    cur=newVisit('fin');Object.assign(cur.f,d.f);cur.t=d.t;visits.push(cur);if(numDos(cur))saveP();await save(true);view='dash';
+    toast(d.t.length?`${d.t.length} travau${d.t.length>1?'x':''} repris du dossier d’origine`:'Aucun travail trouvé dans le dossier d’origine : ajoutez-les');return go()}
+  if(!cur||!isFin(cur))return;
+  if(a==='fi-add'){const c=cur.t.length?cur.t[cur.t.length-1].cat:'';cur.t.push(finLn(c,'',''));save();return keep()}
+  if(a==='fi-del'){if(!armed(b,'Confirmer la suppression'))return;cur.t=cur.t.filter(l=>l.id!==b.dataset.id);delete cur.it['t:'+b.dataset.id];save();return keep()}}
+
+/* --- rapport PDF, au style du rapport de dégradation --- */
+async function finPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',format:'a4'}),f=v.f;
+  const INK=[20,33,43],MUT=[68,83,95],ACC=[27,109,150],LINE=[214,224,231],WHITE=[255,255,255];
+  const T=s=>PDFT(String(s??'').replace(/[  ]/g,' '));
+  const W=210,H=297,ML=19,MR=15,CW=W-ML-MR,BOT=H-16;let y=15;
+  const font=(sz,st='normal',c=INK)=>{doc.setFont('helvetica',st);doc.setFontSize(sz);doc.setTextColor(...c)};
+  const LH=sz=>sz*.3528*1.3,lines=(s,w,sz,st='normal')=>{font(sz,st);return T(s).split('\n').flatMap(p=>p.trim()?doc.splitTextToSize(p.trim(),w):[''])};
+  const page=()=>{doc.addPage('a4','portrait');y=15},need=h=>{if(y+h>BOT)page()};
+  const para=(s,sz=9.5,st='normal',c=INK,x=ML,w=CW)=>{for(const l of lines(s,w,sz,st)){need(LH(sz));font(sz,st,c);doc.text(l,x,y+LH(sz)*.75);y+=LH(sz)}};
+  const pill=(s,x,yy,[fg,bg],sz=8)=>{font(sz,'bold',fg);const w=doc.getTextWidth(T(s))+5;doc.setFillColor(...bg);doc.roundedRect(x,yy,w,5.4,1.4,1.4,'F');doc.text(T(s),x+2.5,yy+3.8);return w};
+  const pillW=(s,sz=8)=>{font(sz,'bold');return doc.getTextWidth(T(s))+5};
+  const sec=t=>{need(20);font(13,'bold',INK);doc.text(T(t),ML,y+4.6);doc.setFillColor(...ACC);doc.rect(ML,y+7,9,.7,'F');y+=12};
+  const photos=async(L,titre)=>{if(!L.length)return;const P2=[];for(const p of L)P2.push(await ergoPdfImg(p));font(7,'bold',MUT);need(8);doc.text(T(titre),ML+3,y+3);y+=5;
+    const cw=(CW-10)/2;for(let i=0;i<P2.length;i+=2){const row=P2.slice(i,i+2),hs=row.map(p=>Math.min(p.h>p.w?80:48,cw*p.h/p.w));need(Math.max(...hs)+7);
+      row.forEach((p,k)=>{const ih=hs[k],iw=ih*p.w/p.h,xx=ML+3+k*(cw+4);doc.addImage(p.src,'JPEG',xx+(cw-iw)/2,y,iw,ih,undefined,'FAST');if(filled(p.cap)){font(7.5,'italic',MUT);doc.text(lines(p.cap,cw,7.5,'italic')[0],xx,y+ih+3.8)}});
+      y+=Math.max(...hs)+7}};
+  const C=finCompte(v),src=finSrc(v),cc=f.concl==='Travaux conformes'?FIN_STC['Réalisé']:f.concl==='Travaux non conformes'?FIN_STC['Non réalisé']:f.concl?FIN_STC.Partiel:FIN_STC['Sans objet'];
+
+  /* page de garde */
+  try{const lg=await loadImg(LOGO);doc.addImage(LOGO,'PNG',ML,y,44,44*lg.naturalHeight/lg.naturalWidth,undefined,'FAST')}catch(e){}
+  y=46;{const NL=lines(f.pNom||'Propriétaire non renseigné',CW-12,15,'bold'),AL=lines([f.adresse,cpv(v)].filter(filled).join(', '),CW-12,8.5),h=8+NL.length*LH(15)+AL.length*LH(8.5)+3;
+    doc.setFillColor(...ACC);doc.roundedRect(ML,y,CW,h,2.5,2.5,'F');font(7,'bold',[207,227,239]);doc.text(T('LOGEMENT'),ML+6,y+5.5);let yy=y+7;
+    font(15,'bold',WHITE);NL.forEach(l=>{doc.text(l,ML+6,yy+LH(15)*.78);yy+=LH(15)});font(8.5,'normal',[219,234,243]);AL.forEach(l=>{doc.text(l,ML+6,yy+LH(8.5)*.8);yy+=LH(8.5)});y+=h+8}
+  font(9,'bold',ACC);doc.text(T('CONTRÔLE DES TRAVAUX'),ML,y);y+=3;font(22,'bold',INK);doc.text(T('Visite de fin de travaux'),ML,y+LH(22)*.8);y+=LH(22)+1;
+  para([f.dateVis&&'Visite du '+ergoDateN(f.dateVis,1),(f.srcKind||f.srcNum)&&'dossier d’origine : '+[f.srcKind,f.srcNum].filter(Boolean).join(' · ')].filter(Boolean).join(' · '),10,'normal',MUT);y+=5;
+  // Encadré de conclusion et décompte des travaux.
+  {const hy=y,hh=40;doc.setFillColor(...cc[1]);doc.roundedRect(ML,hy,CW,hh,2.5,2.5,'F');font(7,'bold',cc[0]);doc.text(T('CONCLUSION'),ML+6,hy+7);
+    font(16,'bold',cc[0]);doc.text(T(f.concl||'Conclusion à compléter'),ML+6,hy+16);let x=ML+6;
+    for(const s of FIN_ST){if(!C[s])continue;const t=finNb(s,C[s]);if(x+pillW(t,9)>ML+CW-6)break;x+=pill(t,x,hy+24,[WHITE,FIN_STC[s][0]],9)+3}y=hy+hh+8}
+  {const rows=[['Établi par',[P.nom,P.qual].filter(Boolean).join(', ')],['Contact',[P.tel,P.mail].filter(Boolean).join(' · ')],['Personnes présentes',f.presents],['Entreprises, devis et factures vus',f.entreprises]].filter(([,x])=>filled(x));
+    for(const [l,val] of rows){const a=lines(l,52,9,'bold'),b=lines(val,CW-58,9.5),h=Math.max(a.length,b.length)*LH(9.5)+3;need(h);doc.setDrawColor(...LINE);doc.setLineWidth(.25);doc.line(ML,y+h,ML+CW,y+h);
+      font(9,'bold',MUT);a.forEach((x,i)=>doc.text(x,ML+1,y+1.5+LH(9.5)*(i+.75)));font(9.5,'normal',INK);b.forEach((x,i)=>doc.text(x,ML+58,y+1.5+LH(9.5)*(i+.75)));y+=h}}
+
+  /* récapitulatif */
+  page();sec('Récapitulatif des travaux');
+  {const cats=[...new Set(v.t.map(l=>l.cat))];for(const c of cats){if(c){need(10);font(9.5,'bold',ACC);doc.text(lines(c,CW,9.5,'bold')[0],ML,y+4);y+=7}
+    for(const l of v.t.filter(x=>x.cat===c)){const st=l.st||'À vérifier',pw=pillW(st),L=lines((l.sous?l.sous+' : ':'')+l.lib,CW-pw-8,9),h=L.length*LH(9)+3;need(h);
+      font(9,'normal',INK);L.forEach((t,i)=>doc.text(t,ML+1,y+1+LH(9)*(i+.75)));pill(st,ML+CW-pw,y,FIN_STC[l.st]||FIN_STC['Sans objet']);doc.setDrawColor(...LINE);doc.setLineWidth(.2);doc.line(ML,y+h,ML+CW,y+h);y+=h+1}}}
+
+  /* détail : commentaire, conformité et photos */
+  y+=6;sec('Détail des travaux');
+  for(const l of v.t){const ph=v.it['t:'+l.id]?.ph||[],z=l.z&&src&&isErgo(src)?src.it['z:'+l.z]?.ph||[]:[];
+    if(!filled(l.com)&&!ph.length&&!z.length&&l.conf===false)continue;
+    const TL=lines((l.sous?l.sous+' : ':'')+l.lib,CW-40,10,'bold');need(TL.length*LH(10)+14);doc.setDrawColor(...LINE);doc.setLineWidth(.3);doc.line(ML,y,ML+CW,y);y+=3;
+    font(10,'bold',INK);TL.forEach((t,i)=>doc.text(t,ML+1,y+LH(10)*(i+.75)));if(l.st)pill(l.st,ML+CW-pillW(l.st),y,FIN_STC[l.st]);y+=TL.length*LH(10)+2;
+    if(l.conf){font(8.5,'bold',FIN_STC['Réalisé'][0]);doc.text(T('Conforme au devis / à la facture'),ML+1,y+3);y+=5}
+    if(filled(l.com))para(l.com,9,'italic',MUT,ML+1,CW-2);y+=2;
+    await photos(z,'AVANT TRAVAUX (RAPPORT D’ORIGINE)');await photos(ph,'APRÈS TRAVAUX');y+=3}
+
+  /* observations et signature */
+  // Conclusion et signature gardées ensemble.
+  y+=4;need(66+(filled(f.obs)?lines(f.obs,CW,9.5).length*LH(9.5):0));sec('Conclusion');para(f.concl||'Conclusion à compléter',11,'bold',cc[0]);if(filled(f.obs)){y+=2;para(f.obs)}
+  y+=6;font(9,'bold',MUT);doc.text(T('Le technicien : '+(P.nom||'')),ML,y+4);y+=6;
+  if(P.sig?.src){try{const im=await loadImg(P.sig.src),h=Math.min(28,60*im.naturalHeight/im.naturalWidth);doc.addImage(P.sig.src,P.sig.src.startsWith('data:image/png')?'PNG':'JPEG',ML,y,h*im.naturalWidth/im.naturalHeight,h,undefined,'FAST');y+=h}catch(e){}}
+
+  const n=doc.getNumberOfPages();for(let i=1;i<=n;i++){doc.setPage(i);doc.setFillColor(...ACC);doc.rect(0,0,6.3,H,'F')}
+  piedPdf(doc,v,'Visite de fin de travaux',ML,MR);
+  await offer(`${preNum(v)}Fin_de_travaux_${slug(f.pNom)||'logement'}_${f.dateVis||today()}.pdf`,doc.output('blob'))}
+
+// Auto-tests, après le chargement de l'application (filled() et kind() sont déclarés plus loin).
+queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécurité des occupants\n• Mise en sécurité de l’installation électrique\n   ◦ Création de prises\n   ◦ Remise en état\n• Pose d’un DAAF\n\n2. Humidité\n• Recherche des causes :\n   ◦ Suppression des fuites');
+  console.assert(T.map(l=>[l.cat,l.sous,l.lib].join('|')).join(' / ')==='Sécurité des occupants|Mise en sécurité de l’installation électrique|Création de prises / Sécurité des occupants|Mise en sécurité de l’installation électrique|Remise en état / Sécurité des occupants||Pose d’un DAAF / Humidité|Recherche des causes|Suppression des fuites'
+    &&finLignes('- Reprise de la toiture\n- Isolation des combles','Maison').map(l=>l.cat+':'+l.lib).join()==='Maison:Reprise de la toiture,Maison:Isolation des combles'&&finLignes('').length===0,'ASSERT FAIL finLignes');
+  const d=finDepuis({id:'s1',num:'DEC-2026-JM-0001',f:{pNom:'DURAND',pPrenom:'Paul',adresse:'3 rue A',cp:'79100',ville:'Thouars',trav:'1. Chauffage\n• Pose d’un radiateur'},it:{}});
+  console.assert(d.f.pNom==='DURAND Paul'&&d.f.srcNum==='DEC-2026-JM-0001'&&d.t.length===1&&d.t[0].cat==='Chauffage','ASSERT FAIL finDepuis');
+  const v={t:[{id:'a',st:'Réalisé'},{id:'b',st:'Partiel',com:''},{id:'c',st:''}],it:{},f:{dateVis:'2026-11-03',adresse:'x',concl:'Travaux conformes'}},C=finControles(v).map(c=>c[0]+':'+c[1]).join(' / ');
+  console.assert(/^ko:1 travail sans statut/.test(C)&&/partiel ou non réalisé sans commentaire/.test(C)&&/réalisé sans photo/.test(C)&&/Conclusion « conformes »/.test(C),'ASSERT FAIL finControles',C)});
+
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.03-2215';
+const APP_VER='2026.11.03-2241';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -3308,6 +3463,7 @@ function migrate(v){
   v.f=v.f||{};v.it=v.it||{};v.done=v.done||{};
   if(isDeg(v)){v.g=v.g||[];return v}
   if(isErgo(v))return ergoMigre(v);
+  if(isFin(v)){v.t=v.t||[];return v}
   if(isAud(v)){const d=AUD_VIDE(),a=audMigre({...v.a});v.a={...d,...a,gen:{...d.gen,...a.gen},env:{...d.env,...a.env}};return v}
   if(isLoc(v)){const d=locVide(),l=v.loc||{};
     // Ancienne saisie : n° et voie du bien séparés, adresse du propriétaire en texte libre.
@@ -3342,7 +3498,7 @@ function migrate(v){
 
 /* ---------- n° de dossier, rappel de sauvegarde, avancement ---------- */
 // N° unique : type, année de création, initiales du technicien, compteur de l'appareil (DEC-2026-JM-0042).
-const NUM_PRE={pdl:'PDL',deg:'DEG',loc:'LOC',aud:'AUD',ergo:'ERG'};
+const NUM_PRE={pdl:'PDL',deg:'DEG',loc:'LOC',aud:'AUD',ergo:'ERG',fin:'FIN'};
 const initiales=()=>(P.nom||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').split(/\s+/).filter(Boolean).map(x=>x[0]).slice(0,3).join('').toUpperCase().replace(/[^A-Z]/g,'');
 function numDos(v){if(v.num||!P.nom)return false;const k=(NUM_PRE[v.type]||'DEC')+'-'+new Date(v.created||Date.now()).getFullYear();
   P.seq=P.seq||{};P.seq[k]=(P.seq[k]||0)+1;v.num=`${k}-${initiales()}-${String(P.seq[k]).padStart(4,'0')}`;return true}
@@ -3357,6 +3513,7 @@ function rappelSauv(){const L=visits.filter(v=>!sauve(v));if(!L.length)return nu
 // Avancement : rubriques contrôlées et conclusion (décence, permis de louer), éléments notés (dégradation), étapes clés (Loc'Avantages).
 function prog(v){
   if(isAud(v)){const M=audModules(v);return {f:M.filter(x=>x[1]).length,n:M.length,u:'modules'}}
+  if(isFin(v))return {f:v.t.filter(l=>l.st).length+(v.f.concl?1:0),n:v.t.length+1,u:'étapes'};
   if(isErgo(v)){const s=ERGO_SECS.filter(([k])=>k!=='eaides').map(([k])=>ergoEtat(v,k)==='complet');return {f:s.filter(Boolean).length,n:s.length,u:'sections'}}
   if(isLoc(v)){const D=v.loc,R=locR(v),s=[D.proprio.nom||D.proprio.sci,D.bien.insee,R.lgs.every(r=>r.eligible),R.comp.ok];return {f:s.filter(Boolean).length,n:s.length,u:'étapes'}}
   if(isDeg(v)){const E=v.g.flatMap(g=>GRILLES[g.k].els.map(e=>g.n[e.id]?.h!=null));return {f:E.filter(Boolean).length,n:E.length,u:'éléments notés'}}
@@ -3369,6 +3526,7 @@ function progHtml(v,num){const p=prog(v),pc=Math.round(100*p.f/(p.n||1));
 // Points à corriger ('ko' : le dossier reste en cours si le PDF est forcé) ou à vérifier ('av'), avec la vue à ouvrir.
 function controles(v){
   if(isErgo(v))return ergoControles(v);
+  if(isFin(v))return finControles(v);
   const f=v.f,pdl=isPdl(v),L=[],add=(n,t,vw)=>L.push([n,t,vw]),sg=(n,a,b)=>n+' '+(n>1?b:a);
   for(const [r,ds] of aControler(v)){const it_=ds.filter(d=>d.id),nl=it_.filter(d=>!v.it[d.id]?.on&&!v.it[d.id]?.ras).length,nc=it_.filter(d=>comManq(d,v.it[d.id])).length,nt=ds.length-it_.length;
     add('ko',`Rubrique ${r.n} : `+[nl&&sg(nl,'ligne ni Défaut ni RAS','lignes ni Défaut ni RAS'),nc&&sg(nc,'commentaire manquant','commentaires manquants'),nt&&(nt>1?'types':'type')+' d’équipement à renseigner'].filter(Boolean).join(', '),r.id)}
@@ -3386,7 +3544,7 @@ function controles(v){
   return L}
 
 /* ---------- état ---------- */
-let visits=[],cur=null,view='list',saveT=null,P={id:'moi'};
+let visits=[],cur=null,view='list',saveT=null,P={id:'moi'},FSDIR=null;  // FSDIR : dossier de la sauvegarde automatique
 // Sauvegarde : dossiers cochés pour l'export, et inclusion du carnet des mairies.
 const exSel=new Set();let exMairies=true;
 // Espace de stockage (estimation du navigateur) et protection contre l'effacement automatique.
@@ -3408,7 +3566,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const today=()=>new Date().toISOString().slice(0,10);
 const frDate=d=>d&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d.split('-').reverse().join('/'):(d||'');
 const newVisit=(t,b)=>({dfTxt:1,dfV:3,phV:1,id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),created:Date.now(),updated:Date.now(),
-  ...(t==='ergo'?{type:'ergo',f:{dateVis:today(),dateDiag:today()},z:ergoZonesDefaut()}:t==='aud'?{type:'aud',f:{dateVis:today(),dispositif:'MaPrimeRénov’ Parcours accompagné'},a:AUD_VIDE()}:t==='loc'?{type:'loc',f:{dateVis:today()},loc:locVide()}:t==='deg'?{type:'deg',bien:b,f:{op:P.lastOp||'',dateVis:today(),...(b==='imm'?{g1_nom:'Logement 1'}:{})},g:b==='imm'?[{id:'g0',k:'bc',n:{}},{id:'g1',k:'lc',n:{}}]:[{id:'g0',k:'mi',n:{}}]}:t==='pdl'?{type:'pdl',f:{commune:'Thouars',cp:COMMUNES.Thouars.cp,ville:COMMUNES.Thouars.ville,typeVis:'Visite de contrôle',dateVis:today()}}:{f:{dem:'CAF',typeVis:'Visite initiale',dateVis:today(),mrCiv:'Madame, Monsieur'}}),it:{},done:{},sig:''});
+  ...(t==='fin'?{type:'fin',f:{dateVis:today()},t:[]}:t==='ergo'?{type:'ergo',f:{dateVis:today(),dateDiag:today()},z:ergoZonesDefaut()}:t==='aud'?{type:'aud',f:{dateVis:today(),dispositif:'MaPrimeRénov’ Parcours accompagné'},a:AUD_VIDE()}:t==='loc'?{type:'loc',f:{dateVis:today()},loc:locVide()}:t==='deg'?{type:'deg',bien:b,f:{op:P.lastOp||'',dateVis:today(),...(b==='imm'?{g1_nom:'Logement 1'}:{})},g:b==='imm'?[{id:'g0',k:'bc',n:{}},{id:'g1',k:'lc',n:{}}]:[{id:'g0',k:'mi',n:{}}]}:t==='pdl'?{type:'pdl',f:{commune:'Thouars',cp:COMMUNES.Thouars.cp,ville:COMMUNES.Thouars.ville,typeVis:'Visite de contrôle',dateVis:today()}}:{f:{dem:'CAF',typeVis:'Visite initiale',dateVis:today(),mrCiv:'Madame, Monsieur'}}),it:{},done:{},sig:''});
 function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(t._t);t._t=setTimeout(()=>t.hidden=true,Math.max(2600,msg.length*60))}
 function save(now){if(!cur)return;cur.updated=Date.now();clearTimeout(saveT);const v=cur,go=()=>store.put(v).catch(e=>toast('Enregistrement impossible : '+e.message));if(now)return go();saveT=setTimeout(go,350)}
 // Alerte « commentaire manquant » d'une pathologie, mise à jour pendant la saisie.
@@ -3529,10 +3687,10 @@ function phBlock(id,s,nums,need,d){return `<div class="grp"><span>Photos${need?'
 function topbar(title,sub,back,logo){const sv=cur&&back==='list'&&view==='dash'?`<button class="tb-sv${sauve(cur)?' ok':''}" data-act="fsave">${svg(sauve(cur)?'ok':'save')}<span>${sauve(cur)?'Sauvegardé':'Sauvegarder'}</span></button>`:'';
   return `<div class="top">${back?`<button class="btn-icon" data-act="${back}" aria-label="Retour">${svg('back')}</button>`:''}<div class="grow"><h1>${esc(title)}</h1>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>${sv}${logo?`<img class="com" src="${logo}" alt="${esc(isPdl(cur)?cur.f.commune:cur.f.dem)}">`:''}</div>`}
 const cpv=v=>[v.f.cp,v.f.ville].filter(Boolean).join(' ');
-const who=v=>isErgo(v)?v.f.noms||'Demandeur non renseigné':isAud(v)?[v.f.pNom,v.f.pPrenom].filter(Boolean).join(' ')||[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Propriétaire non renseigné':isLoc(v)?locWho(v):isDeg(v)?v.f.pNom||[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Propriétaire non renseigné':isPdl(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Logement non renseigné':[v.f.nom,v.f.prenom].filter(Boolean).join(' ')||'Occupant non renseigné';
-const where=v=>isErgo(v)||isAud(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', '):isLoc(v)?locWhere(v):isDeg(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', '):isPdl(v)?(v.f.pNom||v.f.pSoc?'Propriétaire : '+(v.f.pSoc||[v.f.pNom,v.f.pPrenom].filter(Boolean).join(' ')):''):[v.f.adresse,cpv(v)].filter(Boolean).join(', ');
+const who=v=>isFin(v)?v.f.pNom||[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Propriétaire non renseigné':isErgo(v)?v.f.noms||'Demandeur non renseigné':isAud(v)?[v.f.pNom,v.f.pPrenom].filter(Boolean).join(' ')||[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Propriétaire non renseigné':isLoc(v)?locWho(v):isDeg(v)?v.f.pNom||[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Propriétaire non renseigné':isPdl(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Logement non renseigné':[v.f.nom,v.f.prenom].filter(Boolean).join(' ')||'Occupant non renseigné';
+const where=v=>isFin(v)||isErgo(v)||isAud(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', '):isLoc(v)?locWhere(v):isDeg(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', '):isPdl(v)?(v.f.pNom||v.f.pSoc?'Propriétaire : '+(v.f.pSoc||[v.f.pNom,v.f.pPrenom].filter(Boolean).join(' ')):''):[v.f.adresse,cpv(v)].filter(Boolean).join(', ');
 const logoOf=v=>isPdl(v)?COMMUNES[v.f.commune]?.logo:COM[v.f.dem]?.logo;
-const kind=v=>isErgo(v)?'Rapport ergothérapeute':isAud(v)?'Audit énergétique · '+(v.f.dispositif||'maison individuelle'):isLoc(v)?'Loc’Avantages · '+v.loc.logements.length+' logement'+(v.loc.logements.length>1?'s':''):isDeg(v)?['Dégradation',v.bien==='imm'?`Immeuble · ${v.g.length-1} logement${v.g.length>2?'s':''}`:'Maison individuelle',v.f.op].filter(Boolean).join(' · '):isPdl(v)?'Permis de louer · '+v.f.commune+' · '+(v.f.typeVis||''):(COM[v.f.dem]?.label||'')+' · '+(v.f.typeVis||'');
+const kind=v=>isFin(v)?'Fin de travaux'+(v.f.srcNum?' · '+v.f.srcNum:''):isErgo(v)?'Rapport ergothérapeute':isAud(v)?'Audit énergétique · '+(v.f.dispositif||'maison individuelle'):isLoc(v)?'Loc’Avantages · '+v.loc.logements.length+' logement'+(v.loc.logements.length>1?'s':''):isDeg(v)?['Dégradation',v.bien==='imm'?`Immeuble · ${v.g.length-1} logement${v.g.length>2?'s':''}`:'Maison individuelle',v.f.op].filter(Boolean).join(' · '):isPdl(v)?'Permis de louer · '+v.f.commune+' · '+(v.f.typeVis||''):(COM[v.f.dem]?.label||'')+' · '+(v.f.typeVis||'');
 
 // Dossiers en cours ou terminés, filtrés par type et par les mots recherchés (tous présents, sans accents ni casse).
 const dosCle=v=>mkey([who(v),where(v),kind(v),v.num,v.f.refDos,frDate(v.f.dateVis),v.f.nom,v.f.pNom,v.f.pSoc].join(' '));
@@ -3560,13 +3718,14 @@ function caseHtml(v){
     ${v.pdfAt?`<button data-act="reopen" data-id="${v.id}">Remettre en cours</button>`:''}
     ${isErgo(v)?`<button data-act="er-dup" data-id="${v.id}">Dupliquer</button>`:''}
     <button data-act="fsave" data-id="${v.id}">${sauve(v)?'Sauvegardé ✓':'Sauvegarder'}</button>
-    ${isPdl(v)||deg||isAud(v)||isErgo(v)?'':`<button data-act="ctrl" data-id="${v.id}">Créer la visite de contrôle</button>`}
+    ${isPdl(v)||deg||isAud(v)||isErgo(v)||isFin(v)?'':`<button data-act="ctrl" data-id="${v.id}">Créer la visite de contrôle</button>`}
+    ${isAud(v)||isFin(v)?'':`<button data-act="fi-new" data-id="${v.id}">Visite de fin de travaux</button>`}
     <button class="btn-danger" data-act="delv" data-id="${v.id}">Supprimer</button></div></div>`;
 }
 /* ---------- tableau de bord de l'accueil (maquettes A téléphone + C tablette validées le 30/10/2026) ---------- */
 // Visites à venir (date de visite aujourd'hui ou plus tard), dossiers à reprendre, chiffres clés, création d'un dossier par type.
-const TDB_TYPES=[['dec','Contrôle décence',()=>ICO.logement],['pdl','Permis de louer',()=>ICO.admin],['deg','Dégradation',()=>ICO_DEG.deg],['aud','Audit énergétique',()=>ICO_DEG.isolation],['ergo','Ergothérapie',()=>ICO.ergo],['loc','Loc’Avantages',()=>ICO.synth]];
-const TDB_LAB={dec:'Décence',pdl:'Permis de louer',deg:'Dégradation',aud:'Audit énergétique',ergo:'Ergothérapie',loc:'Loc’Avantages'};
+const TDB_TYPES=[['dec','Contrôle décence',()=>ICO.logement],['pdl','Permis de louer',()=>ICO.admin],['deg','Dégradation',()=>ICO_DEG.deg],['aud','Audit énergétique',()=>ICO_DEG.isolation],['ergo','Ergothérapie',()=>ICO.ergo],['loc','Loc’Avantages',()=>ICO.synth],['fin','Fin de travaux',()=>ICO.trav]];
+const TDB_LAB={dec:'Décence',pdl:'Permis de louer',deg:'Dégradation',aud:'Audit énergétique',ergo:'Ergothérapie',loc:'Loc’Avantages',fin:'Fin de travaux'};
 const tdbTag=v=>{const t=v.type||'dec';return `<span class="tg tg-${t}">${esc(TDB_LAB[t]||'')}</span>`};
 const tdbNew=([t,l,ic])=>`<button class="tdb-ty" ${t==='deg'?'data-act="go" data-v="degbien"':`data-act="newt" data-t="${t}"`}><img src="${ic()}" alt=""><span>${esc(l)}</span></button>`;
 // Rapport à produire : visite passée, rapport PDF pas encore généré (hors simulation Loc'Avantages).
@@ -3662,7 +3821,8 @@ function render(){
       <button class="tile" data-act="go" data-v="degbien"><img class="ic" src="${ICO_DEG.deg}" alt=""><span class="lbl">Rapport de dégradation</span><span class="muted">Grilles Anah : maison individuelle ou immeuble collectif</span></button>
       <button class="tile" data-act="newt" data-t="aud"><img class="ic" src="${ICO_DEG.isolation}" alt=""><span class="lbl">Visite audit énergétique</span><span class="muted">Relevé terrain pour l’audit réglementaire (maison individuelle) et fiche de saisie DPEV5</span></button>
       <button class="tile" data-act="newt" data-t="loc"><img class="ic" src="${ICO.synth}" alt=""><span class="lbl">Simulation Loc’Avantages</span><span class="muted">Aides Anah, OPAH et Pactes pour propriétaires bailleurs</span></button>
-      ${cf?'':`<button class="tile" data-act="newt" data-t="ergo"><img class="ic" src="${ICO.ergo}" alt=""><span class="lbl">Rapport ergothérapeute</span><span class="muted">Diagnostic adaptation et accessibilité (MaPrimeAdapt’)</span></button>`}</div>`;
+      ${cf?'':`<button class="tile" data-act="newt" data-t="ergo"><img class="ic" src="${ICO.ergo}" alt=""><span class="lbl">Rapport ergothérapeute</span><span class="muted">Diagnostic adaptation et accessibilité (MaPrimeAdapt’)</span></button>`}
+      <button class="tile" data-act="newt" data-t="fin"><img class="ic" src="${ICO.trav}" alt=""><span class="lbl">Visite de fin de travaux</span><span class="muted">Sans dossier d’origine. Pour reprendre les travaux d’un dossier : bouton « Visite de fin de travaux » sur sa carte</span></button></div>`;
     return;
   }
   if(view==='degbien'){
@@ -3718,6 +3878,9 @@ function render(){
         `<div class="field full"><span>${esc(l)}</span><div class="chips" role="radiogroup" aria-label="${esc(l)}">${L.map(o=>`<label class="chip"><input type="radio" name="p_${k}" data-p="${k}" value="${esc(o)}" ${(P[k]||L[0])===o?'checked':''}>${esc(o)}</label>`).join('')}</div></div>`).join('')}
       <div class="field full"><span>Signature : signez au doigt ou importez une image scannée</span><canvas class="pad" id="pad" aria-label="Zone de signature de l'enquêteur"></canvas>
        <div class="row"><button data-act="clrpsig">Effacer</button><label class="btn">Importer une image<input type="file" accept="image/*" data-psig hidden></label></div></div>
+      <div class="field full"><span>Sauvegarde automatique</span>${!('showDirectoryPicker' in window)?'<span class="muted">Non disponible sur ce navigateur : utilisez le bouton « Sauvegarder » de chaque dossier.</span>'
+       :FSDIR?`<span>Dossier de sauvegarde : <b>${esc(FSDIR.name)}</b>. Chaque dossier y est enregistré (<i>n° du dossier</i>.json) quand vous le quittez, et après chaque PDF ou courrier.</span><div class="row"><button data-act="fsdir">Changer de dossier</button><button data-act="fsdirx">Arrêter</button></div>`
+       :`<span class="muted">Choisissez une fois un dossier de l’appareil (ex. Documents/SoliTech) : chaque dossier y sera enregistré automatiquement.</span><div class="row"><button data-act="fsdir">Choisir le dossier</button></div>`}</div>
      </div>`;
     app.insertAdjacentHTML('beforeend',`<p class="muted ver">Version ${esc(APP_VER)}</p>`);
     initPad(P.sig?.src,(src,r)=>{P.sig={src,r};saveP()});
@@ -3729,6 +3892,7 @@ function render(){
   if(isLoc(cur)&&locView(app,bar,bi))return;
   if(isAud(cur)&&audView(app,bar,bi))return;
   if(isErgo(cur)&&ergoView(app,bar,bi))return;
+  if(isFin(cur)&&finView(app,bar,bi))return;
   const logo=logoOf(cur),RV=RR(cur),pdl=isPdl(cur);
   if(view==='avantpdf'){const C=controles(cur),ko=C.filter(c=>c[0]==='ko'),av=C.filter(c=>c[0]==='av');
     const li=ergoCtlLi;
@@ -4225,6 +4389,7 @@ document.addEventListener('input',e=>{
   if(el.dataset.ak&&!['checkbox','radio'].includes(el.type)&&el.tagName!=='SELECT'){audSet(el);save();return}
   if(el.dataset.gn==='pt'||el.dataset.gn==='motif'){const s=degS(el);s[el.dataset.gn]=el.value;save();return}
   if(isErgo(cur)&&ergoInp(el))return;
+  if(isFin(cur)&&finInp(el))return;
   if(el.dataset.f&&!el.dataset.ft){cur.f[el.dataset.f]=el.value;save();if(/^mr/.test(el.dataset.f))memoMairie(cur);return}
   if(el.dataset.it&&el.dataset.k==='note'){it(el.dataset.it)[el.dataset.k]=el.value;save();cmMaj(el.dataset.it);if(el.nextElementSibling?.classList.contains('wc'))el.nextElementSibling.textContent=motsTxt(el.value)}
   if(el.dataset.it&&(el.dataset.k==='cap'||el.dataset.k==='com')){it(el.dataset.it).ph[+el.dataset.i][el.dataset.k]=el.value;save();cmMaj(el.dataset.it)}
@@ -4241,6 +4406,7 @@ document.addEventListener('change',async e=>{
   if(!cur)return;
   if(el.dataset.vcp!==undefined)cpLien(el);
   if(isErgo(cur)&&ergoChg(el))return;
+  if(isFin(cur)&&finChg(el))return;
   if(el.dataset.lcom!==undefined)return locCommune(el.value,true);
   if(el.dataset.lphoto!==undefined){const f=el.files[0];el.value='';if(f)await locPhoto(f);return}
   // Audit : listes, cases et origine réaffichent l'écran (champs conditionnels) ; l'année d'un générateur aussi, en fin de saisie.
@@ -4293,6 +4459,7 @@ document.addEventListener('click',async e=>{
   if(a.startsWith('au-')&&cur&&isAud(cur))return audAct(a,b);
   if(a.startsWith('er-'))return ergoAct(a,b);
   if(a.startsWith('an-'))return annAct(a,b);
+  if(a.startsWith('fi-'))return finAct(a,b);
   if(a==='new'){cbNew='';view='choose';return go()}
   if(a==='cbrepr'){const b=cbBloc(cur),c=CARNET.l[cur.cb];if(b&&c){const d=cbRead(cur,b);for(const [x,y] of Object.entries(c))if(y)d[x]=y;cbFill(cur,b,d);await save(true);keep();toast('Coordonnées reprises de la fiche')}return}
   if(a==='cbmaj'){const b=cbBloc(cur),e=CARNET.l[cur.cb];if(b&&e){const seul=!('prenom' in b.m(cur,0));for(const [x,y] of Object.entries(cbRead(cur,b)))if(y&&!(x==='nom'&&seul&&e.prenom))e[x]=y;e.maj=today();saveCarnet();cbDL();keep();toast('Fiche du propriétaire mise à jour')}return}
@@ -4317,11 +4484,11 @@ document.addEventListener('click',async e=>{
       const bl=cbBloc(cur);if(bl){cbFill(cur,bl,cf);cur.cb=cbNew}if(l)lgVers(cur,l);cbNew=''}
     // Depuis une visite de décence : coordonnées et date reprises.
     {const src=isDeg(cur)&&degSrc&&visits.find(x=>x.id===degSrc);degSrc='';if(src)degDepuis(cur,src)}
-    visits.push(cur);if(numDos(cur))saveP();await save(true);view=isLoc(cur)?'lprop':isAud(cur)||isErgo(cur)?'dash':'admin';return go()}
+    visits.push(cur);if(numDos(cur))saveP();await save(true);view=isLoc(cur)?'lprop':isAud(cur)||isErgo(cur)||isFin(cur)?'dash':'admin';return go()}
   if(a==='open'){cur=visits.find(v=>v.id===b.dataset.id);view='dash';return go()}
   if(a==='ctrl'){const src=visits.find(v=>v.id===b.dataset.id);cur=structuredClone(src);Object.assign(cur,{id:newVisit().id,created:Date.now(),done:{},sig:''});delete cur.num;delete cur.savedAt;delete cur.pdfAt;if(numDos(cur))saveP();cur.f.typeVis='Visite de contrôle';cur.f.dateVis=today();visits.push(cur);await save(true);view='dash';toast('Visite de contrôle créée à partir de la visite initiale');return go()}
   if(a==='delv'){if(!armed(b,'Confirmer la suppression'))return;await store.del(b.dataset.id);visits=visits.filter(v=>v.id!==b.dataset.id);return render()}
-  if(a==='list'){await save(true);if(cur)carnetMemo(cur);cur=null;view='list';return go()}
+  if(a==='list'){await save(true);if(cur){carnetMemo(cur);if(!sauve(cur))await fsSave(cur,1)}cur=null;view='list';return go()}
   if(a==='reopen'){const v=visits.find(x=>x.id===b.dataset.id);delete v.pdfAt;await store.put(v);toast('Dossier remis en cours');return render()}
   if(a==='dash'){view='dash';return go()}
   if(a==='lfx'){lf='';return keep()}
@@ -4367,15 +4534,17 @@ document.addEventListener('click',async e=>{
     // Rapport ergothérapeute : les points à corriger bloquent le rapport (écran de synthèse).
     if(isErgo(v)&&ko){view='esynth';toast('Corrigez d’abord les points bloquants');return go()}
     if(C.length&&!b.dataset.force){view='avantpdf';return go()}
-    return exportPdf(v).then(()=>{if(!window.jspdf)return;if(isDeg(v)?degFinal(v):!ko){v.pdfAt=Date.now();store.put(v).catch(()=>{})}else if(ko)toast('PDF généré : le dossier reste en cours tant que les points à corriger ne sont pas réglés')}).catch(err=>toast('PDF impossible : '+err.message))}
+    return exportPdf(v).then(()=>{if(!window.jspdf)return;if(isDeg(v)?degFinal(v):!ko){v.pdfAt=Date.now();store.put(v).catch(()=>{})}else if(ko)toast('PDF généré : le dossier reste en cours tant que les points à corriger ne sont pas réglés');return fsSave(v,1)}).catch(err=>toast('PDF impossible : '+err.message))}
   if(a==='export')return exportJson();
+  if(a==='fsdir'){try{const h=await showDirectoryPicker({id:'solitech',mode:'readwrite'});await store.putRec({id:'fsdir',h});FSDIR=h;toast('Sauvegarde automatique dans « '+h.name+' »')}catch(e){if(e.name!=='AbortError')toast('Choix du dossier impossible : '+e.message)}return keep()}
+  if(a==='fsdirx'){if(!armed(b,'Confirmer l’arrêt'))return;await store.putRec({id:'fsdir'});FSDIR=null;toast('Sauvegarde automatique arrêtée');return keep()}
   if(a==='fsave'){await fsSave(b.dataset.id?visits.find(x=>x.id===b.dataset.id):cur);return keep()}
   if(a==='sel'){exSel.clear();for(const v of visits)if(b.dataset.k==='all'||b.dataset.k==='encours'&&!v.pdfAt||b.dataset.k==='nonsauv'&&!sauve(v))exSel.add(v.id);return keep()}
   if(a==='cbdel'){if(!armed(b,'Confirmer la suppression'))return;delete CARNET.l[b.dataset.k];saveCarnet();cbDL();return keep()}
   if(a==='delmairie'){if(!armed(b,'Confirmer la suppression'))return;delete MAIRIES.l[b.dataset.k];saveMairies();return render()}
   if(['lettre','envoi','zipcour'].includes(a)){await save(true);if(!window.jspdf){toast("Le module PDF n'est pas chargé : ouvrez l'application une fois avec internet.");return}
     if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur les courriers');view='profil';return go()}await numeroter();
-    try{if(a==='lettre')await telechargerLettre(cur,b.dataset.k);else if(a==='envoi')await envoyerLettre(cur,b.dataset.k);else await zipLettres(cur)}catch(err){toast('Courrier impossible : '+err.message)}return}
+    try{if(a==='lettre')await telechargerLettre(cur,b.dataset.k);else if(a==='envoi')await envoyerLettre(cur,b.dataset.k);else await zipLettres(cur)}catch(err){toast('Courrier impossible : '+err.message)}return fsSave(cur,1)}
   if(a==='copymail'){const l=lettres(cur).find(x=>x.k===b.dataset.k);try{await navigator.clipboard.writeText(l.mail);toast('Adresse copiée')}catch(e){toast(l.mail)}return}
   if(a==='zipph')return exportPhotos(cur);
 });
@@ -4403,13 +4572,18 @@ addEventListener('appinstalled',()=>{instEv=null;if(view==='list')render()});
 // Sauvegarde d'un dossier dans un fichier choisi au 1er appui (<n° du dossier>.json, format de la sauvegarde), écrasé ensuite sans redemander
 // l'emplacement : l'accès au fichier est gardé dans IndexedDB (enregistrement fs:<id>). Android redemande l'autorisation une fois par ouverture.
 // Sans cette possibilité (navigateur ancien), le fichier est téléchargé.
-async function fsSave(v){if(!v)return;const nom=(v.num||slug(who(v))||v.id)+'.json',json=()=>JSON.stringify({app:'constat-decence',v:2,visits:[v]});
-  const fait=n=>{const t=Date.now();v.savedAt=t;store.put(v).catch(()=>{});P.lastBak=t;saveP();toast(n)};
-  if(!('showSaveFilePicker' in window)){offer(nom,new Blob([json()],{type:'application/json'}));return fait('Dossier téléchargé : « '+nom+' »')}
-  try{const r=await store.getRec('fs:'+v.id);let h=r.h;
+// auto : sauvegarde automatique (sortie du dossier, PDF, courrier) : jamais de choix d'emplacement ni de téléchargement, message seulement en cas d'échec.
+// Avec un dossier de sauvegarde choisi dans « Mon profil » (FSDIR), le fichier y est écrit directement.
+async function fsSave(v,auto){if(!v)return;const nom=(v.num||slug(who(v))||v.id)+'.json',json=()=>JSON.stringify({app:'constat-decence',v:2,visits:[v]});
+  const fait=n=>{const t=Date.now();v.savedAt=t;store.put(v).catch(()=>{});P.lastBak=t;saveP();if(n)toast(n)};
+  if(FSDIR){try{if(await FSDIR.queryPermission({mode:'readwrite'})!=='granted'&&await FSDIR.requestPermission({mode:'readwrite'})!=='granted')return toast('Accès au dossier de sauvegarde refusé : sauvegarde non faite');
+      const w=await (await FSDIR.getFileHandle(nom,{create:true})).createWritable();await w.write(json());await w.close();return fait(auto?'':'Dossier enregistré dans « '+FSDIR.name+' »')}
+    catch(e){return toast('Sauvegarde impossible dans « '+FSDIR.name+' » : '+e.message+' (choisissez de nouveau le dossier dans Mon profil)')}}
+  if(!('showSaveFilePicker' in window)){if(auto)return;offer(nom,new Blob([json()],{type:'application/json'}));return fait('Dossier téléchargé : « '+nom+' »')}
+  try{const r=await store.getRec('fs:'+v.id);let h=r.h;if(auto&&!h)return;
     if(h&&await h.queryPermission({mode:'readwrite'})!=='granted'&&await h.requestPermission({mode:'readwrite'})!=='granted')return toast('Accès au fichier refusé : sauvegarde non faite');
     if(!h){h=await showSaveFilePicker({suggestedName:nom,types:[{description:'Sauvegarde SoliTech',accept:{'application/json':['.json']}}]});await store.putRec({id:'fs:'+v.id,h})}
-    const w=await h.createWritable();await w.write(json());await w.close();fait('Dossier enregistré dans « '+h.name+' »')}
+    const w=await h.createWritable();await w.write(json());await w.close();fait(auto?'':'Dossier enregistré dans « '+h.name+' »')}
   catch(e){if(e.name==='AbortError')return;
     // Fichier déplacé ou supprimé depuis : l'emplacement sera redemandé au prochain appui.
     if(e.name==='NotFoundError'){await store.putRec({id:'fs:'+v.id});return toast('Fichier introuvable (déplacé ou supprimé) : touchez à nouveau « Sauvegarder » pour choisir l’emplacement')}
@@ -4648,6 +4822,7 @@ async function exportPdf(v){
   if(isDeg(v))return degPdf(v);
   if(isLoc(v))return locPdf(v);
   if(isErgo(v))return ergoPdf(v);
+  if(isFin(v))return finPdf(v);
   const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',format:'a4'});
   const W=210,H=297,M=12,CW=W-2*M,TOP=12,BOT=H-14,PAD=1.5;
   const ROSE=[251,233,231],INK=[33,43,54],MUT=[96,110,122],ACC=[27,109,150],TINT=[233,242,247],LINE=[196,208,217],WHITE=[255,255,255],RED=[180,35,24],OK=[43,122,75];let y=TOP;
@@ -5250,6 +5425,7 @@ function locPdfChart(doc,cp,x0,y0,w,h,{T,font,ACC,LL,INK,MUT,LINE,SKYT},M){
   try{P=await store.getProfil()}catch(e){}
   try{MAIRIES=await store.getRec('mairies');MAIRIES.l=MAIRIES.l||{}}catch(e){}
   try{CARNET=await store.getRec('carnet');CARNET.l=CARNET.l||{}}catch(e){}
+  try{FSDIR=(await store.getRec('fsdir')).h||null}catch(e){}
   cbLier();
   await numeroter();
   cbDL();
