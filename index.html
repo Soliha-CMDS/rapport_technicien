@@ -329,6 +329,12 @@ label.chip.erb{border-radius:10px;width:100%;align-items:flex-start}.erpad{heigh
 .adpe .afl{border-top:0}
 .arel{font-size:.85rem}
 
+/* Annotation des photos */
+.annbar{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.annbar button{min-height:44px}
+.annsw span{display:inline-block;width:16px;height:16px;border-radius:50%;border:1px solid var(--line);margin-right:6px;vertical-align:-3px}.annsw.on{outline:3px solid var(--accent);outline-offset:1px}
+.annc{display:block;max-width:100%;touch-action:none;border-radius:8px;background:#000;margin:4px auto}
+.phc .tools{flex-wrap:wrap}
+
 </style>
 
 <div class="wrap">
@@ -3232,7 +3238,7 @@ console.assert(ERGO_SANTE('anam')&&ERGO_SANTE('b_p1_transf')&&!ERGO_SANTE('noms'
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.03-2120';
+const APP_VER='2026.11.03-2146';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -3489,7 +3495,7 @@ const dfSel=(d,i)=>d.df?`<select data-it="${d.id}" data-k="df" ${i!=null?`data-i
 // Photos ; pour un désordre (d), chaque photo a sa légende et son commentaire.
 function phBlock(id,s,nums,need,d){return `<div class="grp"><span>Photos${need?' <span class="need">— à joindre impérativement</span>':''}</span>
      <div class="phs">${s.ph.map((p,i)=>`<div class="phc${d?' st':''}"><img src="${esc(p.src)}" alt="Photo ${nums[id+':'+i]}">
-       <div class="cap"><div class="tools"><b>Photo ${nums[id+':'+i]}</b>${/^z:/.test(id)&&i?`<button type="button" data-act="er-phup" data-it="${id}" data-i="${i}">Avancer</button>`:''}<button type="button" data-act="delph" data-it="${id}" data-i="${i}">Supprimer</button></div>
+       <div class="cap"><div class="tools"><b>Photo ${nums[id+':'+i]}</b>${/^z:/.test(id)&&i?`<button type="button" data-act="er-phup" data-it="${id}" data-i="${i}">Avancer</button>`:''}<button type="button" data-act="an-open" data-it="${id}" data-i="${i}">Annoter</button><button type="button" data-act="delph" data-it="${id}" data-i="${i}">Supprimer</button></div>
        ${d?'<span class="lab">Légende</span>':''}<textarea data-it="${id}" data-k="cap" data-i="${i}" aria-label="Légende de la photo ${nums[id+':'+i]}" placeholder="${d?'Ex. : chambre 1, prise murale':'Légende : ce que montre la photo'}">${esc(p.cap)}</textarea>
        ${d?`<span class="lab">Commentaire</span>${dfSel(d,i)}<textarea id="com_${id}_${i}" data-it="${id}" data-k="com" data-i="${i}" aria-label="Commentaire de la photo ${nums[id+':'+i]}" placeholder="Commentaire (facultatif)">${esc(p.com||'')}</textarea>`:''}</div></div>`).join('')}
       <div class="cams"><label class="btn cam">${svg('cam')}Prendre une photo<input type="file" accept="image/*" capture="environment" data-photo="${id}"></label>
@@ -3693,6 +3699,7 @@ function render(){
     bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="${cur?'dash':'list'}">Terminé</button>`;
     return;
   }
+  if(view==='annot'&&ann)return annView(app,bar,bi);
   if(isDeg(cur)&&degView(app,bar,bi))return;
   if(isLoc(cur)&&locView(app,bar,bi))return;
   if(isAud(cur)&&audView(app,bar,bi))return;
@@ -3900,6 +3907,72 @@ async function shrink(file){
     c.getContext('2d').drawImage(im,0,0,w,h);return{src:c.toDataURL('image/jpeg',.72),w,h,cap:''}}
   finally{URL.revokeObjectURL(url)}
 }
+
+/* ---------- annotation des photos ---------- */
+// L'original est gardé (p.orig) avec les formes (p.ann, en pixels de l'original) et le recadrage (p.crop) : on peut retoucher ou tout retirer.
+// p.src reste l'image utilisée partout (écran, PDF, zip) : l'original recadré avec les formes dessinées.
+let ann=null;
+const ANN_C={rouge:'#E02020',jaune:'#FFD400',blanc:'#FFFFFF'};
+const ANN_T=[['pen','Crayon'],['fl','Flèche'],['ce','Cercle'],['re','Rectangle'],['tx','Texte'],['co','Cote'],['crop','Recadrer']];
+// Point touché à l'écran (px, py en pixels affichés) vers les pixels de la photo d'origine, k = échelle d'affichage.
+const annPt=(cr,k,px,py)=>[Math.round(cr.x+px/k),Math.round(cr.y+py/k)];
+const annRect=(a,b)=>({x:Math.min(a[0],b[0]),y:Math.min(a[1],b[1]),w:Math.abs(b[0]-a[0]),h:Math.abs(b[1]-a[1])});
+function annDessine(g,L,lw){
+  for(const f of L){g.strokeStyle=g.fillStyle=f.c;g.lineWidth=lw;g.lineCap=g.lineJoin='round';g.setLineDash([]);g.beginPath();
+    const [ax,ay]=f.a||f.pts[0],[bx,by]=f.b||f.a||f.pts[0];
+    if(f.t==='pen'){f.pts.forEach(([x,y],j)=>j?g.lineTo(x,y):g.moveTo(x,y));g.stroke()}
+    else if(f.t==='re'){const r=annRect(f.a,f.b);g.strokeRect(r.x,r.y,r.w,r.h)}
+    else if(f.t==='ce'){g.ellipse((ax+bx)/2,(ay+by)/2,Math.abs(bx-ax)/2||1,Math.abs(by-ay)/2||1,0,0,2*Math.PI);g.stroke()}
+    else if(f.t==='fl'||f.t==='co'){g.moveTo(ax,ay);g.lineTo(bx,by);g.stroke();const an=Math.atan2(by-ay,bx-ax),h=lw*4;
+      const tete=(x,y,a)=>{g.beginPath();g.moveTo(x,y);g.lineTo(x-h*Math.cos(a-.45),y-h*Math.sin(a-.45));g.lineTo(x-h*Math.cos(a+.45),y-h*Math.sin(a+.45));g.closePath();g.fill()};
+      tete(bx,by,an);if(f.t==='co')tete(ax,ay,an+Math.PI)}
+    // Texte et valeur de la cote : contour sombre (ou blanc sur le rouge) pour rester lisible sur n'importe quelle photo.
+    if(f.s){g.font=`bold ${Math.round(lw*6)}px sans-serif`;g.textAlign=f.t==='co'?'center':'left';g.textBaseline=f.t==='co'?'bottom':'middle';
+      const x=f.t==='co'?(ax+bx)/2:ax,y=f.t==='co'?(ay+by)/2-lw*1.5:ay;g.lineWidth=lw*1.4;g.strokeStyle=f.c===ANN_C.rouge?'#fff':'#000';g.strokeText(f.s,x,y);g.fillStyle=f.c;g.fillText(f.s,x,y)}}}
+const annLw=a=>Math.max(3,Math.round(Math.max(a.im.naturalWidth,a.im.naturalHeight)/250));
+async function annOuvrir(id,i){const p=it(id).ph[i],im=await loadImg(p.orig||p.src);
+  ann={id,i,back:view,y:scrollY,im,outil:'fl',c:ANN_C.rouge,L:structuredClone(p.ann||[]),crop:p.crop?{...p.crop}:{x:0,y:0,w:im.naturalWidth,h:im.naturalHeight},hist:[],tmp:null};
+  view='annot';render();scrollTo(0,0)}
+function annDraw(){const c=$('#annc');if(!c||!ann)return;const cr=ann.crop,dpr=devicePixelRatio||1,k=c.clientWidth/cr.w,g=c.getContext('2d');
+  c.width=Math.round(c.clientWidth*dpr);c.height=Math.round(c.clientHeight*dpr);g.setTransform(k*dpr,0,0,k*dpr,-cr.x*k*dpr,-cr.y*k*dpr);g.drawImage(ann.im,0,0);
+  const t=ann.tmp,lw=annLw(ann);annDessine(g,t&&t.t!=='crop'?[...ann.L,t]:ann.L,lw);
+  if(t?.t==='crop'){const r=annRect(t.a,t.b);g.setLineDash([lw*2,lw*2]);g.lineWidth=lw/2;g.strokeStyle='#fff';g.strokeRect(r.x,r.y,r.w,r.h);g.strokeStyle='#000';g.lineDashOffset=lw*2;g.strokeRect(r.x,r.y,r.w,r.h)}}
+const annHist=()=>ann.hist.push(JSON.stringify({L:ann.L,crop:ann.crop}));
+function annView(app,bar,bi){const p=it(ann.id).ph[ann.i],cr=ann.crop,maxW=Math.min(app.clientWidth||innerWidth,1200),maxH=innerHeight*.62,k=Math.min(maxW/cr.w,maxH/cr.h);
+  app.innerHTML=`${topbar('Annoter la photo',p.cap||'Photo '+(ann.i+1),'an-q')}
+   <div class="annbar" role="toolbar" aria-label="Outils d’annotation">${ANN_T.map(([t,l])=>`<button data-act="an-t" data-t="${t}" class="${ann.outil===t?'btn-primary':''}" aria-pressed="${ann.outil===t}">${l}</button>`).join('')}</div>
+   <div class="annbar" role="group" aria-label="Couleur et corrections">${Object.entries(ANN_C).map(([n,c])=>`<button data-act="an-c" data-c="${c}" class="annsw${ann.c===c?' on':''}" aria-pressed="${ann.c===c}" aria-label="Couleur ${n}"><span style="background:${c}"></span>${n}</button>`).join('')}
+    <button data-act="an-u"${ann.hist.length?'':' disabled'}>Annuler le dernier</button><button data-act="an-x">Tout effacer</button></div>
+   <canvas id="annc" class="annc" style="width:${Math.round(cr.w*k)}px;aspect-ratio:${cr.w}/${cr.h}" aria-label="Photo à annoter"></canvas>
+   <p class="muted">${ann.outil==='crop'?'Tracez le cadre à garder.':ann.outil==='tx'?'Touchez la photo à l’endroit du texte.':ann.outil==='co'?'Tracez la cote d’un bout à l’autre, puis tapez la valeur (ex. 90 cm).':'Dessinez au doigt ou au stylet.'}</p>`;
+  bar.hidden=false;bi.innerHTML=`<button data-act="an-q">Annuler</button>${p.orig?'<button data-act="an-r">Retirer les annotations</button>':''}<button class="btn-primary" data-act="an-ok">Enregistrer</button>`;
+  const c=$('#annc'),pt=e=>{const b=c.getBoundingClientRect();return annPt(ann.crop,c.clientWidth/ann.crop.w,e.clientX-b.left,e.clientY-b.top)};
+  c.onpointerdown=e=>{e.preventDefault();const q=pt(e);
+    if(ann.outil==='tx'){const s=prompt('Texte à écrire sur la photo');if(s&&s.trim()){annHist();ann.L.push({t:'tx',c:ann.c,a:q,s:s.trim()});keep()}return}
+    c.setPointerCapture(e.pointerId);ann.tmp=ann.outil==='pen'?{t:'pen',c:ann.c,pts:[q]}:{t:ann.outil,c:ann.c,a:q,b:q};annDraw()};
+  c.onpointermove=e=>{const t=ann.tmp;if(!t)return;const q=pt(e);if(t.t==='pen')t.pts.push(q);else t.b=q;annDraw()};
+  c.onpointerup=c.onpointercancel=()=>{const t=ann.tmp;if(!t)return;ann.tmp=null;const r=t.a&&annRect(t.a,t.b),min=annLw(ann)*3;
+    if(t.t==='pen'?t.pts.length<2:Math.max(r.w,r.h)<min)return annDraw();  // simple toucher : rien
+    if(t.t==='crop'){annHist();ann.crop=r;return keep()}
+    if(t.t==='co'){const s=prompt('Valeur de la cote (ex. 90 cm)');if(s===null)return annDraw();t.s=s.trim()}
+    annHist();ann.L.push(t);keep()};
+  requestAnimationFrame(annDraw);return true}
+async function annAct(a,b){
+  if(a==='an-open')return annOuvrir(b.dataset.it,+b.dataset.i);
+  if(!ann)return;
+  if(a==='an-t'){ann.outil=b.dataset.t;return keep()}
+  if(a==='an-c'){ann.c=b.dataset.c;return keep()}
+  if(a==='an-u'){const h=ann.hist.pop();if(h)Object.assign(ann,JSON.parse(h));return keep()}
+  if(a==='an-x'){annHist();ann.L=[];ann.crop={x:0,y:0,w:ann.im.naturalWidth,h:ann.im.naturalHeight};return keep()}
+  const p=it(ann.id).ph[ann.i],fin=()=>{const {back,y}=ann;ann=null;view=back;render();scrollTo(0,y)};
+  if(a==='an-q')return fin();
+  if(a==='an-r'){if(!armed(b,'Confirmer'))return;const im=ann.im;Object.assign(p,{src:p.orig,w:im.naturalWidth,h:im.naturalHeight});delete p.orig;delete p.ann;delete p.crop;save(true);toast('Annotations retirées');return fin()}
+  if(a==='an-ok'){const W=ann.im.naturalWidth,H=ann.im.naturalHeight,cr=ann.crop,plein=!cr.x&&!cr.y&&cr.w===W&&cr.h===H;
+    if(!ann.L.length&&plein){if(p.orig)Object.assign(p,{src:p.orig,w:W,h:H});delete p.orig;delete p.ann;delete p.crop}
+    else{const c=document.createElement('canvas');c.width=cr.w;c.height=cr.h;const g=c.getContext('2d');g.translate(-cr.x,-cr.y);g.drawImage(ann.im,0,0);annDessine(g,ann.L,annLw(ann));
+      Object.assign(p,{orig:p.orig||p.src,ann:ann.L,src:c.toDataURL('image/jpeg',.72),w:cr.w,h:cr.h});if(plein)delete p.crop;else p.crop=cr}
+    save(true);toast('Photo enregistrée');return fin()}}
+console.assert(JSON.stringify(annPt({x:100,y:50,w:800,h:600},.5,40,20))==='[180,90]'&&JSON.stringify(annRect([30,10],[5,40]))==='{"x":5,"y":10,"w":25,"h":30}','ASSERT FAIL annPt');
 
 /* ---------- événements ---------- */
 /* ---------- Simulation Loc'Avantages ---------- */
@@ -4186,6 +4259,7 @@ document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
   if(a.startsWith('au-')&&cur&&isAud(cur))return audAct(a,b);
   if(a.startsWith('er-'))return ergoAct(a,b);
+  if(a.startsWith('an-'))return annAct(a,b);
   if(a==='new'){cbNew='';view='choose';return go()}
   if(a==='cbrepr'){const b=cbBloc(cur),c=CARNET.l[cur.cb];if(b&&c){const d=cbRead(cur,b);for(const [x,y] of Object.entries(c))if(y)d[x]=y;cbFill(cur,b,d);await save(true);keep();toast('Coordonnées reprises de la fiche')}return}
   if(a==='cbmaj'){const b=cbBloc(cur),e=CARNET.l[cur.cb];if(b&&e){const seul=!('prenom' in b.m(cur,0));for(const [x,y] of Object.entries(cbRead(cur,b)))if(y&&!(x==='nom'&&seul&&e.prenom))e[x]=y;e.maj=today();saveCarnet();cbDL();keep();toast('Fiche du propriétaire mise à jour')}return}
