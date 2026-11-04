@@ -3424,7 +3424,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.04-1231';
+const APP_VER='2026.11.04-1416';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -4271,7 +4271,7 @@ function locView(app,bar,bi){
       ${tile('lcomp','COMPARAISON','Loyer libre et observations',ICO.comm,[[R.comp.ok?'Prête':'Loyer libre à saisir',R.comp.ok?'ok':'warn'],...(R.mpr?[[R.mpr.cat==null?'MaPrimeRénov’ : revenu à saisir':'MaPrimeRénov’',R.mpr.cat==null?'warn':'ok']]:[])])}
       ${tile('lres','RÉSULTAT','Synthèse des aides',ICO.synth,[[locEur(R.total),'info']])}
      </div>`;
-    locBar(bi,R,`<button class="btn-primary" data-act="pdf">${svg('pdf')}Générer le PDF</button>`);return true}
+    locBar(bi,R,`<button data-act="lmail">Envoyer par mail</button><button class="btn-primary" data-act="pdf">${svg('pdf')}Générer le PDF</button>`);return true}
   if(view==='lprop'){const p=D.proprio,sci=p.statut!=='NP';
     app.innerHTML=`${topbar('Le propriétaire',who(cur),'dash')}${cbAvert(cur)}<div class="form">
       ${lin('proprio.nom','Nom',{attr:cbAttr('loc.proprio.nom')})}${lin('proprio.prenoms','Prénom(s)')}
@@ -4368,7 +4368,7 @@ function locView(app,bar,bi){
        <tr><td>Bilan sur ${cp.duree} ans<small>revenus cumulés − investissement</small></td>${col(locEur,'bilan')}</tr></tbody>
        <tfoot><tr><td>Meilleur bilan sur ${cp.duree} ans : ${esc(B[0][0])}<small>écart avec ${esc(B[1][0])}</small></td><td class="n" colspan="${m?3:2}">${locEur(B[0][1]-B[1][1])}</td></tr></tfoot></table>`})()
       :`<p class="hint warn">${esc(locCmpTxt(R))}</p>`}`;
-    locBar(bi,R,`<button class="btn-primary" data-act="pdf">${svg('pdf')}Générer le PDF</button>`);return true}
+    locBar(bi,R,`<button data-act="lmail">Envoyer par mail</button><button class="btn-primary" data-act="pdf">${svg('pdf')}Générer le PDF</button>`);return true}
   return false;
 }
 const keep=()=>{const y=scrollY;render();scrollTo(0,y)};
@@ -4535,6 +4535,9 @@ document.addEventListener('click',async e=>{
     if(isErgo(v)&&ko){view='esynth';toast('Corrigez d’abord les points bloquants');return go()}
     if(C.length&&!b.dataset.force){view='avantpdf';return go()}
     return exportPdf(v).then(()=>{if(!window.jspdf)return;if(isDeg(v)?degFinal(v):!ko){v.pdfAt=Date.now();store.put(v).catch(()=>{})}else if(ko)toast('PDF généré : le dossier reste en cours tant que les points à corriger ne sont pas réglés');return fsSave(v,1)}).catch(err=>toast('PDF impossible : '+err.message))}
+  if(a==='lmail'){await save(true);if(!window.jspdf){toast("Le module PDF n'est pas chargé : ouvrez l'application une fois avec internet.");return}
+    if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur le document');view='profil';return go()}await numeroter();const v=cur;carnetMemo(v);
+    try{const r=await locPdf(v,1),m=locMail(v);if(await envoiMail(r.nom,r.blob,v.loc.proprio.email,m.sujet,m.corps)){v.pdfAt=Date.now();await store.put(v);fsSave(v,1)}}catch(err){toast('Envoi impossible : '+err.message)}return}
   if(a==='export')return exportJson();
   if(a==='fsdir'){try{const h=await showDirectoryPicker({id:'solitech',mode:'readwrite'});await store.putRec({id:'fsdir',h});FSDIR=h;toast('Sauvegarde automatique dans « '+h.name+' »')}catch(e){if(e.name!=='AbortError')toast('Choix du dossier impossible : '+e.message)}return keep()}
   if(a==='fsdirx'){if(!armed(b,'Confirmer l’arrêt'))return;await store.putRec({id:'fsdir'});FSDIR=null;toast('Sauvegarde automatique arrêtée');return keep()}
@@ -4791,14 +4794,18 @@ async function envoyerLettre(v,k){
   const l=lettres(v).find(x=>x.k===k),blob=await letterPdf(v,l),name=l.file+'.pdf';
   const sujet=`Visite de contrôle décence ${[v.f.adresse,v.f.ville].filter(Boolean).join(' ')}`;
   const corps=`Bonjour,\n\nVeuillez trouver ci-joint le courrier d’information concernant la visite de contrôle de décence citée en objet.\n`;
+  return envoiMail(name,blob,l.mail,sujet,corps);
+}
+// Tablette et téléphone : menu de partage (l'adresse est copiée). PC : le PDF est enregistré et un mail pré-rempli s'ouvre. Renvoie false si l'envoi n'a pas abouti.
+async function envoiMail(name,blob,mail,sujet,corps){
   const file=new File([blob],name,{type:'application/pdf'});
   if(matchMedia('(pointer:coarse)').matches&&navigator.canShare?.({files:[file]})){
-    if(l.mail)try{await navigator.clipboard.writeText(l.mail);toast('Adresse copiée : collez-la comme destinataire')}catch(e){}
-    try{await navigator.share({files:[file],title:sujet,text:corps})}catch(e){if(e.name!=='AbortError')toast('Partage impossible : '+e.message)}
-    return}
+    if(mail)try{await navigator.clipboard.writeText(mail);toast('Adresse copiée : collez-la comme destinataire')}catch(e){}
+    try{await navigator.share({files:[file],title:sujet,text:corps})}catch(e){if(e.name!=='AbortError')toast('Partage impossible : '+e.message);return false}
+    return true}
   await offer(name,blob);
-  location.href=`mailto:${l.mail||''}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(corps)}`;
-  toast(`Joignez au mail le fichier ${name} qui vient d’être enregistré`);
+  location.href=`mailto:${mail||''}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(corps)}`;
+  toast(`Joignez au mail le fichier ${name} qui vient d’être enregistré`);return true
 }
 
 /* ---------- PDF : tableaux au format de la fiche ---------- */
@@ -5245,7 +5252,7 @@ async function degPdf(v){
 
 /* ---------- PDF de la simulation Loc'Avantages ---------- */
 // Même contenu et même ordre que le document du simulateur d'origine ; conseiller repris de « Mon profil ».
-async function locPdf(v){
+async function locPdf(v,envoi){
   const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',format:'a4'}),D=v.loc,R=locR(v),ctx=R.ctx,p=D.proprio,b=D.bien;
   // Texte jsPDF (Windows-1252) : espaces fines des montants et signes ≥ ≤ remplacés.
   const T=s=>PDFT(String(s??'').replace(/[  ]/g,' ').replace(/≥/g,'>=').replace(/≤/g,'<=').replace(/−/g,'-'));
@@ -5383,8 +5390,13 @@ async function locPdf(v){
   for(let i=1;i<=n;i++){doc.setPage(i);doc.setFillColor(...ACC);doc.rect(0,0,6.3,H,'F')}
   piedPdf(doc,v,"Simulation Loc'Avantages"+(p.soliact?' · dossier Soliact '+p.soliact:''),ML,MR);
   const nom=[v.num,'Aides_LocAvantages',slug(p.statut!=='NP'&&p.sci?p.sci:p.nom),slug(p.soliact)].filter(Boolean).join('_');
+  if(envoi)return {nom:nom+'.pdf',blob:doc.output('blob')};
   await offer(nom+'.pdf',doc.output('blob'));
 }
+// Envoi de l'étude au propriétaire : la signature vient d'Outlook (pas de formule de politesse ni de nom ici).
+function locMail(v){const b=v.loc.bien,adr=[b.adresse,[b.cp,b.communeTxt].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  return {sujet:'Étude de financement de votre projet'+(adr?' – '+adr:''),
+    corps:`Bonjour,\n\nVous trouverez ci-joint l’étude de financement de votre projet${adr?' au '+adr:''}. Elle présente les aides mobilisables et le reste à charge estimé ; il s’agit d’une simulation indicative, établie à partir des barèmes en vigueur.\n\nJe reste à votre disposition pour toute question.\n`}}
 // Graphique du bilan cumulé (revenus cumulés − investissement), redessiné d'après chartBilan du simulateur.
 function locPdfChart(doc,cp,x0,y0,w,h,{T,font,ACC,LL,INK,MUT,LINE,SKYT},M){
   const la=cp.la,ll=cp.ll,S=cp.duree,fLA=t=>la.revenu*t-la.invest,fLL=t=>ll.revenu*t-ll.invest,fM=t=>M.revenu*t-M.invest,MC=[0,122,90];
