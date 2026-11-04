@@ -450,6 +450,9 @@ const LOC_ENGINE = (() => {
     "79001"  // L'Absie
   ];
   // Communes du Mellois sans prime de sortie de vacance du Pacte
+  // Prime de sortie de vacance de la commune, en plus de celle de la CC (Pacte Mellois) : code INSEE → [montant par logement, logements par an (0 = limite non précisée)].
+  // La limite annuelle ne figure qu'à l'écran, pas dans le PDF (demande de l'utilisateur, 04/11/2026).
+  const MELLOIS_VAC_COM = { "79087": [2000, 2], "79148": [2000, 2], "79150": [5000, 5], "79184": [5000, 4], "79217": [2000, 0], "79251": [2000, 0] };
   const MELLOIS_SANS_VACANCE = [
     "79185", // Aigondigné
     "79015", // Asnières-en-Poitou
@@ -619,6 +622,7 @@ const LOC_ENGINE = (() => {
       const cap = lg.thematique === "TD" ? 20000 : 15000;
       pctCap("CC Mellois en Poitou", `Pacte territorial – ${th.court}`, 0.25, cap);
       if (lg.vacant && !MELLOIS_SANS_VACANCE.includes(ctx.insee)) add("CC Mellois en Poitou", "Prime de sortie de vacance", "Logement vacant depuis plus de 2 ans", 5000);
+      if (lg.vacant && MELLOIS_VAC_COM[ctx.insee]) add(communeDe(ctx.commune), "Prime de sortie de vacance", "Logement vacant depuis plus de 2 ans", MELLOIS_VAC_COM[ctx.insee][0]);
       if (lg.vacant && MELLOIS_SANS_VACANCE.includes(ctx.insee)) out.notes.push(`Pas de prime de sortie de vacance du Pacte Mellois ${aCommune(ctx.commune)}.`);
     } else if (ctx.key === "VDG") {
       const CC = { TD: [0.15, 12000], SEC: [0.15, 9000] }[lg.thematique];
@@ -777,7 +781,7 @@ const LOC_ENGINE = (() => {
     l.push("Département des Deux-Sèvres", "Région Nouvelle-Aquitaine");
     return [...new Set(l)];
   }
-  return { TH, DISP, PRIME, TAX, SANS_PRIME_VACANCE, MELLOIS_SANS_VACANCE, communeDe, resoudre, loyers, calcLogement, calcDossier, financeurs, norm, r2 };
+  return { TH, DISP, PRIME, TAX, SANS_PRIME_VACANCE, MELLOIS_SANS_VACANCE, MELLOIS_VAC_COM, communeDe, resoudre, loyers, calcLogement, calcDossier, financeurs, norm, r2 };
 })();
 // Plafonds de ressources des locataires (revenu fiscal de référence) : Loc 1, Loc 2, Loc 3.
 const LOC_PLAF_RES = [
@@ -804,6 +808,9 @@ const cases=[
  const B26={...LOC_DATA,communes:[[79136,"Alloinay",5.71,4.7,3.7],[79012,"Ardin",5.7,4.69,3.69],[79049,"Bressuire",6.15,5.06,3.98],[79191,"Niort",8.79,7.24,5.68],[79270,"Saint-Maixent-l'École",5.71,4.7,3.7]]};
  cases.forEach((d,i)=>{const R=LOC_ENGINE.calcDossier(B26,d,x=>Math.round(x)+" €");const got=[R.ctx.key,R.total,R.reste,R.resteTTC,R.parFin,R.comp.ok?R.comp.la.bilan:null,R.comp.ok?R.comp.ll.bilan:null,R.lgs.map(r=>r.impot&&r.impot.montant||0)];
   console.assert(JSON.stringify(got)===JSON.stringify(exp[i]),"Loc'Avantages cas "+(i+1),got)});
+ // Prime de vacance communale du Pacte Mellois : en plus des 5 000 € de la CC, seulement pour un logement vacant.
+ const pv=(insee,vacant)=>LOC_ENGINE.calcDossier(LOC_DATA,dos({insee},[lg({surface:'50',montant:'30000',vacant})]),x=>x).lgs[0].lignes.filter(l=>/vacance/.test(l.lib)).map(l=>l.fin+':'+l.m).filter(x=>!x.startsWith('Anah'));
+ console.assert(pv('79150',true).join()==="CC Mellois en Poitou:5000,Commune de Limalonges:5000"&&pv('79251',true).join()==="CC Mellois en Poitou:5000,Commune de Marcillé:2000"&&pv('79150',false).length===0&&pv('79136',true).join()==="CC Mellois en Poitou:5000","ASSERT FAIL prime commune Mellois",pv('79150',true));
 })();
 // MaPrimeRénov' rénovation d'ampleur, propriétaire bailleur en nom propre : comparaison avec Loc'Avantages.
 // Plafonds de ressources 2026 hors Île-de-France (revenu fiscal de référence) : 1 à 5 personnes, puis majoration par personne. À mettre à jour chaque année.
@@ -832,6 +839,7 @@ function mprLogement(cat, lg, r, ctx, opts, eur) {
   // Primes locales de sortie de vacance : mêmes règles qu'en Loc'Avantages (validé par l'utilisateur le 30/10/2026).
   const vac = (fin, m) => lignes.push({ fin, lib: "Prime de sortie de vacance", base: "Logement vacant depuis plus de 2 ans", m });
   if (lg.vacant && ctx.key === "MELLOIS" && !LOC_ENGINE.MELLOIS_SANS_VACANCE.includes(ctx.insee)) vac("CC Mellois en Poitou", 5000);
+  if (lg.vacant && ctx.key === "MELLOIS" && LOC_ENGINE.MELLOIS_VAC_COM[ctx.insee]) vac(LOC_ENGINE.communeDe(ctx.commune), LOC_ENGINE.MELLOIS_VAC_COM[ctx.insee][0]);
   if (lg.vacant && ctx.key === "VDG") { vac("CC Val de Gâtine", 2000); if (ctx.renforce) vac(LOC_ENGINE.communeDe(ctx.commune), 1000); if (opts.pacteSol) vac("Pacte des solidarités (2026)", 2000); }
   let total = lignes.reduce((a, l) => a + l.m, 0);
   const cap = Math.round(MPR.ecr[cat] * ttc);
@@ -870,6 +878,7 @@ function mprDossier(d, R, eur) {
   // Mellois : +1 000 € en modeste, rien en intermédiaire
   console.assert(mprLogement(1, { mprMontant: "20000", mprGain: 2 }, {}, { key: "MELLOIS", insee: "79049" }, { tva: 0.1 }, e).total === 13000, "MPR Mellois modeste");
   console.assert(mprLogement(2, { mprMontant: "20000", mprGain: 2 }, {}, { key: "MELLOIS", insee: "79049" }, { tva: 0.1 }, e).total === 9000, "MPR Mellois intermédiaire");
+  console.assert(mprLogement(1, { mprMontant: "20000", mprGain: 2, vacant: true }, {}, { key: "MELLOIS", insee: "79150", commune: "Limalonges" }, { tva: 0.1 }, e).lignes.some(l => l.fin === "Commune de Limalonges" && l.m === 5000), "ASSERT FAIL MPR prime commune Mellois");
   // Val de Gâtine, périmètre renforcé, vacant, intermédiaire : 45 % × 20 000 = 9 000 + 5 000 + 2 000 + 1 000 + 2 000 = 19 000 (écrêtement 80 % × 22 000 = 17 600)
   r = mprLogement(2, { mprMontant: "20000", mprGain: 2, vacant: true }, {}, { key: "VDG", renforce: true, commune: "Ardin", insee: "79012" }, { tva: 0.1, pacteSol: true }, e);
   console.assert(r.total === 17600 && r.lignes.length === 6, "MPR Val de Gâtine vacance", r);
@@ -3424,7 +3433,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.04-1416';
+const APP_VER='2026.11.04-1444';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -4245,6 +4254,7 @@ function locDispBox(R){const ctx=R.ctx,b=cur.loc.bien;
    ${ctx.key==='STM'?`<div class="chips">${ctx.ruePourDeplaf?'':lchk('bien.ori','Immeuble classé en ORI')}${lchk('bien.ravalement','Ravalement de façade prévu')}</div>
      <div class="hint">${ctx.ruePourDeplaf||b.ori?(b.ravalement?'Plafond de l’aide communale relevé à 1 500 €/m² (très dégradé, dégradé et énergie).':'Avec un ravalement de façade, le plafond de l’aide communale passe à 1 500 €/m² (très dégradé, dégradé et énergie).')
        :'Le plafond relevé à 1 500 €/m² est réservé aux rues Chalon et Taupineau et aux immeubles en ORI, avec ravalement de façade.'}</div>`:''}
+   ${ctx.key==='MELLOIS'&&LOC_ENGINE.MELLOIS_VAC_COM[b.insee]?(([m,n])=>`<div class="hint">Prime de sortie de vacance de la commune : ${locEur(m)} par logement${n?`, dans la limite de ${n} logements par an (à vérifier auprès de la commune)`:''}.</div>`)(LOC_ENGINE.MELLOIS_VAC_COM[b.insee]):''}
    ${ctx.key==='VDG'?`<div class="chips">${lchk('bien.pacteSol','Inclure le Pacte des solidarités (valable en 2026)')}</div>`:''}
    ${ctx.key==='AGGLO2B'&&ctx.abondCom?lin('bien.tauxCom','Taux de l’aide communale (%)',{im:'decimal',hint:'<div class="hint">Plafonds inchangés : 8 000 € par logement en très dégradé, 6 000 € en sécurité / salubrité.</div>'}):''}
    ${lsel('bien.force','Dispositif appliqué',[['AUTO','Automatique (selon l’adresse)'],['STM','OPAH-RU Saint-Maixent'],['AGGLO2B','OPAH Agglo2B'],['MELLOIS','Pacte Mellois'],['VDG','Pacte Val de Gâtine'],['VDGR','Pacte Val de Gâtine – périmètre renforcé'],['NONE','Aucun dispositif (Anah seule)']])}</div>`}
