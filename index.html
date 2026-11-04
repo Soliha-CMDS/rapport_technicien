@@ -3418,7 +3418,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.03-2241';
+const APP_VER='2026.11.04-0958';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -3813,16 +3813,10 @@ function render(){
     return;
   }
   if(view==='choose'){
-    const t=(k,ic,l,d)=>`<button class="tile" data-act="newt" data-t="${k}"><img class="ic" src="${ICO[ic]}" alt=""><span class="lbl">${l}</span><span class="muted">${d}</span></button>`;
     const cf=cbNew&&CARNET.l[cbNew],L=cf?cbLogements(cbDossiers(cbNew)):[];
     app.innerHTML=`${topbar('Nouvelle visite',cf?'Pour '+cbNom(cf):'Choisissez le type de visite',cf?'cbfiche':'list')}
      ${L.length?`<div class="field full"><span>Logement</span><div class="chips">${[...L.map((l,i)=>[i,lgTxt(l)]),[-1,'Autre logement (à saisir)']].map(([i,t])=>`<label class="chip"><input type="radio" name="cblg" data-cblg="${i}"${cbLgI===i?' checked':''}>${esc(t)}</label>`).join('')}</div></div>`:''}
-     <div class="tiles">${t('dec','logement','Contrôle décence','Constat de décence : CAF, DDT 79, mairie, collectivité')}${t('pdl','admin','Permis de louer','Autorisation préalable à la mise en location : Thouars, Saint-Maixent-l’École')}
-      <button class="tile" data-act="go" data-v="degbien"><img class="ic" src="${ICO_DEG.deg}" alt=""><span class="lbl">Rapport de dégradation</span><span class="muted">Grilles Anah : maison individuelle ou immeuble collectif</span></button>
-      <button class="tile" data-act="newt" data-t="aud"><img class="ic" src="${ICO_DEG.isolation}" alt=""><span class="lbl">Visite audit énergétique</span><span class="muted">Relevé terrain pour l’audit réglementaire (maison individuelle) et fiche de saisie DPEV5</span></button>
-      <button class="tile" data-act="newt" data-t="loc"><img class="ic" src="${ICO.synth}" alt=""><span class="lbl">Simulation Loc’Avantages</span><span class="muted">Aides Anah, OPAH et Pactes pour propriétaires bailleurs</span></button>
-      ${cf?'':`<button class="tile" data-act="newt" data-t="ergo"><img class="ic" src="${ICO.ergo}" alt=""><span class="lbl">Rapport ergothérapeute</span><span class="muted">Diagnostic adaptation et accessibilité (MaPrimeAdapt’)</span></button>`}
-      <button class="tile" data-act="newt" data-t="fin"><img class="ic" src="${ICO.trav}" alt=""><span class="lbl">Visite de fin de travaux</span><span class="muted">Sans dossier d’origine. Pour reprendre les travaux d’un dossier : bouton « Visite de fin de travaux » sur sa carte</span></button></div>`;
+     <div class="tdb-types">${TDB_TYPES.filter(([t])=>!cf||!['ergo','fin'].includes(t)).map(tdbNew).join('')}</div>`;
     return;
   }
   if(view==='degbien'){
