@@ -1310,7 +1310,7 @@ const ADMIN_PDL=[
  ['dateVis','Date de la visite','d'],
  ['dateRap','Date du rapport de visite','d'],
  ['h','Propriétaire'],
- ['pSoc','Société','t'],['pNom','Nom','t'],['pPrenom','Prénom','t'],['pAdr','Adresse','t'],['pCp','Code postal','t'],['pVille','Ville','t'],
+ ['pSoc','Société','t'],['pCiv','Civilité','r',['Monsieur','Madame','Madame, Monsieur']],['pNom','Nom','t'],['pPrenom','Prénom','t'],['pAdr','Adresse','t'],['pCp','Code postal','t'],['pVille','Ville','t'],
  ['pTelF','Tél. fixe','tel'],['pTelP','Tél. portable','tel'],['pMail','E-mail','email'],
  ['h','Mandataire'],
  ['mAg','Nom de l’agence','t'],['mNom','Nom du référent','t'],['mPrenom','Prénom du référent','t'],['mAdr','Adresse','t'],['mCp','Code postal','t'],['mVille','Ville','t'],
@@ -1357,6 +1357,7 @@ function pdlLigne(txt,entete=THO_ENTETE){
   for(const[k,c]of[['dateDepot','date depot'],['dateDepot','date recepisse'],['dateDem','date reception mail a soliha'],['dateDem','date envoi demande rdv soliha'],['dateVis','date visite'],['dateRap','rapport visite'],['cvDateVis','date contre-visite'],['cvDateRap','date rapport contre-visite']])if(!f[k])set(k,isoD(g[c]||''));
   if(f.cvDateVis)f.typeVis='Contre-visite';
   [f.pNom,f.pPrenom]=nomPre(G('nom / prenom','nom du demandeur (proprietaire)'));
+  {const c=/^(m\.|mr\.?|monsieur|mme\.?|mlle\.?|madame|mademoiselle)\s/i.exec(G('nom / prenom','nom du demandeur (proprietaire)'));if(c)f.pCiv=/^m(\.|r)|^monsieur/i.test(c[1])?'Monsieur':'Madame'}
   set('pSoc',g['representant moral']);set('pAdr',g['adresse']);set('pCp',(g['cp']||'').replace(/^(\d\d) (\d{3})$/,'$1$2'));set('pVille',g['ville']);set('pMail',G('adresse mail proprietaire','mail'));tel('p',g['tel. proprietaire']||'');
   set('mAg',g['gestionnaire']);const mm=g['mail du gestionnaire']||'';if(mm.includes('@'))f.mMail=mm;else[f.mNom,f.mPrenom]=nomPre(mm);tel('m',G('telephone du gestionnaire','tel. gestionnaire'));
   set('adresse',[[g['n° rue'],g['nom rue']].filter(Boolean).join(' '),g['n° appartement & etage']].filter(Boolean).join(', '));
@@ -1411,6 +1412,20 @@ function pdlLimite(v,auj=today()){if(!isPdl(v)||v.pdfAt||v.f.typeVis==='Contre-v
   const a=pdlLimite(V('2026-10-20'),'2026-11-04'),b=pdlLimite(V('2026-10-20'),'2026-11-07'),c=pdlLimite(V('2026-10-20'),'2026-11-09'),d=pdlLimite(V('2026-12-20'),'2026-12-21');
   console.assert(a.date==='2026-11-07'&&a.r===3&&a.c==='warn'&&a.t==='Réponse au plus tard le 07/11/2026 · reste 3 jours'&&b.r===0&&b.c==='warn'&&b.reste==='dernier jour'&&c.r===-2&&c.c==='danger'&&c.t==='Date limite 07/11/2026 dépassée de 2 jours'
     &&d.date==='2027-01-07'&&d.c==='ok'&&pdlLimite(V(''),'2026-11-04').vide&&pdlLimite(V('2026-10-20',{pdfAt:1}),'2026-11-04')===null&&pdlLimite({type:'pdl',f:{dateDem:'2026-10-20',typeVis:'Contre-visite'}},'2026-11-04')===null&&pdlLimite({f:{dateDem:'2026-10-20'}},'2026-11-04')===null,'ASSERT FAIL pdlLimite')})();
+// Envoi du rapport au propriétaire (à défaut au mandataire) : texte et adresse de retour propres à chaque commune ; signature du mail dans Outlook.
+const PDL_RETOUR={'Thouars':'permisdelouer@thouars-communaute.fr','Saint-Maixent-l’École':'services-techniques@saint-maixent-lecole.fr'};
+function pdlMail(v){const f=v.f,sme=f.commune==='Saint-Maixent-l’École',cv=f.typeVis==='Contre-visite',adr=[f.adresse,[f.cp,f.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  const qui=f.pCiv&&String(f.pNom||'').trim()?` ${f.pCiv} ${f.pNom.trim()}`:'',cas=cv?'contre-visite':sme?'Visite de Contrôle':'visite de contrôle';
+  return {a:f.pMail||f.mMail||'',sujet:['Rapport permis de louer',f.refDos,adr].filter(Boolean).join(' – '),
+    corps:`Bonjour${qui},\n\nVous trouverez en pièce jointe le rapport permis de louer ${sme?'pour la visite ':''}concernant le logement situé au ${adr}.\n\nJe vous demanderai de bien vouloir compléter la case « Propriétaire ou son représentant » et signer dans la case « ${cas} » avant de le retourner par mail à la commune à ${PDL_RETOUR[f.commune]||''}.\n`}}
+// Nom du PDF : « Rapport » + référence du dossier (à défaut le n° SoliTech).
+const pdlFichier=v=>`Rapport ${v.f.refDos||v.num||'permis de louer'}`.replace(/[\/\\:*?"<>|\n\r\t]+/g,'-').replace(/\s+/g,' ').trim()+'.pdf';
+(()=>{const b={commune:'Thouars',typeVis:'Visite de contrôle',pCiv:'Monsieur',pNom:'DURAND',pMail:'p@x.fr',mMail:'m@x.fr',adresse:'5 rue A',cp:'79100',ville:'Thouars',refDos:'2026-PL-1'},T=pdlMail({f:b}),S=pdlMail({f:{...b,commune:'Saint-Maixent-l’École',pCiv:'Madame'}}),C=pdlMail({f:{...b,typeVis:'Contre-visite',pMail:''}}),N=pdlMail({f:{...b,pCiv:''}});
+  console.assert(T.corps.startsWith('Bonjour Monsieur DURAND,\n')&&T.corps.includes('« Propriétaire ou son représentant »')&&T.corps.includes('permis de louer concernant le logement situé au 5 rue A, 79100 Thouars.')&&T.corps.includes('« visite de contrôle » avant de le retourner par mail à la commune à permisdelouer@thouars-communaute.fr.')&&T.a==='p@x.fr'
+    &&S.corps.startsWith('Bonjour Madame DURAND,')&&S.corps.includes('pour la visite concernant')&&S.corps.includes('« Visite de Contrôle »')&&S.corps.includes('services-techniques@saint-maixent-lecole.fr')
+    &&C.corps.includes('« contre-visite »')&&C.a==='m@x.fr'&&N.corps.startsWith('Bonjour,')&&T.sujet==='Rapport permis de louer – 2026-PL-1 – 5 rue A, 79100 Thouars','ASSERT FAIL pdlMail');
+  console.assert(pdlFichier({f:{refDos:'PL 79 270/26'}})==='Rapport PL 79 270-26.pdf'&&pdlFichier({f:{},num:'PDL-2026-JM-0001'})==='Rapport PDL-2026-JM-0001.pdf','ASSERT FAIL pdlFichier');
+  console.assert(pdlLigne(['2026','X-1','','','','','M. DURAND Paul'].join('\t')).f.pCiv==='Monsieur'&&pdlLigne(['2026','X-1','','','','','Mme DURAND Anne'].join('\t')).f.pCiv==='Madame'&&!pdlLigne(['2026','X-1','','','','','DURAND Paul'].join('\t')).f.pCiv,'ASSERT FAIL pdlLigne civilité')})();
 // Signature du propriétaire ou de son représentant : une par visite.
 const sigKey=v=>isCv(v)?'sigPcv':'sigP';
 const PT_PDL={r2:'CONSTATS RELATIFS AU BÂTI, APPARENTS DEPUIS L’EXTÉRIEUR',r3:'CONSTATS RELATIFS À L’AMÉNAGEMENT ET À L’ORGANISATION DU LOGEMENT',
@@ -2135,7 +2150,7 @@ console.assert(LEXIQUE_DEG.length===9&&LEXIQUE_DEG[2][1].includes('Moins de 0,35
 const CB_CAT={prop:'Propriétaire',mand:'Mandataire ou agence'};
 const CBLOCS=[
  {k:'pdec',cat:'prop',ok:v=>!isPdl(v)&&!isDeg(v)&&!isLoc(v),m:()=>({civ:'pCiv',nom:'pNom',prenom:'pPrenom',adr:'pAdr',cp:'pCp',ville:'pVille',telP:'pTel',mail:'pMail'})},
- {k:'ppdl',cat:'prop',ok:isPdl,m:()=>({soc:'pSoc',nom:'pNom',prenom:'pPrenom',adr:'pAdr',cp:'pCp',ville:'pVille',telF:'pTelF',telP:'pTelP',mail:'pMail'})},
+ {k:'ppdl',cat:'prop',ok:isPdl,m:()=>({soc:'pSoc',civ:'pCiv',nom:'pNom',prenom:'pPrenom',adr:'pAdr',cp:'pCp',ville:'pVille',telF:'pTelF',telP:'pTelP',mail:'pMail'})},
  {k:'mpdl',cat:'mand',ok:isPdl,m:()=>({soc:'mAg',nom:'mNom',prenom:'mPrenom',adr:'mAdr',cp:'mCp',ville:'mVille',telF:'mTelF',telP:'mTelP',mail:'mMail'})},
  {k:'pdeg',cat:'prop',ok:isDeg,m:(v,w)=>v.f.pStat==='Propriétaire bailleur'?{nom:'pNom',adr:'pAdr',cp:'pCp',ville:'pVille'}:w?{nom:'pNom'}:{nom:'pNom',adr:'adresse',cp:'cp',ville:'ville'}},
  {k:'ploc',cat:'prop',ok:isLoc,m:()=>({soc:'loc.proprio.sci',nom:'loc.proprio.nom',prenom:'loc.proprio.prenoms',adr:'loc.proprio.adresse',cp:'loc.proprio.cp',ville:'loc.proprio.ville',telP:'loc.proprio.tel',mail:'loc.proprio.email'})}];
@@ -3444,7 +3459,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.04-1635';
+const APP_VER='2026.11.04-1653';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -3943,7 +3958,7 @@ function render(){
       ${pdl?tile('synth','SYNTHÈSE','Résumé et commentaires','comm',[[cur.f.etat?'État : '+cur.f.etat:'À faire',{Bon:'ok',Passable:'warn',Mauvais:'danger'}[cur.f.etat]||'']])
        :tile('synth','CONCLUSION','Synthèse et signature','synth',[[cur.f.cNd?'Non-décence : '+cur.f.cNd:'À faire',cur.f.cNd==='Oui'?'danger':cur.f.cNd?'ok':'']])}
      </div>${pdl?'':`<div class="row"><button data-act="go" data-v="degbien" data-src="${cur.id}">${svg('plus')}Créer un rapport de dégradation pour ce logement</button></div>`}`;
-    bar.hidden=false;bi.innerHTML=`<button data-act="zipph">${svg('cam')}Exporter les photos</button><button class="btn-primary" data-act="pdf">${svg('pdf')}Générer le rapport PDF</button>`;
+    bar.hidden=false;bi.innerHTML=`<button data-act="zipph">${svg('cam')}Exporter les photos</button>${pdl?'<button data-act="pmail">Envoyer par mail</button>':''}<button class="btn-primary" data-act="pdf">${svg('pdf')}Générer le rapport PDF</button>`;
     return;
   }
   if(view==='admin'){
@@ -3983,7 +3998,7 @@ function render(){
        <div><button data-act="go" data-v="profil">Modifier mon profil</button></div></div>
      </div>`;
     if(pdl)initPad(cur.f[sigKey(cur)]?.src,(src,r)=>{cur.f[sigKey(cur)]={src,r};save()});
-    bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="pdf">${svg('pdf')}Générer le rapport PDF</button>`;
+    bar.hidden=false;bi.innerHTML=`${pdl?'<button data-act="pmail">Envoyer par mail</button>':''}<button class="btn-primary" data-act="pdf">${svg('pdf')}Générer le rapport PDF</button>`;
     return;
   }
   const r=RV.find(x=>x.id===view),nums=phNums(r),manq=r.gen?aControler():[],nManq=manq.reduce((n,x)=>n+x[1].length,0);
@@ -4565,6 +4580,11 @@ document.addEventListener('click',async e=>{
     if(isErgo(v)&&ko){view='esynth';toast('Corrigez d’abord les points bloquants');return go()}
     if(C.length&&!b.dataset.force){view='avantpdf';return go()}
     return exportPdf(v).then(()=>{if(!window.jspdf)return;if(isDeg(v)?degFinal(v):!ko){v.pdfAt=Date.now();store.put(v).catch(()=>{})}else if(ko)toast('PDF généré : le dossier reste en cours tant que les points à corriger ne sont pas réglés');return fsSave(v,1)}).catch(err=>toast('PDF impossible : '+err.message))}
+  if(a==='pmail'){await save(true);if(!window.jspdf){toast("Le module PDF n'est pas chargé : ouvrez l'application une fois avec internet.");return}
+    if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur le rapport');view='profil';return go()}await numeroter();const v=cur;carnetMemo(v);
+    // Un rapport avec des points à corriger ne part pas : retour à l'écran de contrôle.
+    if(controles(v).some(c=>c[0]==='ko')){view='avantpdf';toast('Corrigez d’abord les points à corriger');return go()}
+    try{const r=await exportPdf(v,1),m=pdlMail(v);if(await envoiMail(r.nom,r.blob,m.a,m.sujet,m.corps)){v.pdfAt=Date.now();await store.put(v);fsSave(v,1)}}catch(err){toast('Envoi impossible : '+err.message)}return}
   if(a==='lmail'){await save(true);if(!window.jspdf){toast("Le module PDF n'est pas chargé : ouvrez l'application une fois avec internet.");return}
     if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur le document');view='profil';return go()}await numeroter();const v=cur;carnetMemo(v);
     try{const r=await locPdf(v,1),m=locMail(v);if(await envoiMail(r.nom,r.blob,v.loc.proprio.email,m.sujet,m.corps)){v.pdfAt=Date.now();await store.put(v);fsSave(v,1)}}catch(err){toast('Envoi impossible : '+err.message)}return}
@@ -4853,7 +4873,7 @@ function piedPdf(doc,v,type,ml,mr,adr){const n=doc.getNumberOfPages();
     doc.setFont('helvetica','normal');doc.setTextColor(68,83,95);doc.text(PDFT(`${type} · édité le ${frDate(today())}`),x,h-7.8,{maxWidth:w-mr-25-x});
     doc.setFontSize(6.5);doc.text(PDFT(adr||SOLIHA_ADR+' · contact.deux-sevres@soliha.fr'),ml,h-4.8)}}
 const preNum=v=>v.num?v.num+'_':'';
-async function exportPdf(v){
+async function exportPdf(v,envoi){
   if(!window.jspdf){toast("Le module PDF n'est pas chargé : ouvrez l'application une fois avec internet.");return}
   toast('Génération du PDF…');
   if(isDeg(v))return degPdf(v);
@@ -5108,7 +5128,8 @@ async function exportPdf(v){
 
   const n=doc.getNumberOfPages();
   piedPdf(doc,v,pdl?cm.foot:'Constat Décence '+com.foot,M,M);
-  await offer(preNum(v)+(pdl?`Permis_de_louer_${slug(f.adresse)||'logement'}_${f.dateVis||today()}.pdf`:`Constat_decence_${slug(f.nom)||'logement'}_${f.dateVis||today()}.pdf`),doc.output('blob'));
+  if(pdl&&envoi)return {nom:pdlFichier(v),blob:doc.output('blob')};
+  await offer(pdl?pdlFichier(v):preNum(v)+(`Constat_decence_${slug(f.nom)||'logement'}_${f.dateVis||today()}.pdf`),doc.output('blob'));
 }
 
 /* ---------- rapport de dégradation : relecture IA et PDF ---------- */
