@@ -497,6 +497,8 @@ const LOC_ENGINE = (() => {
     "79096", // Combrand
     "79001"  // L'Absie
   ];
+  // Agglo2B : 10 % pour les communes qui abondent, sauf ces taux particuliers (validé le 07/11/2026).
+  const AGGLO2B_TAUX_COM = { "79049": 0.05, "79179": 0.15 }; // Bressuire, Moncoutant-sur-Sèvre
   // Communes du Mellois sans prime de sortie de vacance du Pacte
   // Prime de sortie de vacance de la commune, en plus de celle de la CC (Pacte Mellois) : code INSEE → [montant par logement, logements par an (0 = limite non précisée)].
   // La limite annuelle ne figure qu'à l'écran, pas dans le PDF (demande de l'utilisateur, 04/11/2026).
@@ -661,11 +663,9 @@ const LOC_ENGINE = (() => {
       const ass = Math.min(montantRef, plafStm);
       add("Commune de Saint-Maixent-l'École", `OPAH-RU – ${th.court}`, `${pct(L[0])} × ${eur(ass)}${deplaf ? " (plafond relevé à 1 500 €/m² : ravalement de façade" + (opts.ori && !ctx.ruePourDeplaf ? ", immeuble en ORI)" : ")") : montant == null ? " (plafond : " + eur(pm2) + "/m²)" : ""}`, L[0] * ass);
     } else if (ctx.key === "AGGLO2B") {
-      const L = { TD: [0.10, 8000], SEC: [0.10, 6000] }[lg.thematique];
-      if (L) {
-        pctCap("Agglo2B", `${ctx.agglo} – ${th.court}`, L[0], L[1]);
-        if (ctx.abondCom && opts.tauxCom > 0) pctCap(communeDe(ctx.commune), `${ctx.agglo} – ${th.court}`, opts.tauxCom, L[1]);
-      } else out.notes.push(`Pas d'aide complémentaire de l'Agglo2B pour la thématique « ${th.court} ».`);
+      // Toutes les thématiques, sur la base de l'Anah (son plafond de travaux est le seul plafond) : pas de plafond en euros.
+      pctCap("Agglo2B", `${ctx.agglo} – ${th.court}`, 0.10, Infinity);
+      if (ctx.abondCom) pctCap(communeDe(ctx.commune), `${ctx.agglo} – ${th.court}`, AGGLO2B_TAUX_COM[ctx.insee] ?? 0.10, Infinity);
     } else if (ctx.key === "MELLOIS") {
       const cap = lg.thematique === "TD" ? 20000 : 15000;
       pctCap("CC Mellois en Poitou", `Pacte territorial – ${th.court}`, 0.25, cap);
@@ -728,9 +728,8 @@ const LOC_ENGINE = (() => {
 
   function calcDossier(data, d, eur) {
     const ctx = d.bien.force && d.bien.force !== "AUTO" ? forcer(data, d.bien) : resoudre(data, d.bien);
-    const tc = d.bien.tauxCom === "" || d.bien.tauxCom == null || isNaN(parseFloat(String(d.bien.tauxCom).replace(",", "."))) ? 10 : parseFloat(String(d.bien.tauxCom).replace(",", "."));
     const pnum = (v, def) => { const x = parseFloat(String(v ?? "").replace(",", ".")); return isNaN(x) ? def : x; };
-    const opts = { eur, tva: Math.max(0, pnum(d.bien.tva, 10)) / 100, moe: d.bien.moe ? Math.max(0, pnum(d.bien.moeTaux, 0)) / 100 : 0, tauxCom: Math.min(100, Math.max(0, tc)) / 100, ori: !!d.bien.ori, statut: d.proprio.statut, ravalement: !!d.bien.ravalement && ctx.key === "STM" && (ctx.ruePourDeplaf || !!d.bien.ori), pacteSol: d.bien.pacteSol !== false };
+    const opts = { eur, tva: Math.max(0, pnum(d.bien.tva, 10)) / 100, moe: d.bien.moe ? Math.max(0, pnum(d.bien.moeTaux, 0)) / 100 : 0, ori: !!d.bien.ori, statut: d.proprio.statut, ravalement: !!d.bien.ravalement && ctx.key === "STM" && (ctx.ruePourDeplaf || !!d.bien.ori), pacteSol: d.bien.pacteSol !== false };
     const lgs = d.logements.map((lg) => calcLogement(data, ctx, lg, opts));
     const parFin = {};
     let total = 0, montantTotal = 0, tousMontants = true, refTotal = 0, ecrete = 0, ttcTotal = 0, tousTTC = lgs.length > 0, honTotal = 0, travauxHT = 0, ttcCalc = false;
@@ -846,16 +845,23 @@ const LOC_PLAF_RES = [
 const lg=(o)=>Object.assign({nom:'L',loyerLibre:'',annexes:'',ttc:'',surface:'',thematique:'TD',loc:2,iml:false,travaux:'',montant:'',vacant:false,gain35:false,passoire:false,rdc:false,montantRdc:''},o); const dos=(bien,lgs,extra={})=>Object.assign({proprio:{statut:'NP'},bien:Object.assign({numero:'',voie:'',insee:'',ravalement:false,pacteSol:true,force:'AUTO'},bien),logements:lgs,obs:'',compDuree:9},extra); 
 const cases=[
  dos({numero:'12',voie:'Rue Chalon',insee:'79270',ravalement:true},[lg({surface:'70.7',annexes:'6',loyerLibre:'560',vacant:true,gain35:true,passoire:true}),lg({surface:'36',thematique:'SEC',loc:3,iml:true,montant:'28000',ttc:'30800',annexes:'4',loyerLibre:'380'})]),
- dos({insee:'79049',tauxCom:'10'},[lg({surface:'55',montant:'60000',vacant:true,iml:true,loyerLibre:'500'})]),
+ dos({insee:'79049'},[lg({surface:'55',montant:'60000',vacant:true,iml:true,loyerLibre:'500'})]),
  dos({insee:'79136'},[lg({surface:'90',thematique:'ENE',loc:3,iml:true,vacant:true,gain35:true})],{aidesProjet:[{fin:'Région Nouvelle-Aquitaine',lib:'Forfait',m:'3000'}]}),
  dos({insee:'79012',moe:true,moeTaux:'10',tva:'5.5'},[lg({surface:'48',thematique:'SEC',montant:'40000',vacant:true,iml:true,rdc:true,montantRdc:'6000',loyerLibre:'450'})]),
  dos({insee:'79191'},[lg({surface:'60',loc:1,montant:'30000'}),lg({surface:'30',thematique:'TU',loc:3,iml:true,loyerLibre:'350'})],{proprio:{statut:'SCI_IS'}})
 ];
- const exp=[["STM",72433,66117,79972,{"Anah":40595,"Commune de Saint-Maixent-l\'École":31838},-1444.12,-50885,[1396,1316]],["AGGLO2B",37250,22750,28750,{"Anah":26250,"Agglo2B":5500,"Commune de Bressuire":5500},15409.4,-12000,[1402]],["MELLOIS",46500,13500,19500,{"Anah":23500,"CC Mellois en Poitou":20000},null,null,[2366]],["VDG",35200,8800,11220,{"Anah":10800,"CC Val de Gâtine":12200,"Commune d\'Ardin":2800,"Pacte des solidarités (2026)":9400},26230.44,2180,[1189]],["NONE",8625,43875,49125,{"Anah":8625},null,null,[0,0]]];
+ const exp=[["STM",72433,66117,79972,{"Anah":40595,"Commune de Saint-Maixent-l\'École":31838},-1444.12,-50885,[1396,1316]],["AGGLO2B",34500,25500,31500,{"Anah":26250,"Agglo2B":5500,"Commune de Bressuire":2750},12659.4,-12000,[1402]],["MELLOIS",46500,13500,19500,{"Anah":23500,"CC Mellois en Poitou":20000},null,null,[2366]],["VDG",35200,8800,11220,{"Anah":10800,"CC Val de Gâtine":12200,"Commune d\'Ardin":2800,"Pacte des solidarités (2026)":9400},26230.44,2180,[1189]],["NONE",8625,43875,49125,{"Anah":8625},null,null,[0,0]]];
  // Barème 2026 figé des 5 communes testées : les montants attendus restent valables quand LOC_DATA.communes est mis à jour (maj-baremes.py).
  const B26={...LOC_DATA,communes:[[79136,"Alloinay",5.71,4.7,3.7],[79012,"Ardin",5.7,4.69,3.69],[79049,"Bressuire",6.15,5.06,3.98],[79191,"Niort",8.79,7.24,5.68],[79270,"Saint-Maixent-l'École",5.71,4.7,3.7]]};
  cases.forEach((d,i)=>{const R=LOC_ENGINE.calcDossier(B26,d,x=>Math.round(x)+" €");const got=[R.ctx.key,R.total,R.reste,R.resteTTC,R.parFin,R.comp.ok?R.comp.la.bilan:null,R.comp.ok?R.comp.ll.bilan:null,R.lgs.map(r=>r.impot&&r.impot.montant||0)];
   console.assert(JSON.stringify(got)===JSON.stringify(exp[i]),"Loc'Avantages cas "+(i+1),got)});
+ // Agglo2B : 10 % sur toutes les thématiques ; communes à 10 %, Bressuire 5 %, Moncoutant 15 % ; seul le plafond de travaux de l'Anah limite (étude de Bressuire en énergie : 15 000, 6 000, 3 000).
+ const ag=(nom,thematique)=>Object.values(LOC_ENGINE.calcDossier(LOC_DATA,dos({insee:String(LOC_DATA.communes.find(c=>c[1]===nom)[0])},[lg({surface:'96',montant:'110000',thematique})]),x=>x).parFin);
+ console.assert(ag('Bressuire','ENE').join()==='15000,6000,3000',"Agglo2B : Bressuire en énergie",ag('Bressuire','ENE'));
+ console.assert(ag('Moncoutant-sur-Sèvre','TU').join()==='15000,6000,9000',"Agglo2B : Moncoutant en transformation d'usage",ag('Moncoutant-sur-Sèvre','TU'));
+ console.assert(ag('Moncoutant-sur-Sèvre','TD').join()==='28000,8000,12000',"Agglo2B : Moncoutant en très dégradé",ag('Moncoutant-sur-Sèvre','TD'));
+ console.assert(ag('Cerizay','SEC').join()==='21000,6000,6000',"Agglo2B : commune à 10 %",ag('Cerizay','SEC'));
+ console.assert(ag('Boismé','ENE').join()==='15000,6000',"Agglo2B : commune sans abondement",ag('Boismé','ENE'));
  // Prime de vacance communale du Pacte Mellois : en plus des 5 000 € de la CC, seulement pour un logement vacant.
  const pv=(insee,vacant)=>LOC_ENGINE.calcDossier(LOC_DATA,dos({insee},[lg({surface:'50',montant:'30000',vacant})]),x=>x).lgs[0].lignes.filter(l=>/vacance/.test(l.lib)).map(l=>l.fin+':'+l.m).filter(x=>!x.startsWith('Anah'));
  console.assert(pv('79150',true).join()==="CC Mellois en Poitou:5000,Commune de Limalonges:5000"&&pv('79251',true).join()==="CC Mellois en Poitou:5000,Commune de Marcillé:2000"&&pv('79150',false).length===0&&pv('79136',true).join()==="CC Mellois en Poitou:5000","ASSERT FAIL prime commune Mellois",pv('79150',true));
@@ -3595,7 +3601,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.07-1754';
+const APP_VER='2026.11.07-2029';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -4458,7 +4464,7 @@ console.assert(JSON.stringify(annPt({x:100,y:50,w:800,h:600},.5,40,20))==='[180,
 // Dossier : v.loc = {proprio, bien, logements, aidesProjet, obs, compDuree}, même structure que le simulateur d'origine.
 const locLg=i=>({nom:'Logement '+i,surface:'',annexes:'',thematique:'TD',loc:2,iml:false,travaux:'',montant:'',ttc:'',loyerLibre:'',vacant:false,gain35:false,passoire:false,rdc:false,montantRdc:'',aidesManu:[],mprMontant:'',mprGain:2});
 const locVide=()=>({proprio:{nom:'',prenoms:'',email:'',tel:'',adresse:'',cp:'',ville:'',soliact:'',statut:'NP',sci:'',mprOn:false,rfr:'',foyer:'',mprCat:''},
- bien:{adresse:'',cp:'',insee:'',communeTxt:'',description:'',ravalement:false,ori:false,pacteSol:true,force:'AUTO',tauxCom:'10',tva:'10',moe:false,moeTaux:'',photo:''},
+ bien:{adresse:'',cp:'',insee:'',communeTxt:'',description:'',ravalement:false,ori:false,pacteSol:true,force:'AUTO',tva:'10',moe:false,moeTaux:'',photo:''},
  logements:[locLg(1)],aidesProjet:[],obs:'',compDuree:9});
 const locEur=x=>Math.round(x).toLocaleString('fr-FR')+' €';
 const locEur2=x=>(+x).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
@@ -4529,7 +4535,6 @@ function locDispBox(R){const ctx=R.ctx,b=cur.loc.bien;
        :'Le plafond relevé à 1 500 €/m² est réservé aux rues Chalon et Taupineau et aux immeubles en ORI, avec ravalement de façade.'}</div>`:''}
    ${ctx.key==='MELLOIS'&&LOC_ENGINE.MELLOIS_VAC_COM[b.insee]?(([m,n])=>`<div class="hint">Prime de sortie de vacance de la commune : ${locEur(m)} par logement${n?`, dans la limite de ${n} logements par an (à vérifier auprès de la commune)`:''}.</div>`)(LOC_ENGINE.MELLOIS_VAC_COM[b.insee]):''}
    ${ctx.key==='VDG'?`<div class="chips">${lchk('bien.pacteSol','Inclure le Pacte des solidarités (valable en 2026)')}</div>`:''}
-   ${ctx.key==='AGGLO2B'&&ctx.abondCom?lin('bien.tauxCom','Taux de l’aide communale (%)',{im:'decimal',hint:'<div class="hint">Plafonds inchangés : 8 000 € par logement en très dégradé, 6 000 € en sécurité / salubrité.</div>'}):''}
    ${lsel('bien.force','Dispositif appliqué',[['AUTO','Automatique (selon l’adresse)'],['STM','OPAH-RU Saint-Maixent'],['AGGLO2B','OPAH Agglo2B'],['MELLOIS','Pacte Mellois'],['VDG','Pacte Val de Gâtine'],['VDGR','Pacte Val de Gâtine – périmètre renforcé'],['NONE','Aucun dispositif (Anah seule)']])}</div>`}
 async function locPhoto(file){const url=URL.createObjectURL(file);
   try{const img=await loadImg(url),ratio=4/3;let sw=img.naturalWidth,sh=img.naturalHeight,sx=0,sy=0;
