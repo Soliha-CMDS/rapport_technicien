@@ -2247,20 +2247,44 @@ function pcDefaut(f){const nb=(x,def=1)=>x===undefined||x===null||String(x).trim
   return [...L,{id:'gen',t:'Logement en général',k:'gen'},{id:'ext',t:'Extérieur',k:'ext'}]}
 const pcNom=(v,id)=>v.pcs?.find(p=>p.id===id)?.t||'';
 // Ajoute un défaut de pièce à sa ligne de rubrique, seule source du rapport : photos légendées avec la pièce, commentaire sur la photo 1, ou dans le commentaire de la ligne s'il n'y a pas de photo.
-function cstMet(v,c,ph=[]){const s=v.it[c.l]||(v.it[c.l]={on:false,o:[],t:[],df:[],note:'',d:false,ph:[]}),p=v.pcs.find(x=>x.id===c.p),nom=p.k==='gen'?'':p.t,com=c.com.trim();
+// Dégradation (H = la grille) : le commentaire va toujours dans celui de l'élément, car une photo n'y a qu'une légende.
+function cstMet(v,c,ph=[],H=v){const s=v.it[c.l]||(v.it[c.l]={on:false,o:[],t:[],df:[],note:'',d:false,ph:[]}),p=H.pcs.find(x=>x.id===c.p),nom=p.k==='gen'?'':p.t,com=c.com.trim(),surPh=H===v&&ph.length;
   s.on=true;s.ras=false;if(c.d)s.d=true;
   for(const k of ['o','t','df'])s[k]=[...new Set([...s[k],...c[k]])].sort((a,b)=>a-b);
-  ph.forEach((x,i)=>{const cap=String(x.cap||'').trim();s.ph.push({...x,cst:c.id,cap:!nom||cap.toLowerCase().includes(nom.toLowerCase())?cap:[nom,cap].filter(Boolean).join(', '),com:i?x.com||'':com})});
-  c.com=com;c.n=ph.length||!com?'':nom?nom+' : '+com:com;if(c.n)s.note=[s.note.trim(),c.n].filter(Boolean).join('\n');
-  (v.cst=v.cst||[]).push(c)}
+  ph.forEach((x,i)=>{const cap=String(x.cap||'').trim();s.ph.push({...x,cst:c.id,cap:!nom||cap.toLowerCase().includes(nom.toLowerCase())?cap:[nom,cap].filter(Boolean).join(', '),com:i||!surPh?x.com||'':com})});
+  c.com=com;c.n=surPh||!com?'':nom?nom+' : '+com:com;if(c.n)s.note=[s.note.trim(),c.n].filter(Boolean).join('\n');
+  (H.cst=H.cst||[]).push(c)}
 // Retire un défaut de pièce de sa ligne.
 // shortcut: un sous-constat coché aussi à la main dans la rubrique est décoché avec le dernier défaut qui l'utilise ; à revoir si des visites mélangent souvent les deux saisies.
-function cstOte(v,id){const c=v.cst.find(x=>x.id===id),s=v.it[c.l];v.cst=v.cst.filter(x=>x!==c);const R=v.cst.filter(x=>x.l===c.l);
+function cstOte(v,id,H=v){const c=H.cst.find(x=>x.id===id),s=v.it[c.l];H.cst=H.cst.filter(x=>x!==c);const R=H.cst.filter(x=>x.l===c.l);
   s.ph=s.ph.filter(p=>p.cst!==id);if(c.n)s.note=('\n'+s.note+'\n').replace('\n'+c.n+'\n','\n').trim();
   for(const k of ['o','t','df'])s[k]=s[k].filter(i=>!c[k].includes(i)||R.some(x=>x[k].includes(i)));
   if(c.d)s.d=R.some(x=>x.d);
   if(!R.length&&!s.note.trim()&&!s.ph.length)s.on=false}
-const cstCom=(v,c)=>v.it[c.l]?.ph.find(p=>p.cst===c.id)?.com??c.com;
+const cstCom=(v,c)=>c.n?c.com:v.it[c.l]?.ph.find(p=>p.cst===c.id)?.com??c.com;
+// Rapport de dégradation : éléments proposés d'abord selon la grille et le type de pièce.
+const PC_DEG={mi:{entree:['2.4','5.4','7','20.1','20.2'],sejour:['5.3','6.1','7','12','18.1','18.2','20.1','20.2','5.1'],chambre:['5.3','6.1','7','12','18.1','18.2','20.1','20.2','5.1'],
+    cuisine:['15','6.2','8','7','10','11','20.1','20.2'],sde:['16','6.2','7','10','13','11','20.1','20.2'],wc:['17','6.2','11','20.1','20.2'],
+    ext:['2.1','4.1','4.2','3.1','3.2','3.3','5.2','21','22'],gen:['1.1','2.2','2.3','5.1','14','19.1','9','23']},
+  lc:{entree:['4.2','4.3','6','3.1','3.2'],sejour:['4.1','5.1','6','13','1.1','1.2','3.1','3.2','2.2'],chambre:['4.1','5.1','6','13','1.1','1.2','3.1','3.2','2.2'],
+    cuisine:['10','5.2','7','6','8','9','3.1','3.2'],sde:['12','5.2','6','8','14','9','3.1','3.2'],wc:['11','5.2','9','3.1','3.2'],gen:['2.1','2.2','15','16','17','18']},
+  bc:{hall:['2.4','2.5','5.3','6.1','6.2','7','14','15','5.2'],caves:['19','2.1','4.2','7','11','2.2'],cour:['2.1','4.1','4.2','6.3','3.2','16','5.3','20','1.1'],
+    combles:['2.3','3.1','3.3','5.1','9','2.2'],locaux:['17','18','20','8','10','12','13'],gen:['1.1','2.1','2.2','7','8','9','10','11','12','13','14','21']}};
+console.assert(Object.entries(PC_DEG).every(([k,P])=>Object.values(P).flat().every(id=>GRILLES[k].els.some(e=>e.id===id))),'PC_DEG');
+// Pièces de départ d'une grille : les pièces principales moins une sont comptées comme chambres (le descriptif n'en dit pas plus).
+function pcDeg(v,g){if(g.k==='bc')return [['hall','Hall et cage d’escalier'],['caves','Caves'],['cour','Cour et extérieur'],['combles','Combles et toiture'],['locaux','Locaux communs'],['gen','Immeuble en général']].map(([k,t],i)=>({id:k==='gen'?'gen':'p'+(i+1),t,k}));
+  const pp=parseInt(g.k==='lc'?v.f[g.id+'_nbPP']:v.f.nbPP),L=pcDefaut(pp>=1?{lNbPP:pp,lNbCh:pp-1}:{}).filter(p=>g.k==='mi'||p.k!=='ext');L.find(p=>p.k==='gen').t=g.k==='mi'?'Maison en général':'Logement en général';return L}
+// Repère affiché dans la grille : aucune note, ampleur ni prorata n'en est déduit (l'Excel prime).
+const pcInfo=(H,l)=>{const C=(H.cst||[]).filter(c=>c.l===l);if(!C.length)return '';const P=[...new Set(C.map(c=>c.p))].map(id=>H.pcs.find(p=>p.id===id)).filter(Boolean),hors=p=>p.k==='gen'||p.k==='ext',n=P.filter(p=>!hors(p)).length,tot=H.pcs.filter(p=>!hors(p)).length,noms=P.map(p=>p.t).join(', ');
+  return n?`Constaté dans ${n} pièce${n>1?'s':''} sur ${tot} : ${noms}`:`Constaté : ${noms}`};
+(()=>{const v={f:{nbPP:'3',g2_nbPP:'1'},it:{}},g={id:'g0',k:'mi',n:{}},b={o:[],t:[],df:[],d:false};g.pcs=pcDeg(v,g);const id=t=>g.pcs.find(p=>p.t===t).id;
+  console.assert(g.pcs.filter(p=>p.k==='chambre').length===2&&g.pcs.some(p=>p.t==='Maison en général')&&g.pcs.some(p=>p.k==='ext')&&!pcDeg(v,{id:'g2',k:'lc'}).some(p=>p.k==='ext'||p.k==='chambre')&&pcDeg(v,{id:'g1',k:'bc'}).at(-1).id==='gen','pcDeg');
+  cstMet(v,{...b,id:'c1',p:id('Cuisine'),l:'g0:7',com:'Prise arrachée.'},[{src:'x',cap:''}],g);
+  cstMet(v,{...b,id:'c2',p:id('Chambre 1'),l:'g0:7',com:'Fils apparents.'},[],g);
+  cstMet(v,{...b,id:'c3',p:id('Extérieur'),l:'g0:3.1',com:'Tuiles cassées.'},[],g);
+  const x=v.it['g0:7'];console.assert(x.note==='Cuisine : Prise arrachée.\nChambre 1 : Fils apparents.'&&x.ph[0].cap==='Cuisine'&&!x.ph[0].com&&!g.n['7']&&cstCom(v,g.cst[0])==='Prise arrachée.','cstMet dégradation');
+  console.assert(pcInfo(g,'g0:7')==='Constaté dans 2 pièces sur 7 : Cuisine, Chambre 1'&&pcInfo(g,'g0:3.1')==='Constaté : Extérieur'&&pcInfo(g,'g0:8')==='','pcInfo');
+  cstOte(v,'c1',g);console.assert(x.note==='Chambre 1 : Fils apparents.'&&!x.ph.length&&pcInfo(g,'g0:7')==='Constaté dans 1 pièce sur 7 : Chambre 1','cstOte dégradation')})();
 (()=>{const L=pcDefaut({lNbPP:'3',lNbCh:'2',lNbWc:'2'}),L0=pcDefaut({lNbCh:'0'});console.assert(L.filter(p=>p.k==='chambre').length===2&&L.filter(p=>p.k==='sejour').length===1&&L.some(p=>p.t==='WC 2')&&L.at(-1).id==='ext'&&!L0.some(p=>p.k==='chambre')&&pcKind('Chambre parents')==='chambre'&&pcKind('Cave')==='autre','pcDefaut');
   const v={pcs:[{id:'a',t:'Cuisine',k:'cuisine'},{id:'b',t:'Chambre 1',k:'chambre'},{id:'gen',t:'Logement en général',k:'gen'}],it:{}},b={o:[],t:[],df:[]};
   cstMet(v,{...b,id:'c1',p:'a',l:'elec',o:[2],df:[1],d:true,com:' Prise arrachée. '},[{src:'x',cap:''},{src:'y',cap:'cuisine, plan de travail'}]);
@@ -3571,7 +3595,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.06-2206';
+const APP_VER='2026.11.07-1754';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -3913,7 +3937,7 @@ function tdbHtml(enc){const t=today(),now=new Date(),mois=t.slice(0,7);
     ${reprendre}</div>`:`<p class="muted tdb-vide">Aucune visite programmée. La date de visite se saisit dans chaque dossier.</p>${reprendre}`}
    <section class="tdb-new"><h2 class="tdb-h">Nouvelle visite</h2><div class="tdb-types">${TDB_TYPES.map(tdbNew).join('')}</div></section>`}
 function render(){
-  const app=$('#app'),bar=$('#bar'),bi=$('#barin');bar.hidden=true;$('.wrap').classList.remove('plein','tdbw');
+  const app=$('#app'),bar=$('#bar'),bi=$('#barin');bar.hidden=true;$('.wrap').classList.remove('plein','tdbw','pcw');
   if(view==='list'){
     lq='';lt='';lf='';const rap=rappelSauv();
     const enc=visits.filter(v=>!v.pdfAt).length,ini=(P.nom||'').split(/\s+/).filter(Boolean).map(x=>x[0]).slice(0,2).join('').toUpperCase();
@@ -4148,38 +4172,53 @@ function pdlRetourHtml(v){return `<div class="eyebrow">Tableau de suivi de ${esc
 /* ---------- visite par pièce ---------- */
 // Les défauts saisis ici remplissent les lignes des rubriques (cstMet) : le rapport, les contrôles et les travaux n'ont rien à changer.
 let pcId='',pcF=null,pcQ='',pcAj=false,pcTout=false,pcCle='';
-const pcLignes=()=>RR(cur).flatMap(r=>r.items||[]);
-const pcRub=d=>RR(cur).find(r=>r.items?.includes(d));
-const pcCour=()=>cur.pcs.find(p=>p.id===pcId)||cur.pcs.find(p=>!p.vu)||cur.pcs[0];
+// Décence et permis de louer : pièces et défauts dans le dossier. Dégradation : dans chaque grille, les lignes étant ses éléments (la note reste dans la grille).
+const pcH=()=>isDeg(cur)?gOf(gId):cur;
+const pcLignes=()=>{if(!isDeg(cur))return RR(cur).flatMap(r=>r.items||[]);const g=pcH();return GRILLES[g.k].els.map(e=>({...e,id:g.id+':'+e.id,e:e.id}))};
+const pcD=l=>pcLignes().find(d=>d.id===l);
+const pcLib=d=>{if(isDeg(cur))return `Chapitre ${d.part} · ${GRILLES[pcH().k].parts[d.part][0]}`;const r=RR(cur).find(r=>r.items?.includes(d));return `Rubrique ${r.n} · ${r.t}`};
+const pcIci=p=>isDeg(cur)?(PC_DEG[pcH().k][p.k]||[]).map(id=>pcH().id+':'+id):PC_ICI[p.k]||[];
+const pcMots=d=>isDeg(cur)?Object.entries(preDeg(pcH().k,d.e)).filter(([k])=>k!=='aide').flatMap(x=>x[1]):[...(d.o||[]),...(d.df||[]).map(x=>x[0])];
+const pcBtn=g=>{const n=g.cst?.length;return `<div class="row pcgo"><button class="btn-primary" data-act="pcgo" data-g="${g.id}">Visite par pièce${n?` · ${n} constat${n>1?'s':''}`:''}</button></div>`};
+const pcCour=()=>{const P=pcH().pcs;return P.find(p=>p.id===pcId)||P.find(p=>!p.vu)||P[0]};
 const pcVide=()=>!pcF||!pcF.edit&&!pcF.com.trim()&&!pcF.o.length&&!it('pcd').ph.length;
 const pcFerme=()=>{pcF=null;delete cur.it.pcd};
-function pcListe(p){const q=mkey(pcQ).split(' ').filter(Boolean),L=pcLignes(),ici=(PC_ICI[p.k]||[]).map(id=>L.find(d=>d.id===id)).filter(Boolean);
-  const M=q.length?L.filter(d=>{const s=mkey([d.t,...(d.o||[]),...(d.df||[]).map(x=>x[0])].join(' '));return q.every(w=>s.includes(w))}):pcTout||!ici.length?L:ici;
+function pcListe(p){const q=mkey(pcQ).split(' ').filter(Boolean),L=pcLignes(),ici=pcIci(p).map(id=>L.find(d=>d.id===id)).filter(Boolean);
+  const M=q.length?L.filter(d=>{const s=mkey([d.t,...pcMots(d)].join(' '));return q.every(w=>s.includes(w))}):pcTout||!ici.length?L:ici;
   return `<div class="pclib">${q.length?`${M.length} ligne${M.length>1?'s':''} trouvée${M.length>1?'s':''}`:M===ici?'Souvent relevé ici':'Toutes les lignes'}</div>
-   ${M.map(d=>`<button class="pcl" data-act="pcline" data-l="${d.id}"><b>${esc(d.t)}</b><span>Rubrique ${esc(pcRub(d).n)} · ${esc(pcRub(d).t)}</span></button>`).join('')||'<div class="empty">Aucune ligne ne correspond.</div>'}
+   ${M.map(d=>`<button class="pcl" data-act="pcline" data-l="${d.id}"><b>${esc(d.t)}</b><span>${esc(pcLib(d))}</span></button>`).join('')||'<div class="empty">Aucune ligne ne correspond.</div>'}
    ${!q.length&&ici.length?`<button class="lnk" data-act="pctout">${pcTout?'Revenir aux lignes de cette pièce':'Voir toutes les lignes'}</button>`:''}`}
-function pcForm(p){const d=itemOf(pcF.l),s=it('pcd'),nums=Object.fromEntries(s.ph.map((_,i)=>['pcd:'+i,i+1])),r=pcRub(d),
+function pcForm(p){const d=pcD(pcF.l),s=it('pcd'),nums=Object.fromEntries(s.ph.map((_,i)=>['pcd:'+i,i+1])),deg=isDeg(cur),pre=deg?preDeg(pcH().k,d.e):null,
     grp=(k,lab,arr)=>`<div class="grp"><span>${esc(lab)}</span><div class="chips">${arr.map((o,i)=>`<label class="chip"><input type="checkbox" data-pfk="${k}" data-i="${i}" ${pcF[k].includes(i)?'checked':''}>${esc(o)}</label>`).join('')}</div></div>`;
-  return `<div class="pcfs"><button data-act="pcann">← Autre défaut</button>
-    <div><h2 class="pct">${esc(d.t)}</h2><div class="muted">Rubrique ${esc(r.n)} · ${esc(p.t)}</div></div>
+  return `<div class="pcfs"><button data-act="pcann">← Autre ${deg?'élément':'défaut'}</button>
+    <div><h2 class="pct">${esc(d.t)}</h2><div class="muted">${esc(pcLib(d))} · ${esc(p.t)}</div></div>
+    ${deg?`<details class="aide"><summary>Que regarder ?</summary><div class="hint">${esc(pre.aide)}</div></details><div class="hint">La note, l’ampleur et le prorata se saisissent ensuite dans la grille.</div>`:''}
     ${d.hint?`<div class="hint">${esc(d.hint)}</div>`:''}
     ${d.ty&&!d.tf?grp('t',d.tl,d.ty):''}${d.o?grp('o',d.ol||'Constat',d.o):''}
     ${d.d?`<label class="dgl"><input type="checkbox" data-pfd ${pcF.d?'checked':''}>Danger</label>`:''}
     <div class="field"><span>Commentaire</span>
+     ${deg?`<select data-pfdf aria-label="Insérer un commentaire pré-rédigé"><option value="">+ Insérer un commentaire pré-rédigé…</option>${[0,1,2,3].filter(n=>pre[n]).map(n=>`<optgroup label="Note ${n}">${pre[n].map((t,i)=>`<option value="${n}:${i}">${esc(t)}</option>`).join('')}</optgroup>`).join('')}</select>`:''}
      ${d.df?`<select data-pfdf aria-label="Insérer un commentaire pré-rédigé"><option value="">+ Insérer un commentaire pré-rédigé…</option>${d.df.map((x,k)=>`<option value="${k}">${esc(x[0])}</option>`).join('')}</select>`:''}
      <textarea id="pfc" data-pfc aria-label="Commentaire" placeholder="Ex. : prise arrachée de son support">${esc(pcF.com)}</textarea></div>
-    ${phBlock('pcd',s,nums,phReq(d,{o:pcF.o})&&!s.ph.length)}
+    ${phBlock('pcd',s,nums,!deg&&phReq(d,{o:pcF.o})&&!s.ph.length)}
    </div><div class="pcok"><button class="btn-primary" data-act="pcok">${pcF.edit?'Enregistrer':'Ajouter à : '+esc(p.t)}</button></div>`}
-function pcCarte(c){const d=itemOf(c.l);if(!d)return '';const P=(cur.it[c.l]?.ph||[]).filter(x=>x.cst===c.id),txt=[...c.o.map(i=>d.o?.[i]),cstCom(cur,c)].filter(Boolean).join(' — ');
-  return `<article class="pcc"><div class="pcch"><div class="grow"><b>${esc(d.t)}</b><div class="muted">Rubrique ${esc(pcRub(d).n)} · ${esc(pcRub(d).t)}</div></div>${c.d?'<span class="pill danger">Danger</span>':''}</div>
+function pcCarte(c){const d=pcD(c.l);if(!d)return '';const P=(cur.it[c.l]?.ph||[]).filter(x=>x.cst===c.id),txt=[...c.o.map(i=>d.o?.[i]),cstCom(cur,c)].filter(Boolean).join(' — ');
+  return `<article class="pcc"><div class="pcch"><div class="grow"><b>${esc(d.t)}</b><div class="muted">${esc(pcLib(d))}</div></div>${c.d?'<span class="pill danger">Danger</span>':''}</div>
     <div>${esc(txt)||'<span class="muted">Sans précision</span>'}</div>
     ${P.length?`<div class="pcph">${P.map(x=>`<img src="${esc(x.src)}" alt="${esc(x.cap||'Photo')}">`).join('')}</div>`:''}
     <div class="row"><button data-act="pcedit" data-c="${c.id}">Modifier</button><button class="btn-danger" data-act="pcdel" data-c="${c.id}">Retirer</button></div></article>`}
 function pcView(app,bar,bi,logo){
-  if(!cur.pcs){cur.pcs=pcDefaut(cur.f);save()}
-  const ver=d=>!cur.it[d.id]?.on&&!cur.it[d.id]?.ras,L=pcLignes(),nV=L.filter(ver).length,pc=view==='pieces';
-  const seg=`<div class="seg" role="group" aria-label="Vue de la visite"><button data-act="go" data-v="pieces" aria-pressed="${pc}">Par pièce</button><button data-act="go" data-v="pctrl" aria-pressed="${!pc}">Par rubrique${nV?` · ${nV} à vérifier`:''}</button></div>`;
+  const H=pcH(),deg=isDeg(cur),qui=deg&&cur.bien==='imm'?gNom(cur,H):who(cur);
+  if(!H.pcs){H.pcs=deg?pcDeg(cur,H):pcDefaut(cur.f);save()}
+  const ver=d=>deg?H.n[d.e]?.h==null:!cur.it[d.id]?.on&&!cur.it[d.id]?.ras,L=pcLignes(),nV=L.filter(ver).length,pc=view==='pieces';
+  const seg=`<div class="seg" role="group" aria-label="Vue de la visite"><button data-act="go" data-v="pieces" aria-pressed="${pc}">Par pièce</button><button data-act="go" data-v="pctrl" aria-pressed="${!pc}">${deg?'Par chapitre':'Par rubrique'}${nV?` · ${nV} ${deg?'à noter':'à vérifier'}`:''}</button></div>`;
   $('.wrap').classList.add('pcw');
+  if(!pc&&deg){const G=GRILLES[H.k];
+    app.innerHTML=`${topbar('Visite par pièce',qui,'dash')}${seg}
+     <div class="pct2"><h2 class="pct">Contrôle de fin de visite</h2><span class="muted">${L.length-nV} notés · ${nV} à noter</span></div>
+     <div class="pcco">${Object.entries(G.parts).map(([p,[t]])=>`<section class="pcb"><h3>${esc(p)}. ${esc(t)}</h3>${L.filter(d=>d.part===p).map(d=>{const e=G.els.find(x=>x.id===d.e),h=H.n[d.e]?.h,al=degAlertes(cur,H,e),i=pcInfo(H,d.id);
+       return `<div class="pcr ${h==null?'ver':al.length?'def':'ras'}"><div class="grow"><b>${esc(d.t)}</b><div class="pcs">${h==null?'À noter':'Note '+esc(h)}${al.length?` · ${al.length} à vérifier`:''}${i?`<br>${esc(i)}`:''}</div></div><button data-act="grille" data-g="${H.id}" data-p="${esc(p)}">${h==null?'Noter':'Revoir'}</button></div>`}).join('')}</section>`).join('')}</div>`;
+    bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="dash">Retour au dossier</button>`;return}
   if(!pc){const nD=L.filter(d=>cur.it[d.id]?.on).length,nR=L.length-nV-nD,typ=RR(cur).filter(r=>r.items&&preManq(r).length);
     app.innerHTML=`${topbar('Visite par pièce',who(cur),'dash',logo)}${seg}
      <div class="pct2"><h2 class="pct">Contrôle de fin de visite</h2><span class="muted">${nD} en défaut · ${nR} RAS · ${nV} à vérifier</span></div>
@@ -4189,18 +4228,18 @@ function pcView(app,bar,bi,logo){
         ${on?(pb?`<button data-act="go" data-v="${r.id}">Compléter</button>`:''):ras?`<button data-act="pcras" data-l="${d.id}">Annuler</button>`:`<button class="pcokb" data-act="pcras" data-l="${d.id}">RAS</button><button class="btn-danger" data-act="pcdef" data-l="${d.id}">Défaut</button>`}</div>`}).join('')}</section>`).join('')}</div>
      <p class="muted">${nV?'Tant qu’il reste des lignes à vérifier, le pré-remplissage des travaux reste grisé.':'Toutes les lignes sont contrôlées.'}</p>`;
     bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="dash">Retour au dossier</button>`;return}
-  const p=pcCour(),C=(cur.cst||[]).filter(c=>c.p===p.id),i=cur.pcs.indexOf(p),sv=cur.pcs[i+1];pcId=p.id;
+  const p=pcCour(),C=(H.cst||[]).filter(c=>c.p===p.id),i=H.pcs.indexOf(p),sv=H.pcs[i+1],nom=deg?'constat':'défaut';pcId=p.id;
   const cle=p.id+'|'+(pcF?.l||''),ya=cle===pcCle&&$('.pv aside')?.scrollTop;pcCle=cle;
-  app.innerHTML=`${topbar('Visite par pièce',who(cur),'dash',logo)}${seg}
+  app.innerHTML=`${topbar('Visite par pièce',qui,'dash',logo)}${seg}
    <div class="pv ${pcAj||pcF?'aj':''}">
-    <nav aria-label="Pièces du logement">${cur.pcs.map(x=>{const n=(cur.cst||[]).filter(c=>c.p===x.id).length;return `<button class="${x.k==='gen'?'pcsep':''}" data-act="pcp" data-p="${x.id}" ${x===p?'aria-current="true"':''}><span class="grow">${esc(x.t)}</span>${x.vu?`<span aria-label="Pièce terminée">${svg('ok')}</span>`:''}${n?`<span class="pcn" aria-label="${n} défaut${n>1?'s':''}">${n}</span>`:''}</button>`}).join('')}
+    <nav aria-label="Pièces du logement">${H.pcs.map(x=>{const n=(H.cst||[]).filter(c=>c.p===x.id).length;return `<button class="${x.k==='gen'?'pcsep':''}" data-act="pcp" data-p="${x.id}" ${x===p?'aria-current="true"':''}><span class="grow">${esc(x.t)}</span>${x.vu?`<span aria-label="Pièce terminée">${svg('ok')}</span>`:''}${n?`<span class="pcn" aria-label="${n} ${nom}${n>1?'s':''}">${n}</span>`:''}</button>`}).join('')}
      <button class="pcplus" data-act="pcnew">+ Ajouter une pièce</button></nav>
-    <main><div class="pct2"><h2 class="pct">${esc(p.t)}</h2><span class="muted grow">${C.length?`${C.length} défaut${C.length>1?'s':''} relevé${C.length>1?'s':''}`:'Aucun défaut'}</span>
+    <main><div class="pct2"><h2 class="pct">${esc(p.t)}</h2><span class="muted grow">${C.length?`${C.length} ${nom}${C.length>1?'s':''} relevé${C.length>1?'s':''}`:'Aucun '+nom}</span>
       ${p.k==='gen'||p.k==='ext'?'':`<button class="lnk" data-act="pcren">Renommer</button>${C.length?'':'<button class="lnk" data-act="pcsup">Retirer la pièce</button>'}`}</div>
-     <button class="btn-primary pcadd" data-act="pcaj">+ Ajouter un défaut</button>
-     ${C.map(pcCarte).join('')||'<div class="empty">Aucun défaut relevé dans cette pièce.</div>'}</main>
-    <aside aria-label="Ajouter un défaut">${pcF?pcForm(p):`<div class="pct2"><h2 class="pct grow">Ajouter un défaut</h2><button class="pcfer" data-act="pcfer">Fermer</button></div>
-      <input id="pcq" type="search" value="${esc(pcQ)}" aria-label="Rechercher un défaut" placeholder="Rechercher : prise, moisissure, escalier…"><div id="pcls" class="pcls">${pcListe(p)}</div>`}</aside>
+     <button class="btn-primary pcadd" data-act="pcaj">+ Ajouter un ${nom}</button>
+     ${C.map(pcCarte).join('')||`<div class="empty">Aucun ${nom} relevé dans cette pièce.</div>`}</main>
+    <aside aria-label="Ajouter un ${nom}">${pcF?pcForm(p):`<div class="pct2"><h2 class="pct grow">Ajouter un ${nom}</h2><button class="pcfer" data-act="pcfer">Fermer</button></div>
+      <input id="pcq" type="search" value="${esc(pcQ)}" aria-label="Rechercher un ${nom}" placeholder="Rechercher : prise, moisissure, escalier…"><div id="pcls" class="pcls">${pcListe(p)}</div>`}</aside>
    </div>`;
   if(ya)$('.pv aside').scrollTop=ya;
   $('.pv nav [aria-current]')?.scrollIntoView({block:'nearest',inline:'center'});
@@ -4208,26 +4247,26 @@ function pcView(app,bar,bi,logo){
 }
 // Actions de l'écran pièce ; true si l'action a été traitée.
 async function pcAct(a,b){
-  if(a==='pcgo'){pcFerme();pcId='';pcQ='';pcAj=false;pcTout=false;view='pieces';return go()}
+  if(a==='pcgo'){if(b.dataset.g)gId=b.dataset.g;pcFerme();pcId='';pcQ='';pcAj=false;pcTout=false;view='pieces';return go()}
   if(a==='pcp'){if(pcVide())pcFerme();pcId=b.dataset.p;pcQ='';pcTout=false;return keep()}
   if(a==='pcaj'){pcAj=true;return go()}
   if(a==='pcfer'){pcAj=false;pcQ='';return go()}
   if(a==='pctout'){pcTout=!pcTout;return keep()}
-  if(a==='pcline'||a==='pcdef'){const d=itemOf(b.dataset.l);
-    if(d.dm){view=pcRub(d).id;toast('Cette ligne se renseigne dans sa rubrique');return go()}
+  if(a==='pcline'||a==='pcdef'){const d=pcD(b.dataset.l);
+    if(d.dm){view=RR(cur).find(r=>r.items?.includes(d)).id;toast('Cette ligne se renseigne dans sa rubrique');return go()}
     if(a==='pcdef'){const g=k=>PC_ICI[k].includes(d.id)&&cur.pcs.find(p=>p.k===k);pcId=(g('gen')||g('ext')||pcCour()).id;view='pieces'}
     pcFerme();pcF={l:d.id,o:[],t:[],df:[],d:false,com:''};pcAj=true;return go()}
   if(a==='pcann'){if(!pcVide()&&!pcF.edit&&!armed(b,'Abandonner cette saisie ?'))return;pcFerme();return keep()}
-  if(a==='pcedit'){const c=cur.cst.find(x=>x.id===b.dataset.c);pcF={l:c.l,o:[...c.o],t:[...c.t],df:[...c.df],d:!!c.d,com:cstCom(cur,c),edit:c.id};
+  if(a==='pcedit'){const c=pcH().cst.find(x=>x.id===b.dataset.c);pcF={l:c.l,o:[...c.o],t:[...c.t],df:[...c.df],d:!!c.d,com:cstCom(cur,c),edit:c.id};
     cur.it.pcd={on:false,o:[],t:[],df:[],note:'',d:false,ph:structuredClone(cur.it[c.l].ph.filter(x=>x.cst===c.id)).map((x,i)=>i?x:{...x,com:''})};pcAj=true;return go()}
-  if(a==='pcok'){const p=pcCour(),ph=it('pcd').ph;if(pcF.edit)cstOte(cur,pcF.edit);cur.cstN=(cur.cstN||0)+1;
-    cstMet(cur,{id:'c'+cur.cstN,p:p.id,l:pcF.l,o:pcF.o,t:pcF.t,df:pcF.df,d:pcF.d,com:pcF.com},ph);const e=pcF.edit;pcFerme();pcAj=false;pcQ='';pcTout=false;await save(true);toast(e?'Défaut enregistré':'Ajouté à : '+p.t);return go()}
-  if(a==='pcdel'){if(!armed(b,'Confirmer'))return;cstOte(cur,b.dataset.c);save();return keep()}
-  if(a==='pcfin'){const p=pcCour(),sv=cur.pcs[cur.pcs.indexOf(p)+1];p.vu=true;if(pcVide())pcFerme();pcQ='';pcTout=false;if(sv)pcId=sv.id;else view='pctrl';save();return go()}
+  if(a==='pcok'){const H=pcH(),p=pcCour(),ph=it('pcd').ph;if(pcF.edit)cstOte(cur,pcF.edit,H);H.cstN=(H.cstN||0)+1;
+    cstMet(cur,{id:'c'+H.cstN,p:p.id,l:pcF.l,o:pcF.o,t:pcF.t,df:pcF.df,d:pcF.d,com:pcF.com},ph,H);const e=pcF.edit;pcFerme();pcAj=false;pcQ='';pcTout=false;await save(true);toast(e?'Enregistré':'Ajouté à : '+p.t);return go()}
+  if(a==='pcdel'){if(!armed(b,'Confirmer'))return;cstOte(cur,b.dataset.c,pcH());save();return keep()}
+  if(a==='pcfin'){const P=pcH().pcs,p=pcCour(),sv=P[P.indexOf(p)+1];p.vu=true;if(pcVide())pcFerme();pcQ='';pcTout=false;if(sv)pcId=sv.id;else view='pctrl';save();return go()}
   if(a==='pcras'){const s=it(b.dataset.l);s.ras=!s.ras;save();return keep()}
-  if(a==='pcnew'){const t=(prompt('Nom de la pièce (ex. : Chambre 3, Cave)')||'').trim();if(!t)return;const n=(cur.pcN=(cur.pcN||100)+1),x={id:'p'+n,t,k:pcKind(t)};cur.pcs.splice(cur.pcs.findIndex(p=>p.k==='gen'),0,x);pcId=x.id;save();return keep()}
+  if(a==='pcnew'){const t=(prompt('Nom de la pièce (ex. : Chambre 3, Cave)')||'').trim();if(!t)return;const H=pcH(),n=(H.pcN=(H.pcN||100)+1),x={id:'p'+n,t,k:pcKind(t)};H.pcs.splice(H.pcs.findIndex(p=>p.k==='gen'),0,x);pcId=x.id;save();return keep()}
   if(a==='pcren'){const p=pcCour(),t=(prompt('Nouveau nom de la pièce',p.t)||'').trim();if(!t)return;p.t=t;p.k=pcKind(t);save();return keep()}
-  if(a==='pcsup'){if(!armed(b,'Confirmer'))return;const p=pcCour();cur.pcs=cur.pcs.filter(x=>x!==p);pcId='';save();return keep()}
+  if(a==='pcsup'){if(!armed(b,'Confirmer'))return;const H=pcH(),p=pcCour();H.pcs=H.pcs.filter(x=>x!==p);pcId='';save();return keep()}
 }
 /* ---------- rapport de dégradation ---------- */
 let gId=null,gPart='I';
@@ -4267,6 +4306,7 @@ function elHtml(v,g,e,nums){
    ${e.a&&s.h!=='SO'&&s.h!=='NV'?`<div role="radiogroup" aria-label="Ampleur des désordres : ${esc(e.t)}"><div class="lab">Ampleur des désordres</div>${seg('a',[[null,'—','Critère non utilisé'],...AMPLEURS],s.a)}</div>`:''}
    ${(e.p||e.m)&&s.h!=='SO'&&s.h!=='NV'?`<div class="ln">${e.p?`<label class="field"><span>Prorata d’éléments concernés</span><input type="text" inputmode="decimal" data-gn="pt" ${d} value="${esc(s.pt)}" placeholder="ex. 4/5 ou 0,8">${Number.isNaN(p)?'<span class="need">Saisie : « 4/5 », « 4 sur 5 » ou un nombre entre 0 et 1</span>':''}</label>`:''}
     ${e.m?`<div class="field"><span>${e.m==='N'?'Niveaux':'Pièces principales'} concernés</span><div class="kval">${k??'<span class="need">à renseigner dans le descriptif</span>'}</div></div>`:''}</div>`:''}
+   ${pcInfo(g,iid)?`<div class="hint">${esc(pcInfo(g,iid))}</div>`:''}
    ${al.length?`<div class="hint warn">${al.map(esc).join('<br>')}</div>`:''}
    <details data-open="${iid}" ${degOpen.has(iid)||x.note.trim()||x.ph.length?'open':''}><summary>Commentaire et photos${x.ph.length?` · ${x.ph.length} photo${x.ph.length>1?'s':''}`:''}</summary>
     <div class="dgc">
@@ -4286,14 +4326,14 @@ function degView(app,bar,bi){
     bar.hidden=false;bi.innerHTML=`<button data-act="zipph">${svg('cam')}Photos (.zip)</button><button class="btn-primary" data-act="pdf">${svg('pdf')}${degFinal(cur)?'Générer le rapport PDF':'Générer un projet (PDF)'}</button>`;
     const trav=g=>{const t=cur.f[g.id+'_trav'],c=degTravCtrl(cur,g,t),n=String(t||'').split('\n').filter(l=>l.trim()).length;
       return `<button class="tile" data-act="go" data-v="trav" data-g="${g.id}"><img class="ic" src="${ICO_DEG.synthese}" alt=""><span class="num">SYNTHÈSE</span><span class="lbl">Synthèse des travaux</span>${pills([[n?n+' ligne'+(n>1?'s':''):'À faire',n?'info':''],...(c.manque.length+c.zero.length?[['À vérifier','danger']]:[])])}</button>`};
-    if(cur.bien!=='imm'){const g=cur.g[0];app.innerHTML=`<div class="degtop">${topbar(who(cur),kind(cur),'list')}${degScore(cur,g)}</div>${progHtml(cur,1)}<div class="tiles">${adm}${chap(g)}${trav(g)}</div>`;return true}
+    if(cur.bien!=='imm'){const g=cur.g[0];app.innerHTML=`<div class="degtop">${topbar(who(cur),kind(cur),'list')}${degScore(cur,g)}</div>${progHtml(cur,1)}${pcBtn(g)}<div class="tiles">${adm}${chap(g)}${trav(g)}</div>`;return true}
     const [bc,...L]=cur.g;
     app.innerHTML=`${topbar(who(cur),kind(cur),'list')}${progHtml(cur,1)}<div class="tiles">${adm}</div>
      <h2 class="sec">Parties communes</h2>
-     <div class="gcard"><div class="name">${esc(gNom(cur,bc))}</div>${degScore(cur,bc)}<div class="tiles">${chap(bc)}${trav(bc)}</div></div>
+     <div class="gcard"><div class="name">${esc(gNom(cur,bc))}</div>${degScore(cur,bc)}${pcBtn(bc)}<div class="tiles">${chap(bc)}${trav(bc)}</div></div>
      <h2 class="sec">Logements (parties privatives)</h2>
      <div class="visits">${L.map(g=>`<div class="gcard"><div class="name">${esc(lgtNom(cur,g))}</div>
-       <div class="muted">${[cur.f[g.id+'_nbPP']&&cur.f[g.id+'_nbPP']+' pièce(s) principale(s)',cur.f[g.id+'_surf']&&cur.f[g.id+'_surf']+' m²'].filter(Boolean).join(' · ')}</div>${degScore(cur,g)}
+       <div class="muted">${[cur.f[g.id+'_nbPP']&&cur.f[g.id+'_nbPP']+' pièce(s) principale(s)',cur.f[g.id+'_surf']&&cur.f[g.id+'_surf']+' m²'].filter(Boolean).join(' · ')}</div>${degScore(cur,g)}${pcBtn(g)}
        <div class="row"><button class="btn-primary" data-act="grille" data-g="${g.id}" data-p="I">Ouvrir la grille</button><button data-act="go" data-v="lgt" data-g="${g.id}">Descriptif</button><button data-act="go" data-v="trav" data-g="${g.id}">Travaux</button><button data-act="duplgt" data-g="${g.id}">Dupliquer</button><button class="btn-danger" data-act="dellgt" data-g="${g.id}">Supprimer</button></div></div>`).join('')||'<div class="empty">Aucun logement : ajoutez-en un par logement visité.</div>'}</div>
      <button class="big secondary" data-act="addlgt">${svg('plus')}<span><span class="t">Ajouter un logement</span><span class="d">Une grille « logement en collectif » par logement visité</span></span></button>`;
     return true}
@@ -4643,7 +4683,7 @@ document.addEventListener('change',async e=>{
   const el=e.target;
   if(el.dataset.pfk){const k=el.dataset.pfk,i=+el.dataset.i;pcF[k]=pcF[k].filter(x=>x!==i);if(el.checked)pcF[k].push(i);return}
   if(el.dataset.pfd!==undefined){pcF.d=el.checked;return}
-  if(el.dataset.pfdf!==undefined){const i=el.value;el.value='';if(i==='')return;const d=itemOf(pcF.l),t=d.df[+i][0],oi=dfO(d,+i);if(!pcF.df.includes(+i))pcF.df.push(+i);
+  if(el.dataset.pfdf!==undefined){const i=el.value;el.value='';if(i==='')return;const d=pcD(pcF.l),deg=isDeg(cur),t=deg?preDeg(pcH().k,d.e)[i.split(':')[0]][+i.split(':')[1]]:d.df[+i][0],oi=deg?-1:dfO(d,+i);if(!deg&&!pcF.df.includes(+i))pcF.df.push(+i);
     pcF.com=(pcF.com.trim()?pcF.com.replace(/\s+$/,'')+'\n':'')+t+(/[.!?]$/.test(t)?'':'.');if(oi>=0&&!pcF.o.includes(oi))pcF.o.push(oi);return keep()}
   if(el.dataset.import!==undefined)return importJson(el);
   if(el.dataset.sel){el.checked?exSel.add(el.dataset.sel):exSel.delete(el.dataset.sel);return keep()}
@@ -4750,7 +4790,7 @@ document.addEventListener('click',async e=>{
   if(a==='degia'){try{await navigator.clipboard.writeText(texteRelectureDeg(cur,gOf(b.dataset.g)));toast('Texte copié : collez-le dans Copilot')}catch(err){toast('Copie impossible : '+err.message);return}
     open('https://copilot.microsoft.com/','_blank','noopener');return}
   if(a==='addlgt'){const id=newGid();cur.g.push({id,k:'lc',n:{}});cur.f[id+'_nom']='Logement '+(cur.g.length-1);gId=id;view='lgt';save();return go()}
-  if(a==='duplgt'){const src=gOf(b.dataset.g),id=newGid();cur.g.push({...structuredClone(src),id});
+  if(a==='duplgt'){const src=gOf(b.dataset.g),id=newGid();cur.g.push({...structuredClone(src),id,pcs:undefined,cst:undefined,cstN:undefined,pcN:undefined});
     for(const [k,x] of Object.entries(cur.f))if(k.startsWith(src.id+'_'))cur.f[id+k.slice(src.id.length)]=x;
     cur.f[id+'_nom']=lgtNom(cur,src)+' (copie)';save();toast('Logement dupliqué : ajustez son nom et ses notes');return keep()}
   if(a==='dellgt'){if(!armed(b,'Confirmer la suppression'))return;const id=b.dataset.g;cur.g=cur.g.filter(g=>g.id!==id);
