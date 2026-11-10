@@ -3777,7 +3777,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.09-2205';
+const APP_VER='2026.11.10-2055';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -3937,6 +3937,19 @@ const it=(id,v=cur)=>v.it[id]||(v.it[id]={on:false,o:[],t:[],df:[],note:'',d:fal
 // Entrées qui portent des photos : pathologies cochées, puis photos propres à la rubrique (commentaires).
 const phIds=(r,v)=>[...(r.items||[]).filter(d=>v.it[d.id]?.on).map(d=>d.id),...(r.phId&&v.it[r.phId]?[r.phId]:[])];
 function phNums(r,v=cur){const m={};let n=0;for(const id of phIds(r,v))v.it[id].ph.forEach((p,i)=>m[id+':'+i]=++n);return m}
+// Déplace la photo i de l'entrée « from » vers l'entrée « to » (désordre, coché au passage, ou zone photos d'une rubrique).
+// La photo garde légende, commentaire et annotations ; sans case commentaire à l'arrivée, le commentaire passe dans la légende.
+function phDepl(v,from,i,to){const s=it(from,v),[p]=s.ph.splice(i,1),t=it(to,v),RV=RR(v).flatMap(r=>r.items||[]),df=RV.find(d=>d.id===from),dt=RV.find(d=>d.id===to);
+  // Comme une suppression : la dernière photo d'un désordre lui rend son commentaire.
+  if(!s.ph.length&&df&&!df.dm&&p.com?.trim())s.note=[s.note.trim(),p.com.trim()].filter(Boolean).join('\n');
+  // Photo d'un défaut saisi par pièce : elle quitte ce défaut, son commentaire reste au défaut.
+  if(p.cst){const c=v.cst?.find(x=>x.id===p.cst),nx=s.ph.find(x=>x.cst===p.cst);if(c&&!c.n){if(nx&&!nx.com?.trim())nx.com=p.com;else if(!nx)c.com=p.com||c.com}delete p.cst}
+  if(!dt&&p.com?.trim()){p.cap=[p.cap.trim(),p.com.trim()].filter(Boolean).join(' — ');delete p.com}
+  if(dt&&!t.on){t.on=true;t.ras=false;if(dt.dm)dmMaj(t)}
+  t.ph.push(p)}
+{const [a,b]=R.flatMap(r=>r.items||[]).filter(d=>!d.dm),v={type:'dec',f:{},it:{[a.id]:{on:true,o:[],t:[],df:[],note:'',d:false,ph:[{src:'x',cap:'Cuisine',com:'Fuite'}]}}};
+ phDepl(v,a.id,0,b.id);console.assert(v.it[b.id].on&&v.it[b.id].ph[0].com==='Fuite'&&!v.it[a.id].ph.length&&v.it[a.id].note==='Fuite','ASSERT FAIL phDepl vers un désordre non coché');
+ phDepl(v,b.id,0,'r7ph');console.assert(v.it.r7ph.ph[0].cap==='Cuisine — Fuite'&&v.it.r7ph.ph[0].com===undefined,'ASSERT FAIL phDepl vers la zone Commentaires')}
 
 /* ---------- statuts ---------- */
 const filled=x=>Array.isArray(x)?x.length>0:x!==undefined&&x!==null&&String(x).trim()!=='';
@@ -4034,10 +4047,13 @@ function itemHtml(d,nums){
 }
 // Liste des commentaires pré-rédigés : vers le commentaire du désordre, ou vers celui de la photo i.
 const dfSel=(d,i)=>d.df?`<select data-it="${d.id}" data-k="df" ${i!=null?`data-i="${i}"`:''} aria-label="Insérer un commentaire pré-rédigé"><option value="">+ Insérer un commentaire pré-rédigé…</option>${d.df.map((x,k)=>`<option value="${k}">${esc(x[0])}</option>`).join('')}<option value="autre">Autre (rédiger)</option></select>`:'';
+// Décence et permis de louer : liste des destinations d'une photo (tous les désordres, cochés ou non, et les zones photos des rubriques).
+const phDeplSel=(id,i,n)=>`<select data-phmv="${id}" data-i="${i}" aria-label="Déplacer la photo ${n} vers une autre rubrique ou un autre désordre"><option value="">Déplacer vers…</option>${RR(cur).filter(r=>r.items||r.phId).map(r=>`<optgroup label="${esc(r.n+'. '+r.t)}">${(r.items||[]).filter(d=>d.id!==id).map(d=>`<option value="${d.id}">${esc(d.t)}${cur.it[d.id]?.on?'':' (sera coché)'}</option>`).join('')}${r.phId&&r.phId!==id?`<option value="${r.phId}">Photos de la rubrique ${esc(r.t)}</option>`:''}</optgroup>`).join('')}</select>`;
 // Photos ; pour un désordre (d), chaque photo a sa légende et son commentaire.
-function phBlock(id,s,nums,need,d){return `<div class="grp"><span>Photos${need?' <span class="need">— à joindre impérativement</span>':''}</span>
+function phBlock(id,s,nums,need,d){const mv=d||RR(cur).some(r=>r.phId===id);return `<div class="grp"><span>Photos${need?' <span class="need">— à joindre impérativement</span>':''}</span>
      <div class="phs">${s.ph.map((p,i)=>`<div class="phc${d?' st':''}"><img src="${esc(p.src)}" alt="Photo ${nums[id+':'+i]}">
        <div class="cap"><div class="tools"><b>Photo ${nums[id+':'+i]}</b>${/^z:/.test(id)&&i?`<button type="button" data-act="er-phup" data-it="${id}" data-i="${i}">Avancer</button>`:''}<button type="button" data-act="an-open" data-it="${id}" data-i="${i}">Annoter</button><button type="button" data-act="delph" data-it="${id}" data-i="${i}">Supprimer</button></div>
+       ${mv?phDeplSel(id,i,nums[id+':'+i]):''}
        ${d?'<span class="lab">Légende</span>':''}<textarea data-it="${id}" data-k="cap" data-i="${i}" aria-label="Légende de la photo ${nums[id+':'+i]}" placeholder="${d?'Ex. : chambre 1, prise murale':'Légende : ce que montre la photo'}">${esc(p.cap)}</textarea>
        ${d?`<span class="lab">Commentaire</span>${dfSel(d,i)}<textarea id="com_${id}_${i}" data-it="${id}" data-k="com" data-i="${i}" aria-label="Commentaire de la photo ${nums[id+':'+i]}" placeholder="Commentaire (facultatif)">${esc(p.com||'')}</textarea>`:''}</div></div>`).join('')}
       <div class="cams"><label class="btn cam">${svg('cam')}Prendre une photo<input type="file" accept="image/*" capture="environment" data-photo="${id}"></label>
@@ -4310,11 +4326,11 @@ function render(){
      ${pdl&&PDL_TAB[cur.f.commune]?pdlRetourHtml(cur):''}
      <div class="eyebrow">Signature${pdl?'s – '+esc(cur.f.typeVis):''}</div>
      <div class="sigs" style="margin-top:8px">
-      ${pdl?`<div class="field"><span>Propriétaire ou son représentant</span>
+      ${pdl?`<div class="field" style="grid-column:1/-1"><span>Propriétaire ou son représentant</span>
        <input type="text" data-f="${sigKey(cur)}Nom" value="${esc(cur.f[sigKey(cur)+'Nom'])}" placeholder="Nom, prénom et qualité du signataire" aria-label="Nom du signataire">
-       <canvas class="pad" id="pad" aria-label="Zone de signature du propriétaire ou de son représentant"></canvas>
+       <canvas class="pad" id="pad" style="height:260px" aria-label="Zone de signature du propriétaire ou de son représentant"></canvas>
        <div class="row"><button data-act="clrosig">Effacer la signature</button></div></div>`:''}
-      <div class="field"><span>Enquêteur : ${esc(P.nom||'profil non renseigné')}</span>${P.sig?`<img src="${P.sig.src}" alt="Signature de ${esc(P.nom)}" style="background:var(--paper);border-radius:8px;padding:6px;max-height:150px;object-fit:contain">`:''}
+      <div class="field"><span>Enquêteur : ${esc(P.nom||'profil non renseigné')}</span>${P.sig?`<img src="${P.sig.src}" alt="Signature de ${esc(P.nom)}" style="background:var(--paper);border-radius:8px;padding:6px;max-height:${pdl?70:150}px;max-width:${pdl?'220px':'none'};object-fit:contain">`:''}
        <div><button data-act="go" data-v="profil">Modifier mon profil</button></div></div>
      </div>`;
     if(pdl)initPad(cur.f[sigKey(cur)]?.src,(src,r)=>{cur.f[sigKey(cur)]={src,r};save()});
@@ -4874,6 +4890,7 @@ document.addEventListener('change',async e=>{
   if(el.dataset.lt!==undefined){lt=el.dataset.lt;return keep()}
   if(el.dataset.psig!==undefined){const f=el.files[0];el.value='';if(!f)return;try{const p=await shrink(f);P.sig={src:p.src,r:p.h/p.w};await saveP();render()}catch(err){toast('Image non importée : '+err.message)}return}
   if(!cur)return;
+  if(el.dataset.phmv!==undefined){const to=el.value;if(!to)return;phDepl(cur,el.dataset.phmv,+el.dataset.i,to);save();toast('Photo déplacée');return keep()}
   if(el.dataset.vcp!==undefined)cpLien(el);
   if(isErgo(cur)&&ergoChg(el))return;
   if(isFin(cur)&&finChg(el))return;
