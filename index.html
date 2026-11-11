@@ -384,6 +384,15 @@ label.chip.erb{border-radius:10px;width:100%;align-items:flex-start}.erpad{heigh
   .pcadd,.pcfer{display:none}
   .pcco{display:block;columns:3;column-gap:14px}.pcb{break-inside:avoid;margin-bottom:14px}
 }
+/* Liste à cocher des correctifs (travaux préconisés) */
+.trx{border:1px solid var(--line);border-radius:8px;padding:0 12px;margin:0 0 12px}
+.trx summary{min-height:44px;display:flex;align-items:center;font-weight:700;cursor:pointer}
+.trxg{display:grid;gap:2px;margin:10px 0}
+.trxe{font-size:.92rem;color:var(--muted);margin-top:6px}
+.trxl{display:flex;gap:10px;align-items:flex-start;min-height:44px;padding:8px 0}
+.trxl.sub{padding-left:24px}
+.trxl input{width:22px;height:22px;flex:none;margin-top:2px}
+.trxl small{display:block;color:var(--muted);font-size:.8rem}
 
 </style>
 
@@ -1680,14 +1689,16 @@ function travaux(v){
   // Permis de louer : chaque correctif est remplacé par sa version avec les règles techniques.
   const tk=t=>v.type==='pdl'&&TECH[t]||t;
   const bare=l=>l.replace(/^[\s•◦]+/,'');
-  const push=(th,line)=>{if(!L[th].some(l=>bare(l)===bare(line)))L[th].push(line)};
+  // S : désordre d'origine de chaque ligne (affiché dans la liste à cocher des correctifs).
+  const S={};let src='';
+  const push=(th,line)=>{if(!L[th].some(l=>bare(l)===bare(line)))L[th].push(line);S[line.trim()]??=src};
   const diag=()=>{push('regl','• Réalisation et transmission au locataire du dossier de diagnostic technique :');
     ['Diagnostic de performance énergétique (DPE)','État de l’installation intérieure d’électricité',
      ...(v.f.lAv49==='Avant 1949'?['Constat de risque d’exposition au plomb (CREP), le logement ayant été construit avant 1949']:[]),
      'État des risques et pollutions (ERP)','État de l’installation intérieure de gaz, le cas échéant','Diagnostic amiante, le cas échéant (permis de construire antérieur au 1er juillet 1997)'].forEach(x=>push('regl','   ◦ '+x))};
   for(const r of RR(v))for(const d of r.items||[]){
     const s=v.it[d.id];if(!s?.on||!d.th)continue;
-    const subs=[];
+    const subs=[];src=d.t;
     if(d.dm){const c=dmCorr(v,s);push(d.th,'• '+DM_INTRO+(c.length?' :':'.'));c.forEach(x=>push(d.th,'   ◦ '+x));continue}
     const add=x=>{if(!x)return;if(x==='DIAG')return diag();Array.isArray(x)?subs.push({th:x[0],t:tk(x[1])}):subs.push({th:d.th,t:tk(x)})};
     s.o.forEach(i=>{if(!s.df.some(j=>dfO(d,j)===i))add(d.ow?.[i])});s.df.forEach(i=>add(d.df?.[i]?.[1]));(d.wx||[]).forEach(add);
@@ -1698,8 +1709,9 @@ function travaux(v){
     subs.filter(x=>x.th!==d.th).forEach(x=>push(x.th,'• '+x.t));
   }
   // Le DAAF relève du CCH (R.142-2), pas du décret décence : on le précise hors permis de louer.
+  src='Détecteur de fumée';
   if(v.f.detect==='Non')push('sec','• '+tk('Installation d’au moins un détecteur autonome avertisseur de fumée (DAAF) conforme à la norme NF EN 14604')+(v.type==='pdl'?'':' (obligation du CCH, hors critères de décence)'));
-  return Object.entries(L).filter(([,l])=>l.length).map(([k,l])=>({title:TH[k],lines:l}));
+  return Object.entries(L).filter(([,l])=>l.length).map(([k,l])=>({title:TH[k],lines:l,src:l.map(x=>S[x.trim()])}));
 }
 // Phrase fixe sur les justificatifs, placée par le rapport avant la liste de travaux (non modifiable).
 (()=>{const all=[...R,...R_PDL].flatMap(r=>r.items||[]);
@@ -1740,6 +1752,22 @@ function fusionTravaux(txt,blocks){
   }
   return{txt:lines.join('\n'),added};
 }
+// Correctifs refusés (v.f.travNon, lignes sans espaces de tête) : décochés dans la liste, ou effacés à la main
+// du texte après une génération (v.f.travGen = lignes générées la dernière fois). Ils ne sont plus ajoutés.
+// Une ligne d'en-tête (« • … : ») sans sous-ligne restante disparaît avec ses sous-lignes.
+const travEnt=l=>/^•.* :$/.test(l.trim());
+function travFiltre(blocks,non){const N=new Set(non);
+  return blocks.map(b=>{const L=b.lines.filter(l=>!N.has(l.trim()));return{...b,lines:L.filter((l,i)=>!travEnt(l)||/^\s+◦/.test(L[i+1]||''))}}).filter(b=>b.lines.length)}
+// Calcule sans rien modifier : nouvelle liste de refus, texte mis à jour, nombre de lignes ajoutées (vide = liste neuve).
+function travCalc(v){const f=v.f,blocks=travaux(v),txt=f.trav||'',vide=!txt.trim();if(!blocks.length)return null;
+  const T=new Set(txt.split('\n').map(l=>l.trim())),all=new Set(blocks.flatMap(b=>b.lines.map(l=>l.trim())));
+  const non=[...new Set([...(f.travNon||[]),...(vide?[]:(f.travGen||[]).filter(l=>!T.has(l)))])],F=travFiltre(blocks,non);
+  if(vide)return{non,F,txt:travauxTexte(v,F),added:F.reduce((n,b)=>n+b.lines.length,0),vide};
+  // Retire du texte les lignes générées refusées, puis les en-têtes générés restés sans sous-ligne.
+  const N=new Set(non);let L=txt.split('\n').filter(l=>!(N.has(l.trim())&&all.has(l.trim())));
+  L=L.filter((l,i)=>!(travEnt(l)&&all.has(l.trim()))||/^\s+◦/.test(L[i+1]||''));
+  const m=fusionTravaux(L.join('\n'),F);return{non,F,txt:m.txt,added:m.added,vide}}
+function travMaj(v){const c=travCalc(v);if(!c)return null;v.f.trav=c.txt;v.f.travNon=c.non;v.f.travGen=c.F.flatMap(b=>b.lines.map(l=>l.trim()));return c}
 (()=>{const t=(f,s,type)=>{const v={type,f,it:{diagmaj:{on:true,o:[],t:[],df:[],note:'',ph:[],...s}}};return{v,txt:dmTexte(v,v.it.diagmaj),cor:dmCorr(v,v.it.diagmaj),trav:travaux(v)}};
   // 1. chauffage + électricité partielle + peintures, avant 1949, CREP positif
   const a=t({lAv49:'Avant 1949'},{dA:2024,tA:2026,tw:[0,2,4],crep:'Oui'});
@@ -1757,6 +1785,19 @@ function fusionTravaux(txt,blocks){
   console.assert(R_PDL[5].items.some(x=>x.id==='diagmaj')&&ITEMS.diagmaj,'dm R_PDL');
 })();
 const dfi=(id,re)=>ITEMS[id].df.findIndex(x=>re.test(x[0]));
+(()=>{const t={f:{detect:'Non'},it:{elec:{on:true,o:[],t:[],df:[dfi('elec',/^Aucun dispositif de coupure/),dfi('elec',/^Aucun dispositif différentiel/)],ph:[]}}};
+  const g=travMaj(t),[e,a,b]=travaux(t)[0].lines;
+  console.assert(g.vide&&travEnt(e)&&t.f.trav.includes(a.trim())&&t.f.travGen.length>=3&&travaux(t)[0].src[0]===ITEMS.elec.t,'travMaj génération');
+  // Ligne effacée à la main : elle n'est pas régénérée et devient refusée.
+  t.f.trav=t.f.trav.split('\n').filter(l=>l.trim()!==a.trim()).join('\n');
+  console.assert(travMaj(t).added===0&&!t.f.trav.includes(a.trim())&&t.f.travNon.includes(a.trim()),'travMaj ligne effacée');
+  // Ligne décochée : retirée du texte ; les deux sous-lignes refusées font aussi disparaître l'en-tête.
+  t.f.travNon.push(b.trim());travMaj(t);console.assert(!t.f.trav.includes(b.trim())&&!t.f.trav.includes(e.trim())&&t.f.trav.includes('DAAF'),'travMaj en-tête');
+  // Recochée : elle revient avec son en-tête.
+  t.f.travNon=t.f.travNon.filter(x=>x!==b.trim());const r=travMaj(t);console.assert(r.added===2&&t.f.trav.includes(b.trim())&&t.f.trav.includes(e.trim()),'travMaj recochée',r);
+  // Contrôle « à vérifier » : une ligne effacée à la main ne compte pas comme manquante.
+  t.f.trav=t.f.trav.replace(b.trim(),'');console.assert(travCalc(t).added===0,'travCalc à vérifier');
+})();
 (()=>{const t={f:{lAv49:'Avant 1949',detect:'Non',cNd:'Oui'},it:{elec:{on:true,o:[],t:[],df:[dfi('elec',/^Aucun dispositif de coupure/),dfi('elec',/^Aucun dispositif différentiel/)],ph:[]},plomb:{on:true,o:[3],t:[],df:[],ph:[]}}};
   const b=travaux(t),txt=travauxTexte(t,b);
   console.assert(b[0].title===TH.sec&&b[0].lines[0].startsWith('• Mise en sécurité de l’installation électrique')&&b[0].lines.length===4,'travaux sec');
@@ -3777,7 +3818,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.10-2055';
+const APP_VER='2026.11.11-1107';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -3897,7 +3938,7 @@ function controles(v){
   if(!f.dateVis)add('ko','Date de visite manquante','admin');
   if(!filled(f.adresse))add('ko','Adresse du logement manquante','admin');
   for(const r of RR(v)){const n=(r.items||[]).filter(d=>phReq(d,v.it[d.id])&&v.it[d.id]?.on&&!v.it[d.id].ph.length).length;if(n)add('av',`Rubrique ${r.n} : ${sg(n,'photo requise manquante','photos requises manquantes')}`,r.id)}
-  if(bl.length&&filled(f.trav)){const n=fusionTravaux(f.trav,bl).added;if(n)add('av',`Liste de travaux pas à jour : ${sg(n,'correctif manquant','correctifs manquants')}`,gen?.id)}
+  if(bl.length&&filled(f.trav)){const n=travCalc(v).added;if(n)add('av',`Liste de travaux pas à jour : ${sg(n,'correctif manquant','correctifs manquants')}`,gen?.id)}
   if(pdl){if(!filled(f.pNom)&&!filled(f.pSoc))add('av','Nom du propriétaire manquant','admin');if(!f[sigKey(v)])add('av','Signature du propriétaire absente','synth')}
   else{if(!filled(f.nom))add('av','Nom de l’occupant manquant','admin');if(!filled(f.refDos))add('av','Référence du dossier vide','admin')}
   return L}
@@ -4047,6 +4088,13 @@ function itemHtml(d,nums){
 }
 // Liste des commentaires pré-rédigés : vers le commentaire du désordre, ou vers celui de la photo i.
 const dfSel=(d,i)=>d.df?`<select data-it="${d.id}" data-k="df" ${i!=null?`data-i="${i}"`:''} aria-label="Insérer un commentaire pré-rédigé"><option value="">+ Insérer un commentaire pré-rédigé…</option>${d.df.map((x,k)=>`<option value="${k}">${esc(x[0])}</option>`).join('')}<option value="autre">Autre (rédiger)</option></select>`:'';
+// Liste à cocher des correctifs proposés (travCalc) : décocher retire la ligne du texte et l'empêche de revenir ; une ligne effacée à la main apparaît décochée.
+function trxHtml(v){const c=travCalc(v);if(!c)return '';const N=new Set(c.non);let n=0,k=0;
+  const body=travaux(v).map(b=>`<div class="trxg"><b>${esc(b.title)}</b>${b.lines.map((l,i)=>{const t=l.trim();if(travEnt(l))return `<div class="trxe">${esc(t.replace(/^•\s*/,''))}</div>`;
+    k++;const ok=!N.has(t);if(ok)n++;
+    return `<label class="trxl${/^\s+◦/.test(l)?' sub':''}"><input type="checkbox" data-trx="${esc(t)}" ${ok?'checked':''}><span>${esc(t.replace(/^[•◦]\s*/,''))}<small>${esc(b.src[i]||'')}</small></span></label>`}).join('')}</div>`).join('');
+  return `<details class="trx" data-open="trx" ${degOpen.has('trx')?'open':''}><summary>Choisir les correctifs (${n} retenu${n>1?'s':''} sur ${k})</summary>
+    <p class="muted">Décochez un correctif non pertinent : il est retiré de la liste de travaux et ne revient pas aux mises à jour. Une ligne effacée à la main est décochée de la même façon.</p>${body}</details>`}
 // Décence et permis de louer : liste des destinations d'une photo (tous les désordres, cochés ou non, et les zones photos des rubriques).
 const phDeplSel=(id,i,n)=>`<select data-phmv="${id}" data-i="${i}" aria-label="Déplacer la photo ${n} vers une autre rubrique ou un autre désordre"><option value="">Déplacer vers…</option>${RR(cur).filter(r=>r.items||r.phId).map(r=>`<optgroup label="${esc(r.n+'. '+r.t)}">${(r.items||[]).filter(d=>d.id!==id).map(d=>`<option value="${d.id}">${esc(d.t)}${cur.it[d.id]?.on?'':' (sera coché)'}</option>`).join('')}${r.phId&&r.phId!==id?`<option value="${r.phId}">Photos de la rubrique ${esc(r.t)}</option>`:''}</optgroup>`).join('')}</select>`;
 // Photos ; pour un désordre (d), chaque photo a sa légende et son commentaire.
@@ -4346,7 +4394,8 @@ function render(){
    ${r.gen?`${manq.length?`<div class="banner">Il reste ${nManq} point${nManq>1?'s':''} à renseigner (défaut ou RAS, commentaire d’un sous-constat, type de chauffage, d’eau chaude ou de ventilation) avant de pré-remplir les travaux :
       <div class="row">${manq.map(([x,ds])=>`<button data-act="go" data-v="${x.id}">Rubrique ${x.n} : ${ds.length} point${ds.length>1?'s':''}</button>`).join('')}</div></div>`:''}
      <div class="row" style="margin-bottom:10px"><button class="btn-primary" data-act="gentrav" ${manq.length?'disabled':''}>${svg('sync')}${filled(cur.f.trav)?'Mettre à jour depuis les désordres':'Pré-remplir depuis les désordres'}</button></div>
-     <p class="muted">La liste est générée par thème à partir des désordres cochés et des défauts types. Modifiez-la librement : la mise à jour ajoute seulement les correctifs manquants.</p>
+     <p class="muted">La liste est générée par thème à partir des désordres cochés et des défauts types. Modifiez-la librement : la mise à jour ajoute seulement les correctifs manquants, sauf ceux que vous avez décochés ou effacés.</p>
+     ${trxHtml(cur)}
      <div class="hint">Phrase ajoutée automatiquement au rapport, avant la liste : « ${esc(justifTexte(cur))} »</div>
      <div class="row"><button data-act="ia" ${filled(cur.f.trav)?'':'disabled'}>Relecture IA (Copilot)</button></div>
      <p class="muted">Copie une consigne de relecture, les désordres et la liste de travaux (sans nom ni adresse), puis ouvre Copilot : collez le texte et reprenez ici les corrections retenues.</p>`:''}
@@ -4890,6 +4939,8 @@ document.addEventListener('change',async e=>{
   if(el.dataset.lt!==undefined){lt=el.dataset.lt;return keep()}
   if(el.dataset.psig!==undefined){const f=el.files[0];el.value='';if(!f)return;try{const p=await shrink(f);P.sig={src:p.src,r:p.h/p.w};await saveP();render()}catch(err){toast('Image non importée : '+err.message)}return}
   if(!cur)return;
+  if(el.dataset.trx!==undefined){const t=el.dataset.trx,f=cur.f;f.travNon=travCalc(cur).non.filter(x=>x!==t);f.travGen=(f.travGen||[]).filter(x=>x!==t);
+    if(!el.checked)f.travNon.push(t);if(filled(f.trav))travMaj(cur);save();return keep()}
   if(el.dataset.phmv!==undefined){const to=el.value;if(!to)return;phDepl(cur,el.dataset.phmv,+el.dataset.i,to);save();toast('Photo déplacée');return keep()}
   if(el.dataset.vcp!==undefined)cpLien(el);
   if(isErgo(cur)&&ergoChg(el))return;
@@ -5002,11 +5053,9 @@ document.addEventListener('click',async e=>{
   if(a==='clrpsig'){delete P.sig;saveP();return render()}
   if(a==='clrosig'){delete cur.f[sigKey(cur)];save();return keep()}
   if(a==='gentrav'){
-    const blocks=travaux(cur);
-    if(!blocks.length){toast('Aucun désordre coché : rien à pré-remplir');return}
-    let msg;
-    if(!filled(cur.f.trav)){cur.f.trav=travauxTexte(cur,blocks);msg='Liste de travaux pré-remplie'}
-    else{const m=fusionTravaux(cur.f.trav,blocks);cur.f.trav=m.txt;msg=m.added?`${m.added} correctif${m.added>1?'s':''} ajouté${m.added>1?'s':''}`:'Liste déjà à jour'}
+    const m=travMaj(cur);
+    if(!m){toast('Aucun désordre coché : rien à pré-remplir');return}
+    const msg=m.vide?'Liste de travaux pré-remplie':m.added?`${m.added} correctif${m.added>1?'s':''} ajouté${m.added>1?'s':''}`:'Liste déjà à jour';
     if(!isPdl(cur)){const rap=new Set(cur.f.rap||[]);RAP.forEach(([t,f])=>{if(f(cur))rap.add(t)});cur.f.rap=[...rap]}
     save();keep();toast(msg);return;
   }
