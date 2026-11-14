@@ -31,7 +31,9 @@
   --danger:#f28b7d; --danger-bg:#3a1d1a; --warn:#e8b45e; --warn-bg:#3a2c14; --ok:#6fcb98; --ok-bg:#163223;
   color-scheme:dark}
 *{box-sizing:border-box}
-body{background:var(--bg);color:var(--fg);font:16px/1.45 var(--f-body)}
+body{background:var(--bg);color:var(--fg);font:1rem/1.45 var(--f-body)}
+/* Taille du texte « Grand » (Paramètres) : toutes les tailles sont en rem. */
+html.grand{font-size:115%}
 .wrap{max-width:860px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 96px}
 h1,h2,h3{font-family:var(--f-display);font-weight:700;text-wrap:balance;margin:0;line-height:1.2}
 h1{font-size:1.5rem}h2{font-size:1.25rem}h3{font-size:1.1rem}
@@ -139,7 +141,7 @@ button.armed{background:var(--danger);color:#fff;border-color:var(--danger)}
 /* Bandeau aux couleurs SOLiHA, identique en mode sombre (blanc sur #1b6d96 : contraste 5,9:1). */
 .home-head .brand{display:flex;align-items:center;gap:var(--sp-3);min-width:0}
 .home-head .appname{color:#fff;font-weight:700;font-size:clamp(1.6rem,7vw,2.2rem);line-height:1.1}
-@media (max-width:480px){.home-head .logo{height:42px}}
+@media (max-width:480px){.home-head .logo{height:42px}.home-head{gap:var(--sp-2);padding:var(--sp-3);flex-wrap:wrap}.home-head .hd-act{margin-left:auto}.home-head .appname{font-size:1.35rem}.hd-av .avatar{width:44px;height:44px}}
 .home-head .logo{height:52px;width:auto;display:block;background:#fff;border-radius:var(--r-sm);padding:4px 6px}
 .home-head .avatar{background:#fff;color:#1b6d96;border-color:#fff}
 .avatar{width:48px;height:48px;border-radius:50%;background:var(--chip);color:var(--accent-strong);font-weight:700;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);padding:0;min-height:0}
@@ -397,6 +399,8 @@ label.chip.erb{border-radius:10px;width:100%;align-items:flex-start}.erpad{heigh
 /* Case obligatoire : astérisque rouge ; texte réservé aux lecteurs d’écran. */
 .oblig{color:var(--danger)}
 .sronly{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+/* Accueil : Paramètres et Mon profil restent côte à côte sur téléphone. */
+.hd-av{display:inline-flex;gap:8px}
 
 </style>
 
@@ -1232,6 +1236,7 @@ const filled=x=>Array.isArray(x)?x.length>0:x!==undefined&&x!==null&&String(x).t
 // [clé, libellé, type, options, aide, condition d'affichage]
 const ADMIN=[
  ['h','Demande'],
+ ['soliact','N° dossier SOLIACT','t'],
  ['dem','Commanditaire','r',Object.keys(COM)],
  ['dateDem','Date de la demande','d'],
  ['dateVis','Date de la visite','d'],['heureVis','Heure de la visite','tm'],
@@ -1638,6 +1643,7 @@ console.assert(JSON.stringify(numVoie('12 Rue Chalon'))==='{"numero":"12","voie"
   &&JSON.stringify(numVoie('12 avenue Gambetta'))==='{"numero":"12","voie":"avenue Gambetta"}'&&JSON.stringify(numVoie('Impasse de l’Espérance'))==='{"numero":"","voie":"Impasse de l’Espérance"}','numVoie');
 const ADMIN_PDL=[
  ['h','Demande'],
+ ['soliact','N° dossier SOLIACT','t'],
  ['commune','Commune','r',Object.keys(COMMUNES)],
  ['typeVis','Type de visite','r',['Visite de contrôle','Contre-visite']],
  ['refDos','Référence dossier (N°)','t'],
@@ -1666,6 +1672,15 @@ const COMM_PDL=[
 // Ordre des colonnes par défaut ; une ligne d'en-tête collée avec la ligne le remplace (mémorisé par commune dans P.tabH).
 const THO_ENTETE='Année|N° DOSSIER|Autorisation|Validiation de l\'autorisation|Transfert de l\'autorisation|STATUT|NOM / Prénom|ADRESSE|CP|VILLE|Adresse Mail propriétaire|Tel. Propriétaire|REPRESENTANT MORAL|GESTIONNAIRE|Mail du gestionnaire|Téléphone du gestionnaire|N° rue|Nom rue|N° appartement & étage|REGIME JURIDIQUE|INDIVIDUEL / COLLECTIF|Période de construction|VACANT / LOUE|Nb de pièces|TYPOLOGIE|SURFACE|VIDE / MEUBLE|Etat du logement|BATI / STRUCTURE|PARTIES COLLECTIVES|ORGANISATION|ELECTRICITE / GAZ|PLOMBERIE / SANITAIRES|CHAUFFAGE|VENTILATION|GARDE CORPS|HUMIDITE / CHAMPIGNONS|PLOMB/ AMIANTE|PRECARITE ENERGETIQUE|Dossier rattrapé suite à la requête CAF|Date dépôt|Date récepissé|Date visite|Rapport visite|Date décision|LR AR|Lettre Verte|Envoi par mail arrêté (propriétaire)|Mail nom agence|Mail agence date|Remarques|Envoi|Retour|Envoi par mail CAF|Envoi par mail DDT|Envoi par mail MSA|Date réception pièces complémentaires|date envoi demande rdv soliha|date contre-visite|date rapport contre-visite|Date attestation de levée de réserve + courrier notif|date envoi réponse proprio|date envoi mandataire|Date|Nom - Nouveau propriétaire|Adresse|Visite Prédiag|Réalisation Prédiagnostic|Montant|Date|N° facture|Contre visite avec déplacement|Constat sur facture + photos|Montant|Date|N° facture|MANDAT|BORDEREAU|DATE|VISA CIRIL'.split('|');
 const PDL_TAB={'Thouars':THO_ENTETE,'Saint-Maixent-l’École':'SOLIACT|Année|N° DOSSIER|Ref.cad.|Etat du dossier|nom du demandeur (propriétaire)|n° d\'autorisation|STATUT|NOM / Prénom|ADRESSE|CP|VILLE|Tel. Propriétaire|REPRESENTANT MORAL|GESTIONNAIRE|Tel. Gestionnaire|mail|N° rue|Nom rue|N° appartement & étage|REGIME JURIDIQUE|INDIVIDUEL / COLLECTIF|Période de construction|VACANT / LOUE|Nb de pièces|TYPOLOGIE|SURFACE|VIDE / MEUBLE|Etat du logement|BATI / STRUCTURE|PARTIES COLLECTIVES|ORGANISATION|ELECTRICITE / GAZ|PLOMBERIE / SANITAIRES|CHAUFFAGE|VENTILATION|GARDE CORPS|HUMIDITE / CHAMPIGNONS|PLOMB/ AMIANTE|PRECARITE ENERGETIQUE|Dossier rattrapé suite à la requête CAF|Date dépôt|Date récepissé|date réception mail à Soliha|Date visite|Année Visite|Technicien SOLIHA|Rapport visite|Date décision|DATE CONTRÔLE|RAPPORT CONTRÔLE|LR AR|Lettre Verte|Mail nom agence ou propriétaire|Mail date|Dernier délai pour relance avant la levée de réserve|Remarques|Envoi|Retour|Envoi par mail CAF|Envoi par mail DDT|Envoi par mail MSA|Délai traitement|Date réception pièces complémentaires|date envoi demande rdv soliha|date contre-visite|date rapport contre-visite|Date attestation de levée de réserve + courrier notif|date envoi réponse proprio|date envoi mandataire|Date|Nom - Nouveau propriétaire|Adresse|N° BC|Visite Prédiag|Prédiagnostic|Montant|Date|N° facture|N° BC|Contre visite avec déplacement|Montant|Date|N° facture|Constat sur facture + photos|contrôle conformité|Montant|Date|N° facture|MANDAT|BORDEREAU|DATE|VISA'.split('|')};
+// Fichier de sauvegarde d'un dossier : « SOLIACT 12345 - DEC-2026-JM-0042 - 2026-11-14.json » ; sans date pour la sauvegarde automatique.
+const soliactOf=v=>String((v.type==='loc'?v.loc?.proprio?.soliact:v.f?.soliact)||'').trim();
+const bakNom=(v,date)=>{const n=x=>String(x||'').replace(/[\/\:*?"<>|\r\n\t]+/g,'-').replace(/\s+/g,' ').trim(),s=n(soliactOf(v));return [s?'SOLIACT '+s:'SOLIACT sans n°',n(v.num||v.id),date].filter(Boolean).join(' - ')+'.json'};
+console.assert(bakNom({num:'DEC-2026-JM-0042',f:{soliact:' 12345 '}},'2026-11-14')==='SOLIACT 12345 - DEC-2026-JM-0042 - 2026-11-14.json'&&bakNom({num:'DEG-2026-JM-0001',f:{}})==='SOLIACT sans n° - DEG-2026-JM-0001.json'
+  &&bakNom({type:'loc',num:'LOC-2026-JM-0003',f:{},loc:{proprio:{soliact:'A/7'}}})==='SOLIACT A-7 - LOC-2026-JM-0003.json'&&bakNom({id:'x1',f:{soliact:'1:2'}})==='SOLIACT 1-2 - x1.json','ASSERT FAIL bakNom');
+// Paramètres : oublie l'en-tête collé d'une commune (retour à l'ordre par défaut de PDL_TAB).
+const tabHOte=(p,c)=>{if(p.tabH){delete p.tabH[c];if(!Object.keys(p.tabH).length)delete p.tabH}};
+(()=>{const p={tabH:{Thouars:['a'],'Saint-Maixent-l’École':['b']}};tabHOte(p,'Thouars');const u=!p.tabH.Thouars&&p.tabH['Saint-Maixent-l’École'];tabHOte(p,'Saint-Maixent-l’École');const q={};tabHOte(q,'Thouars');
+  console.assert(u&&!('tabH' in p)&&!('tabH' in q),'ASSERT FAIL tabHOte')})();
 const nrmH=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
 // Texte copié depuis Excel : cellules séparées par des tabulations, cellule sur plusieurs lignes entre guillemets.
 function tsv(s){const L=[[]];let c='',q=false;
@@ -1689,7 +1704,7 @@ function pdlLigne(txt,entete=THO_ENTETE){
     if(jH>=0&&jR>=0){r=jR>=jH?r.slice(jR-jH):[...Array(jH-jR).fill(''),...r];break}}
   const g={};H.forEach((h,j)=>{const k=nrmH(h);if(!(k in g))g[k]=(r[j]||'').replace(/\s+/g,' ').trim()});
   const f={},set=(k,x)=>{if(x)f[k]=x},G=(...c)=>c.map(k=>g[k]).find(Boolean)||'',tel=(p,x)=>set(p+(/^(\+33 ?|0)[67]/.test(x)?'TelP':'TelF'),x),num=x=>(x||'').replace(',','.').match(/\d+(\.\d+)?/)?.[0];
-  set('refDos',g['n° dossier']);
+  set('refDos',g['n° dossier']);set('soliact',g['soliact']);
   for(const[k,c]of[['dateDepot','date depot'],['dateDepot','date recepisse'],['dateDem','date reception mail a soliha'],['dateDem','date envoi demande rdv soliha'],['dateVis','date visite'],['dateRap','rapport visite'],['cvDateVis','date contre-visite'],['cvDateRap','date rapport contre-visite']])if(!f[k])set(k,isoD(g[c]||''));
   if(f.cvDateVis)f.typeVis='Contre-visite';
   [f.pNom,f.pPrenom]=nomPre(G('nom / prenom','nom du demandeur (proprietaire)'));
@@ -1718,7 +1733,7 @@ function pdlLigne(txt,entete=THO_ENTETE){
   at('SOLIACT','12');at('Année','2026');at('N° DOSSIER','SME-14');at('nom du demandeur (propriétaire)','M. MARTIN Luc');at('CP','44 000');at('Date récepissé','22/10/2026');at('mail','l@m.fr');at('Tel. Gestionnaire','06 11 11 11 11');
   at('date réception mail à Soliha','02/10/2026');at('date envoi demande rdv soliha','05/10/2026');at('DATE CONTRÔLE','09/10/2026');at('N° rue','4');at('Nom rue','rue Taupineau');
   const m=pdlLigne('\t'+c.join('\t'),S).f;
-  console.assert(S.length===93&&m.refDos==='SME-14'&&m.pNom==='MARTIN'&&m.pPrenom==='Luc'&&m.pCp==='44000'&&m.dateDepot==='2026-10-22'&&m.pMail==='l@m.fr'&&m.mTelP==='06 11 11 11 11'&&m.dateDem==='2026-10-02'&&m.adresse==='4 rue Taupineau'&&!m.dateVis&&!m.typeVis,'pdlLigne Saint-Maixent')})();
+  console.assert(S.length===93&&m.refDos==='SME-14'&&m.pNom==='MARTIN'&&m.pPrenom==='Luc'&&m.pCp==='44000'&&m.dateDepot==='2026-10-22'&&m.pMail==='l@m.fr'&&m.mTelP==='06 11 11 11 11'&&m.dateDem==='2026-10-02'&&m.adresse==='4 rue Taupineau'&&m.soliact==='12'&&!m.dateVis&&!m.typeVis,'pdlLigne Saint-Maixent')})();
 // Retour vers le tableau de suivi : blocs de colonnes qui se suivent, collés dans la ligne du dossier (coller une ligne entière effacerait
 // les autres colonnes). Thème du tableau ← lignes de la visite ; « X » si l'une est en défaut. Les nuisibles n'ont pas de colonne.
 const PDL_THEMES=[['bati / structure',['stab','degr','degint']],['parties collectives',['pc']],['organisation',['surf','ecl']],['electricite / gaz',['elec','gaz']],
@@ -2219,6 +2234,7 @@ console.assert((d=>d.f.pNom==='DURAND Paul'&&d.f.pStat==='Propriétaire bailleur
   (degDepuis({f:{op:'OPAH',dateVis:'2026-11-03'}},{cb:'k1',f:{pNom:'DURAND',pPrenom:'Paul',pAdr:'1 av B',pCp:'79000',pVille:'Niort',adresse:'3 rue A',cp:'79100',ville:'Thouars',dateVis:'2026-10-09'}})),'ASSERT FAIL degDepuis');
 const ADMIN_DEG=[
   ['h','Opération et visite'],
+  ['soliact','N° dossier SOLIACT','t'],
   ['op','Opération (imprimée sur la page de garde)','dl',OPERATIONS],
   ['dateVis','Date de visite *','d'],
   ['pNom','Propriétaire (nom, société ou indivision)','t'],
@@ -2805,7 +2821,7 @@ const ADEF={
 const AUD_GEN=[['annee','Année de construction','n'],['shab','Surface habitable (m²)','d'],['periode','Période (si l’année est inconnue)','c',AC('Avant 1948','1948-1974','1975-1988','1989-2000','2001-2012','Après 2012'),{si:e=>!e.annee}],
  ['niveaux','Nombre de niveaux','c',AC('1','2','3','4 et +')],['mitoy','Mitoyenneté','c',AC('Aucune','1 côté','2 côtés')]];
 const AUD_ENV=[['tissu','Tissu','c',AC('Centre ancien','Faubourg','Lotissement','Hameau','Isolé')]];
-const AUD_ADM=[['h','Visite'],['dateVis','Date de visite','d'],['dispositif','Dispositif','t'],['h','Logement'],['adresse','Adresse','t'],['cp','Code postal','t'],['ville','Ville','t'],['parcelle','Parcelle cadastrale (si connue)','t'],
+const AUD_ADM=[['h','Visite'],['soliact','N° dossier SOLIACT','t'],['dateVis','Date de visite','d'],['dispositif','Dispositif','t'],['h','Logement'],['adresse','Adresse','t'],['cp','Code postal','t'],['ville','Ville','t'],['parcelle','Parcelle cadastrale (si connue)','t'],
  ['h','Propriétaire'],['pNom','Nom','t'],['pPrenom','Prénom','t'],['pAdr','Adresse','t'],['pCp','Code postal','t'],['pVille','Ville','t'],['pTel','Téléphone','tel'],['pMail','E-mail','email'],
  ['consent','Consentement à la transmission des données','r',['Consentement fourni','Absence de consentement','Consentement non requis']],['h','Occupant (si différent)'],['occNom','Nom','t'],['occTel','Téléphone','tel']];
 const AUD_COLS=['murs','pb','plaf','baies','portes','chauf','ecs','vent'];
@@ -3482,7 +3498,7 @@ function ergoView(app,bar,bi){const v=cur,f=v.f;bar.hidden=false;
      <div class="tiles">${ERGO_SECS.map(tile).join('')}${(()=>{const C=ergoControles(v),k=C.filter(c=>c[0]==='ko').length,w=C.length-k;return `<button class="tile" data-act="go" data-v="esynth"><img class="ic" src="${ICO.synth}" alt=""><span class="num">6. SYNTHÈSE</span><span class="lbl">Contrôle et rapport PDF</span>${pills(k||w?[...(k?[[k+' à corriger','danger']]:[]),...(w?[[w+' à vérifier','warn']]:[])]:[['Prêt','ok']])}</button>`})()}</div>`;
     bi.innerHTML=`<button data-act="list">Terminé</button><button class="btn-primary" data-act="pdf">${svg('pdf')}Rapport PDF</button>`;return true}
   if(view==='edem'){const [p1,p2]=ergoPers(v),age=i=>{const a=ergoAge(f['naiss'+i],f.dateVis);return a===null?'':`Âge : ${a} ans`};
-    const F=[['h','Demandeur(s)'],['noms','Nom(s) / prénom(s) du/des demandeur(s)','t'],['tel','Téléphone','tel'],['mail','E-mail','email'],
+    const F=[['h','Demandeur(s)'],['soliact','N° dossier SOLIACT','t'],['noms','Nom(s) / prénom(s) du/des demandeur(s)','t'],['tel','Téléphone','tel'],['mail','E-mail','email'],
       ['adresse','Adresse du logement','t'],['cp','Code postal','t'],['ville','Commune','t'],
       ['presents','Personnes présentes lors de la visite','ta'],['dateVis','Visite réalisée le','d'],
       ['dateDiag','Diagnostic réalisé le','d',null,f.dateVis&&f.dateDiag&&f.dateDiag<f.dateVis?'⚠ Le diagnostic est antérieur à la visite.':''],
@@ -3962,7 +3978,7 @@ const isFin=v=>v.type==='fin';
 const FIN_ST=['Réalisé','Partiel','Non réalisé','Sans objet'];
 const FIN_STC={'Réalisé':[[46,125,79],[225,242,231]],'Partiel':[[138,83,0],[253,241,220]],'Non réalisé':[[180,35,24],[251,233,231]],'Sans objet':[[68,83,95],[236,240,243]]};
 const FIN_CONCL=['Travaux conformes','Travaux réalisés avec réserves','Travaux non conformes'];
-const FIN_ADM=[['h','Visite'],['dateVis','Date de la visite de fin de travaux','d'],['presents','Personnes présentes','ta'],['entreprises','Entreprises, devis et factures vus','ta'],
+const FIN_ADM=[['h','Visite'],['soliact','N° dossier SOLIACT','t'],['dateVis','Date de la visite de fin de travaux','d'],['presents','Personnes présentes','ta'],['entreprises','Entreprises, devis et factures vus','ta'],
   ['h','Logement'],['pNom','Propriétaire','t'],['adresse','Adresse','t'],['cp','Code postal','t'],['ville','Ville','t']];
 const finLn=(cat,sous,lib,z)=>({id:Math.random().toString(36).slice(2,8),cat:cat||'',sous:sous||'',lib,st:'',conf:false,com:'',...(z?{z}:{})});
 // Texte de travaux (décence, permis de louer, synthèse d'une grille) en lignes : « 1. Titre » = catégorie, « • » ou « - » = un travail,
@@ -4110,7 +4126,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.14-1947';
+const APP_VER='2026.11.14-2246';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -4135,6 +4151,7 @@ const IC={
  ok:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 10"/>',
  sync:'<path d="M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5"/>',
  inst:'<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+ gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/><circle cx="12" cy="12" r="6.5"/>',
  warn:'<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17v.5"/>'
 };
 const svg=k=>`<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${IC[k]}</svg>`;
@@ -4247,12 +4264,16 @@ const exSel=new Set();let exMairies=true;
 // Espace de stockage (estimation du navigateur) et protection contre l'effacement automatique.
 let STO={};
 const tailleTxt=n=>n<1e6?Math.max(1,Math.round(n/1e3))+' Ko':n>=1e9?(n/1e9).toLocaleString('fr-FR',{maximumFractionDigits:1})+' Go':(n/1e6).toLocaleString('fr-FR',{maximumFractionDigits:n<1e7?1:0})+' Mo';
+// Barre d'espace de stockage (écrans Sauvegarde et Paramètres) ; vide si le navigateur ne donne pas l'estimation.
+const stoHtml=()=>STO.q?`<div class="sto"><div class="eyebrow">Espace de stockage</div><div class="pbar${stoPlein()?' plein':''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(100*STO.u/STO.q)}" aria-label="Espace de stockage utilisé"><span style="width:${Math.max(1,Math.round(100*STO.u/STO.q))}%"></span></div>
+      <div>${tailleTxt(STO.u)} utilisés sur environ ${tailleTxt(STO.q)} disponibles</div>
+      <div class="muted">${STO.p?'Stockage protégé : le navigateur ne supprimera pas les données.':STO.p===false?'Stockage non protégé : '+conseilSto()+` <button data-act="persist">Réessayer</button>`:''}</div></div>`:'';
 const stoPlein=()=>STO.q>0&&(STO.u/STO.q>=.85||STO.q-STO.u<100e6);
 // Chrome protège le stockage d'un site mis en favori (vérifié sur Android) ; sur iPhone, l'ajout à l'écran d'accueil.
 const IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1;
 const conseilSto=()=>IOS?'Ajoutez l’application à l’écran d’accueil (Partager, puis « Sur l’écran d’accueil ») et sauvegardez régulièrement.':'Ajoutez ce site aux favoris de Chrome (☆), puis touchez Réessayer.';
 async function majStockage(){try{const e=await navigator.storage?.estimate?.(),p=await navigator.storage?.persisted?.(),n={u:e?.usage||0,q:e?.quota||0,p};
-  const chg=Math.round(n.u/1e6)!==Math.round((STO.u||0)/1e6)||n.p!==STO.p||n.q!==STO.q;STO=n;if(chg&&['list','sauvegarde'].includes(view))keep()}catch(e){}}
+  const chg=Math.round(n.u/1e6)!==Math.round((STO.u||0)/1e6)||n.p!==STO.p||n.q!==STO.q;STO=n;if(chg&&['list','sauvegarde','param'].includes(view))keep()}catch(e){}}
 // Listes de dossiers : recherche et filtre par type.
 let lq='',lt='',lf='',hq='';  // lf : filtre venu d'une case de l'accueil ('prod' rapports à produire, 'mois' rapports du mois) ; hq : recherche de l'accueil
 // Ligne collée depuis le tableau de suivi du permis de louer (informations administratives).
@@ -4408,6 +4429,9 @@ function phBlock(id,s,nums,need,d){const mv=d||RR(cur).some(r=>r.phId===id);retu
       <div class="cams"><label class="btn cam">${svg('cam')}Prendre une photo<input type="file" accept="image/*" capture="environment" data-photo="${id}"></label>
       <label class="btn cam">${svg('plus')}Depuis la galerie<input type="file" accept="image/*" multiple data-photo="${id}"></label></div></div></div>`}
 // Tableau de bord d'un dossier (retour vers la liste) : bouton « Sauvegarder » (fsSave).
+const pChoix=(k,l,L,aide)=>`<div class="field full"><span>${esc(l)}</span><div class="chips" role="radiogroup" aria-label="${esc(l)}">${L.map(o=>`<label class="chip"><input type="radio" name="p_${k}" data-p="${k}" value="${esc(o)}" ${(P[k]||L[0])===o?'checked':''}>${esc(o)}</label>`).join('')}</div>${aide?`<div class="hint">${esc(aide)}</div>`:''}</div>`;
+// Apparence et taille du texte choisies dans Paramètres (sans choix : réglage de l'appareil, texte normal).
+function appliqueAff(){const d=document.documentElement,t={Clair:'light',Sombre:'dark'}[P.theme];if(t)d.dataset.theme=t;else delete d.dataset.theme;d.classList.toggle('grand',P.texte==='Grand')}
 function topbar(title,sub,back,logo){const sv=cur&&back==='list'&&view==='dash'?`<button class="tb-sv${sauve(cur)?' ok':''}" data-act="fsave">${svg(sauve(cur)?'ok':'save')}<span>${sauve(cur)?'Sauvegardé':'Sauvegarder'}</span></button>`:'';
   return `<div class="top">${back?`<button class="btn-icon" data-act="${back}" aria-label="Retour">${svg('back')}</button>`:''}<div class="grow"><h1>${esc(title)}</h1>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>${sv}${logo?`<img class="com" src="${logo}" alt="${esc(isPdl(cur)?cur.f.commune:cur.f.dem)}">`:''}</div>`}
 const cpv=v=>[v.f.cp,v.f.ville].filter(Boolean).join(' ');
@@ -4494,7 +4518,8 @@ function render(){
         <button class="hd-b" data-act="go" data-v="carnet">${svg('building')}<span>Carnet d’adresses</span></button>
         <button class="hd-b" data-act="go" data-v="termines">${svg('archive')}<span>Dossiers terminés · ${visits.length-enc}</span></button>
         ${instEv?`<button class="hd-b" data-act="install">${svg('inst')}<span>Installer</span></button>`:''}
-        <button class="avatar" data-act="go" data-v="profil" aria-label="Mon profil">${ini?esc(ini):svg('admin')}</button></div></div>
+        <span class="hd-av"><button class="avatar" data-act="go" data-v="param" aria-label="Paramètres" title="Paramètres">${svg('gear')}</button>
+        <button class="avatar" data-act="go" data-v="profil" aria-label="Mon profil">${ini?esc(ini):svg('admin')}</button></span></div></div>
      ${P.nom?'':`<div class="banner">Renseignez votre profil (nom, téléphone, e-mail, signature) : il figure sur chaque rapport. <button data-act="go" data-v="profil">Remplir mon profil</button></div>`}
      ${rap?`<div class="banner tdb-bak">${P.lastBak?'Dernière sauvegarde '+ilya(P.lastBak):'Aucune sauvegarde'} · ${rap.length} dossier${rap.length>1?'s':''} non sauvegardé${rap.length>1?'s':''}. Ils ne sont enregistrés que sur cet appareil. <button data-act="bak">Sauvegarder maintenant</button></div>`:''}
      ${stoPlein()?`<div class="banner">Espace presque plein (${Math.round(100*STO.u/STO.q)} %). Sauvegardez puis supprimez des dossiers terminés pour pouvoir ajouter des photos. <button data-act="go" data-v="sauvegarde">Voir l’espace utilisé</button></div>`:''}
@@ -4530,9 +4555,7 @@ function render(){
     const L=[...visits].sort((a,b)=>b.updated-a.updated),n=L.filter(v=>exSel.has(v.id)).length;
     app.innerHTML=`${topbar('Sauvegarde et import','Visites et carnet des mairies','list')}
      <p class="muted">Cochez les dossiers à exporter. La sauvegarde (.json) sert à transférer des dossiers vers un PC ou à les partager avec un collègue. L’import accepte aussi les dossiers (.json) enregistrés avec l’ancien « Simulateur Loc’Avantages ».</p>
-     ${STO.q?`<div class="sto"><div class="eyebrow">Espace de stockage</div><div class="pbar${stoPlein()?' plein':''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(100*STO.u/STO.q)}" aria-label="Espace de stockage utilisé"><span style="width:${Math.max(1,Math.round(100*STO.u/STO.q))}%"></span></div>
-      <div>${tailleTxt(STO.u)} utilisés sur environ ${tailleTxt(STO.q)} disponibles</div>
-      <div class="muted">${STO.p?'Stockage protégé : le navigateur ne supprimera pas les données.':STO.p===false?'Stockage non protégé : '+conseilSto()+` <button data-act="persist">Réessayer</button>`:''}</div></div>`:''}
+     ${stoHtml()}
      <div class="hint">Pour transférer une sauvegarde vers un téléphone, utilisez Quick Share, le Bluetooth ou un câble USB, pas Outlook, Teams ni OneDrive professionnel : ces applications chiffrent le fichier, qui devient impossible à importer.</div>
      <div class="row" style="margin-bottom:12px"><button data-act="sel" data-k="all">Tout cocher</button><button data-act="sel" data-k="encours">Dossiers en cours</button><button data-act="sel" data-k="nonsauv">Non sauvegardés</button><button data-act="sel" data-k="none">Tout décocher</button></div>
      <div class="items">${L.length?L.map(v=>`<label class="item ${exSel.has(v.id)?'on':''}" style="display:flex;gap:12px;align-items:flex-start;padding:12px 14px;cursor:pointer">
@@ -4541,7 +4564,7 @@ function render(){
        <span class="muted" style="display:block;font-size:.9rem">${esc(where(v)||'Adresse non renseignée')}${v.f.dateVis?' · visite le '+esc(frDate(v.f.dateVis)):''}${v.pdfAt?' · terminé':''}${v.num?' · N° '+esc(v.num):''} · ${tailleTxt(JSON.stringify(v).length)} · ${sauve(v)?'sauvegardé le '+new Date(v.savedAt).toLocaleDateString('fr-FR'):'<b style="color:var(--warn)">non sauvegardé</b>'}</span></span></label>`).join('')
       :'<div class="empty">Aucun dossier sur cet appareil.</div>'}</div>
      <label class="chip" style="margin-top:14px"><input type="checkbox" data-selmr ${exMairies?'checked':''}>Inclure le carnet d’adresses (${Object.keys(CARNET.l).length+Object.keys(MAIRIES.l).length})</label>
-     <div class="links"><label class="btn">${svg('plus')}<span class="grow">Importer une sauvegarde</span><input type="file" accept=".json,application/json" data-import hidden></label></div>`;
+     <div class="links"><label class="btn">${svg('plus')}<span class="grow">Importer une sauvegarde</span><input type="file" accept=".json,application/json" multiple data-import hidden></label></div>`;
     bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="export">${svg('pdf')}${n?`Exporter ${n} dossier${n>1?'s':''}`:'Exporter'}</button>`;
     return;
   }
@@ -4594,6 +4617,25 @@ function render(){
     bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="zipcour">${svg('pdf')}Tous les courriers (.zip)</button>`;
     return;
   }
+  if(view==='param'){
+    const tab=Object.keys(PDL_TAB).map(c=>`<div class="row"><span class="grow"><b>${esc(c)}</b> : ${P.tabH?.[c]?`ordre collé mémorisé (${P.tabH[c].length} colonnes)`:'ordre par défaut'}</span>${P.tabH?.[c]?`<button data-act="tabhraz" data-c="${esc(c)}">Revenir à l’ordre par défaut</button>`:''}</div>`).join('');
+    app.innerHTML=`${topbar('Paramètres','Réglages de cet appareil',cur?'dash':'list')}
+     <div class="form">
+      ${pChoix('theme','Apparence',['Automatique','Clair','Sombre'],'Automatique : suit le réglage clair ou sombre de l’appareil.')}
+      ${pChoix('texte','Taille du texte',['Normal','Grand'],'Agrandit le texte de tous les écrans. Les rapports PDF ne changent pas.')}
+      ${pChoix('ergoRet','Rapport ergothérapeute : colonne « Travaux retenus »',['Oui','Non'])}
+      <div class="field full"><span>Loc’Avantages</span><div><button data-act="ldopen">Dispositifs et règles de calcul</button></div></div>
+      <div class="field full"><span>Mode administrateur (Loc’Avantages)</span>${adminHtml()}</div>
+      <div class="field full"><span>Sauvegarde automatique</span>${!('showDirectoryPicker' in window)?'<span class="muted">Non disponible sur ce navigateur : utilisez le bouton « Sauvegarder » de chaque dossier.</span>'
+       :FSDIR?`<span>Dossier de sauvegarde : <b>${esc(FSDIR.name)}</b>. Chaque dossier y est enregistré (<i>n° du dossier</i>.json) quand vous le quittez, et après chaque PDF ou courrier.</span><div class="row"><button data-act="fsdir">Changer de dossier</button><button data-act="fsdirx">Arrêter</button></div>`
+       :`<span class="muted">Choisissez une fois un dossier de l’appareil (ex. Documents/SoliTech) : chaque dossier y sera enregistré automatiquement.</span><div class="row"><button data-act="fsdir">Choisir le dossier</button></div>`}</div>
+      <div class="field full">${stoHtml()||'<span>Espace de stockage</span><span class="muted">Non communiqué par ce navigateur.</span>'}<div class="row"><button data-act="go" data-v="sauvegarde">Sauvegarde et import</button></div></div>
+      <div class="field full"><span>Tableaux de suivi du permis de louer (ordre des colonnes)</span>${tab}</div>
+      <div class="field full"><span>Version</span><span>Version installée : <b>${esc(APP_VER)}</b></span><div class="row"><button data-act="majapp">${svg('sync')}Rechercher une mise à jour</button></div></div>
+     </div>`;
+    bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="${cur?'dash':'list'}">Terminé</button>`;
+    return;
+  }
   if(view==='profil'){
     app.innerHTML=`${topbar('Mon profil','Enregistré sur cet appareil, repris sur chaque rapport',cur?'dash':'list')}
      <div class="form">
@@ -4601,17 +4643,11 @@ function render(){
       <div class="field"><span>Qualité (ex. : technicien habitat)</span><input id="p_qual" type="text" data-p="qual" value="${esc(P.qual)}"></div>
       <div class="field"><span>Téléphone</span><input id="p_tel" type="tel" data-p="tel" value="${esc(P.tel)}"></div>
       <div class="field"><span>E-mail</span><input id="p_mail" type="email" data-p="mail" value="${esc(P.mail)}"></div>
-      ${[['agence','Agence (rapport ergothérapeute : bloc « Accompagnateur AMO »)',['Deux-Sèvres (79)','Charente-Maritime (17)']],['ergoRet','Rapport ergothérapeute : colonne « Travaux retenus »',['Oui','Non']]].map(([k,l,L])=>
-        `<div class="field full"><span>${esc(l)}</span><div class="chips" role="radiogroup" aria-label="${esc(l)}">${L.map(o=>`<label class="chip"><input type="radio" name="p_${k}" data-p="${k}" value="${esc(o)}" ${(P[k]||L[0])===o?'checked':''}>${esc(o)}</label>`).join('')}</div></div>`).join('')}
-      <div class="field full"><span>Loc’Avantages</span><div><button data-act="ldopen">Dispositifs et règles de calcul</button></div></div>
-      <div class="field full"><span>Mode administrateur (Loc’Avantages)</span>${adminHtml()}</div>
+            ${pChoix('agence','Agence',['Deux-Sèvres (79)','Charente-Maritime (17)'])}
       <div class="field full"><span>Signature : signez au doigt ou importez une image scannée</span><canvas class="pad" id="pad" aria-label="Zone de signature de l'enquêteur"></canvas>
        <div class="row"><button data-act="clrpsig">Effacer</button><label class="btn">Importer une image<input type="file" accept="image/*" data-psig hidden></label></div></div>
-      <div class="field full"><span>Sauvegarde automatique</span>${!('showDirectoryPicker' in window)?'<span class="muted">Non disponible sur ce navigateur : utilisez le bouton « Sauvegarder » de chaque dossier.</span>'
-       :FSDIR?`<span>Dossier de sauvegarde : <b>${esc(FSDIR.name)}</b>. Chaque dossier y est enregistré (<i>n° du dossier</i>.json) quand vous le quittez, et après chaque PDF ou courrier.</span><div class="row"><button data-act="fsdir">Changer de dossier</button><button data-act="fsdirx">Arrêter</button></div>`
-       :`<span class="muted">Choisissez une fois un dossier de l’appareil (ex. Documents/SoliTech) : chaque dossier y sera enregistré automatiquement.</span><div class="row"><button data-act="fsdir">Choisir le dossier</button></div>`}</div>
-     </div>`;
-    app.insertAdjacentHTML('beforeend',`<p class="muted ver">Version ${esc(APP_VER)}</p>`);
+     </div>
+     <div class="row"><button data-act="go" data-v="param">${svg('gear')}Paramètres de l’application</button></div>`;
     initPad(P.sig?.src,(src,r)=>{P.sig={src,r};saveP()});
     bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="${cur?'dash':'list'}">Terminé</button>`;
     return;
@@ -5240,7 +5276,7 @@ document.addEventListener('input',e=>{
   if(el.dataset.lliste&&ldEd){ldSet(el.dataset.lliste,el.value.split('\n').map(x=>x.trim()).filter(Boolean));return}
   if(el.dataset.lrestr&&ldEd){const [i,k,j]=el.dataset.lrestr.split('.'),r=ldEd.rues.restr[Object.keys(ldEd.rues.restr)[+i]],v=k==='texte'?el.value:parseInt(el.value,10)||0;if(j!=null)r[k][+j]=v;else r[k]=v;return}
   if(el.dataset.lchoix!==undefined&&ldEd){ldSet(el.dataset.lchoix+'.choix',el.value.split('\n').map(x=>x.trim()).filter(Boolean));return}
-  if(el.dataset.p){P[el.dataset.p]=el.value.trim();saveP();return}
+  if(el.dataset.p){P[el.dataset.p]=el.value.trim();saveP();if(['theme','texte'].includes(el.dataset.p))appliqueAff();return}
   if(el.dataset.mr){const m=MAIRIES.l[el.dataset.mr];if(m){m[el.dataset.mk]=el.value;m.maj=today();saveMairies()}return}
   if(el.dataset.cf){const c=CARNET.l[el.dataset.cf];if(c){c[el.dataset.ck]=el.value.trim();c.maj=today();saveCarnet();cbDL()}return}
   if(el.id==='cbq'){cbQ=el.value;$('#cblist').innerHTML=cbListe();return}
@@ -5373,19 +5409,23 @@ document.addEventListener('click',async e=>{
   if(a==='reopen'){const v=visits.find(x=>x.id===b.dataset.id);delete v.pdfAt;await store.put(v);toast('Dossier remis en cours');return render()}
   if(a==='dash'){view='dash';return go()}
   if(a==='lfx'){lf='';return keep()}
+  if(a==='tabhraz'){if(!armed(b,'Confirmer'))return;tabHOte(P,b.dataset.c);saveP();toast('Ordre des colonnes par défaut rétabli pour '+b.dataset.c);return keep()}
+  // Mise à jour : le service worker relit les fichiers sur internet, puis la page se recharge.
+  if(a==='majapp'){if(!navigator.onLine){toast('Pas de réseau : la mise à jour demande internet');return}
+    try{await (await navigator.serviceWorker?.getRegistration())?.update()}catch(e){}toast('Rechargement de l’application…');setTimeout(()=>location.reload(),600);return}
   if(a==='ldopen'){ldDe=view;ldTab='disp';view='ldisp';return go()}
   if(a==='ldtab'){ldTab=b.dataset.t;view='ldisp';return go()}
   if(a==='ldfiche'){if(view!=='ldisp'&&view!=='ldfiche')ldDe=view;ldMsg=[];if(ldFiche(b.dataset.id)){ldId=b.dataset.id;view='ldfiche'}else{ldTab='anah';view='ldisp'}return go()}
   if(a.startsWith('adm'))return adminAct(a,b);
   if(LADMIN&&ldEd&&(view==='ldedit'||view==='ldanah')&&ldEdAct(a,b))return;
-  if(['ldaedit','ldasave','ldavalid','ldadel'].includes(a)&&!LADMIN){toast('Activez d’abord le mode administrateur (Mon profil)');return}
+  if(['ldaedit','ldasave','ldavalid','ldadel'].includes(a)&&!LADMIN){toast('Activez d’abord le mode administrateur (Paramètres)');return}
   if(a==='ldaedit'){ldEd=structuredClone(ldAnahFiche());ldMode='anah';ldSub=null;ldMsg=[];view='ldanah';return go()}
   if(a==='ldasave'||a==='ldavalid'){ldSub=null;const A=ldEd,x=LOCF.anah;if(!x)A.version=(LOC_FICHES.anah.version||1)+1;A.maj=today();
     if(a==='ldavalid'){const E=locPeutValiderAnah(A,ldAvecAnah(A));if(E.length){ldMsg=['Validation impossible :',...E];return keep()}}
     LOCF.anah={fiche:structuredClone(A),etat:a==='ldavalid'?'validee':'brouillon',base:x?x.base:(LOC_FICHES.anah.version||1),modifLe:Date.now()};await locEnr();locActualiser();
     ldEd=null;ldMode=null;ldMsg=[];toast(a==='ldavalid'?'Règles de l’Anah validées : elles s’appliquent aux simulations de cet appareil':'Brouillon enregistré');ldTab='anah';view='ldisp';return go()}
   if(a==='ldadel'){if(!armed(b,'Confirmer'))return;delete LOCF.anah;await locEnr();locActualiser();toast('Règles de l’Anah de l’appareil supprimées');ldTab='anah';view='ldisp';return go()}
-  if(['ldnew','lddup','ldedit','ldsave','ldvalid','lddel','ldexp','ldexp1','ldbok','ldbdel'].includes(a)&&!LADMIN){toast('Activez d’abord le mode administrateur (Mon profil)');return}
+  if(['ldnew','lddup','ldedit','ldsave','ldvalid','lddel','ldexp','ldexp1','ldbok','ldbdel'].includes(a)&&!LADMIN){toast('Activez d’abord le mode administrateur (Paramètres)');return}
   if(a==='ldnew'||a==='lddup'){ldMode=null;const nom=(prompt(a==='ldnew'?'Nom du nouveau dispositif':'Nom de la copie')||'').trim();if(!nom)return;
     let id=slug(nom).toUpperCase().replace(/[^A-Z0-9_]/g,'').replace(/^[^A-Z]+/,'').slice(0,16)||'DISPOSITIF';for(let k=2;ldFiche(id);k++)id=id.slice(0,14)+'_'+k;
     ldEd=a==='lddup'?{...structuredClone(ldFiche(ldId)),id,nom,court:nom.slice(0,40),version:1}:{id,nom,court:nom.slice(0,40),logo:'',dept:'17',version:1,debut:'',fin:'',communes:{},aides:[],questions:[],cas:[]};
@@ -5492,12 +5532,12 @@ addEventListener('appinstalled',()=>{instEv=null;if(view==='list')render()});
 // l'emplacement : l'accès au fichier est gardé dans IndexedDB (enregistrement fs:<id>). Android redemande l'autorisation une fois par ouverture.
 // Sans cette possibilité (navigateur ancien), le fichier est téléchargé.
 // auto : sauvegarde automatique (sortie du dossier, PDF, courrier) : jamais de choix d'emplacement ni de téléchargement, message seulement en cas d'échec.
-// Avec un dossier de sauvegarde choisi dans « Mon profil » (FSDIR), le fichier y est écrit directement.
-async function fsSave(v,auto){if(!v)return;const nom=(v.num||slug(who(v))||v.id)+'.json',json=()=>JSON.stringify({app:'constat-decence',v:2,visits:[v]});
+// Avec un dossier de sauvegarde choisi dans « Paramètres » (FSDIR), le fichier y est écrit directement.
+async function fsSave(v,auto){if(!v)return;const nom=bakNom(v),json=()=>JSON.stringify({app:'constat-decence',v:2,visits:[v]});
   const fait=n=>{const t=Date.now();v.savedAt=t;store.put(v).catch(()=>{});P.lastBak=t;saveP();if(n)toast(n)};
   if(FSDIR){try{if(await FSDIR.queryPermission({mode:'readwrite'})!=='granted'&&await FSDIR.requestPermission({mode:'readwrite'})!=='granted')return toast('Accès au dossier de sauvegarde refusé : sauvegarde non faite');
       const w=await (await FSDIR.getFileHandle(nom,{create:true})).createWritable();await w.write(json());await w.close();return fait(auto?'':'Dossier enregistré dans « '+FSDIR.name+' »')}
-    catch(e){return toast('Sauvegarde impossible dans « '+FSDIR.name+' » : '+e.message+' (choisissez de nouveau le dossier dans Mon profil)')}}
+    catch(e){return toast('Sauvegarde impossible dans « '+FSDIR.name+' » : '+e.message+' (choisissez de nouveau le dossier dans Paramètres)')}}
   if(!('showSaveFilePicker' in window)){if(auto)return;offer(nom,new Blob([json()],{type:'application/json'}));return fait('Dossier téléchargé : « '+nom+' »')}
   try{const r=await store.getRec('fs:'+v.id);let h=r.h;if(auto&&!h)return;
     if(h&&await h.queryPermission({mode:'readwrite'})!=='granted'&&await h.requestPermission({mode:'readwrite'})!=='granted')return toast('Accès au fichier refusé : sauvegarde non faite');
@@ -5544,42 +5584,49 @@ function exportPhotos(v){
   if(!files.length){toast('Aucune photo dans cette visite');return}
   offer(dossier+'.zip',zip(files));
 }
-function exportJson(){
+async function exportJson(){
   const L=visits.filter(v=>exSel.has(v.id));
   if(!L.length&&!exMairies){toast('Cochez au moins un dossier à exporter');return}
   if(!L.length&&!Object.keys(MAIRIES.l).length&&!Object.keys(CARNET.l).length){toast('Cochez au moins un dossier à exporter');return}
-  const nom=L.length===1?slug(who(L[0])):L.length?L.length+'_dossiers':'carnet_mairies';
-  offer(`sauvegarde_${nom}_${today()}.json`,new Blob([JSON.stringify({app:'constat-decence',v:2,visits:L,...(exMairies?{mairies:MAIRIES.l,carnet:CARNET.l}:{})})],{type:'application/json'}));
+  // Un fichier par dossier (nommé avec le n° SOLIACT), puis le carnet d'adresses dans son propre fichier.
+  const J=o=>new Blob([JSON.stringify({app:'constat-decence',v:2,...o})],{type:'application/json'});
+  for(const v of L){await offer(bakNom(v,today()),J({visits:[v]}));await new Promise(r=>setTimeout(r,250))}
+  if(exMairies&&(Object.keys(MAIRIES.l).length||Object.keys(CARNET.l).length))await offer(`Carnet d’adresses - ${today()}.json`,J({visits:[],mairies:MAIRIES.l,carnet:CARNET.l}));
   toast(`${L.length} dossier${L.length>1?'s':''} exporté${L.length>1?'s':''}${exMairies?' avec le carnet d’adresses':''}`);
   // Date de sauvegarde, sans toucher à la date de modification : sert au rappel de l'accueil.
   if(L.length){const t=Date.now();for(const v of L){v.savedAt=t;store.put(v).catch(()=>{})}P.lastBak=t;saveP();keep()}
 }
+// Import de un ou plusieurs fichiers (une sauvegarde par dossier) : bilan unique à la fin.
 async function importJson(el){
-  const f=el.files[0];el.value='';if(!f)return;
+  const F=[...el.files];el.value='';if(!F.length)return;
+  const T={na:0,nu:0,ni:0,nm:0,nc:0,loc:[],err:[]};for(const f of F)await importFichier(f,T);
+  visits=(await store.all()).map(migrate);cbLier();if(cur)cur=visits.find(v=>v.id===cur.id)||null;render();
+  const pl=(n,a,b)=>n+' '+(n>1?b:a);
+  toast([...T.loc.map(n=>'Simulation Loc’Avantages importée : '+n),T.na&&pl(T.na,'dossier ajouté','dossiers ajoutés'),T.nu&&pl(T.nu,'dossier mis à jour','dossiers mis à jour'),T.ni&&pl(T.ni,'dossier ignoré (version plus ancienne ou identique)','dossiers ignorés (versions plus anciennes ou identiques)'),T.nm+T.nc&&pl(T.nm+T.nc,'adresse ajoutée au carnet','adresses ajoutées au carnet'),
+    ...T.err.map(e=>'Import impossible'+(F.length>1?' ('+e[0]+')':'')+' : '+e[1])].filter(Boolean).join(' · ')||'Aucun dossier dans ce fichier')}
+async function importFichier(f,T){
   try{const txt=await f.text();
     // Fichier enregistré depuis Outlook, Teams ou OneDrive professionnel : chiffré par Microsoft Intune, illisible ici.
     if(txt.slice(0,200).includes('MSMAMARPC'))throw new Error('ce fichier a été chiffré par la protection Microsoft (Outlook, Teams ou OneDrive professionnel). Transférez la sauvegarde par Quick Share, Bluetooth ou câble USB, puis importez-la à nouveau.');
     const d=JSON.parse(txt);
     if(d&&d.app===undefined&&d.proprio&&typeof d.proprio==='object'&&Array.isArray(d.logements)){
       const v=newVisit('loc'),{proprio,bien,logements,aidesProjet,obs,compDuree}=d;v.loc={proprio,bien,logements,aidesProjet,obs,compDuree};migrate(v);
-      await store.put(v);visits=(await store.all()).map(migrate);render();toast('Simulation Loc’Avantages importée : '+who(v));return}
+      await store.put(v);T.loc.push(who(v));return}
     if(d.app!=='constat-decence'||!Array.isArray(d.visits))throw new Error('ce fichier n’est pas une sauvegarde de cette application');
     // Un dossier déjà présent n'est remplacé que par une version modifiée plus récemment (allers-retours téléphone ↔ PC).
-    const loc=new Map(visits.map(v=>[v.id,v])),ini=initiales();let na=0,nu=0,ni=0,seq=false;
+    const loc=new Map(visits.map(v=>[v.id,v])),ini=initiales();let seq=false;
     for(const v of d.visits){if(!v||typeof v.id!=='string'||typeof v.f!=='object'||typeof v.it!=='object')continue;
-      const m=migrate(v),x=loc.get(m.id);if(x&&(x.updated||0)>=(m.updated||0)){ni++;continue}
-      await store.put(m);x?nu++:na++;
+      const m=migrate(v),x=loc.get(m.id);if(x&&(x.updated||0)>=(m.updated||0)){T.ni++;continue}
+      await store.put(m);visits=visits.filter(y=>y.id!==m.id).concat(m);x?T.nu++:T.na++;
       // Compteur de n° calé sur les dossiers du même technicien créés sur un autre appareil.
       const k=/^([A-Z]{3}-\d{4})-([A-Z]*)-(\d+)$/.exec(m.num||'');if(k&&ini&&k[2]===ini&&+k[3]>((P.seq||{})[k[1]]||0)){P.seq={...P.seq,[k[1]]:+k[3]};seq=true}}
     if(seq)saveP();
-    let nm=0;if(d.mairies&&typeof d.mairies==='object')for(const [k,m] of Object.entries(d.mairies))if(m&&typeof m.ville==='string'&&!MAIRIES.l[k]){MAIRIES.l[k]=m;nm++}
+    let nm=0,nc=0;if(d.mairies&&typeof d.mairies==='object')for(const [k,m] of Object.entries(d.mairies))if(m&&typeof m.ville==='string'&&!MAIRIES.l[k]){MAIRIES.l[k]=m;nm++}
     if(nm)saveMairies();
-    let nc=0;if(d.carnet&&typeof d.carnet==='object')for(const [k,c] of Object.entries(d.carnet))if(c&&CB_CAT[c.cat]&&!CARNET.l[k]){CARNET.l[k]=c;nc++}
+    if(d.carnet&&typeof d.carnet==='object')for(const [k,c] of Object.entries(d.carnet))if(c&&CB_CAT[c.cat]&&!CARNET.l[k]){CARNET.l[k]=c;nc++}
     if(nc){saveCarnet();cbDL()}
-    visits=(await store.all()).map(migrate);cbLier();if(cur)cur=visits.find(v=>v.id===cur.id)||null;render();
-    const pl=(n,a,b)=>n+' '+(n>1?b:a);
-    toast([na&&pl(na,'dossier ajouté','dossiers ajoutés'),nu&&pl(nu,'dossier mis à jour','dossiers mis à jour'),ni&&pl(ni,'dossier ignoré (version plus ancienne ou identique)','dossiers ignorés (versions plus anciennes ou identiques)'),nm+nc&&pl(nm+nc,'adresse ajoutée au carnet','adresses ajoutées au carnet')].filter(Boolean).join(' · ')||'Aucun dossier dans ce fichier')}
-  catch(e){toast('Import impossible : '+e.message)}
+    T.nm+=nm;T.nc+=nc}
+  catch(e){T.err.push([f.name,e.message])}
 }
 
 
@@ -5736,7 +5783,7 @@ function piedPdf(doc,v,type,ml,mr,adr){const n=doc.getNumberOfPages();
     const num=isPdl(v)?v.f.refDos:v.num;
     if(num){const r=PDFT('N° '+num);doc.text(r,x,h-7.8);x+=doc.getTextWidth(r+'   ')}
     doc.text(`Page ${i} / ${n}`,w-mr,h-7.8,{align:'right'});
-    doc.setFont('helvetica','normal');doc.setTextColor(68,83,95);doc.text(PDFT(`${type} · édité le ${frDate(today())}`),x,h-7.8,{maxWidth:w-mr-25-x});
+    doc.setFont('helvetica','normal');doc.setTextColor(68,83,95);doc.text(PDFT(`${type}${(isErgo(v)||isDeg(v))&&filled(v.f.soliact)?' · dossier SOLIACT '+v.f.soliact.trim():''} · édité le ${frDate(today())}`),x,h-7.8,{maxWidth:w-mr-25-x});
     doc.setFontSize(6.5);doc.text(PDFT(adr||SOLIHA_ADR+' · contact.deux-sevres@soliha.fr'),ml,h-4.8)}}
 const preNum=v=>v.num?v.num+'_':'';
 async function exportPdf(v,envoi){
@@ -6663,7 +6710,7 @@ function ldView(app,bar,bi){
     app.innerHTML=`${topbar(f.nom,`${f.dept||''} · ${S[0]} · ${S[1]}`,'ldback')}${tabs}
      <div class="pills">${ldPill(Et[0],Et[1])}${loc?ldPill('Modifiée le '+new Date(loc.modifLe).toLocaleDateString('fr-FR'),''):''}</div>
      ${loc&&Er.length?`<div class="banner">${loc.etat==='validee'?'':'Avant validation : '}${Er.map(esc).join(' ')}</div>`:''}
-     ${LADMIN?'':'<p class="muted">Consultation : la modification demande le mode administrateur (Mon profil).</p>'}
+     ${LADMIN?'':'<p class="muted">Consultation : la modification demande le mode administrateur (Paramètres).</p>'}
      <h2 class="sec">Règles de calcul</h2><p class="muted">En plus des aides de l’Anah.</p>
      <div class="items">${T.aides.map((x,i)=>`<div class="item"><div class="body" style="padding:12px 14px"><b>${i+1}. ${esc(x.titre)}</b><div>${esc(x.texte)}</div>${x.conditions?`<div class="muted">${esc(x.conditions)}</div>`:''}<div class="muted">S’applique en : ${esc(x.portee)}</div></div></div>`).join('')}</div>
      <h2 class="sec">Périmètre</h2>${T.perimetre.map(t=>`<p>${esc(t)}</p>`).join('')}
@@ -6754,6 +6801,7 @@ function locPdfChart(doc,cp,x0,y0,w,h,{T,font,ACC,LL,INK,MUT,LINE,SKYT},M){
   try{visits=(await store.all()).map(migrate)}catch(e){visits=[]}
   for(const v of visits)if(v._aEnr){delete v._aEnr;store.put(v).catch(()=>{})}
   try{P=await store.getProfil()}catch(e){}
+  appliqueAff();
   try{MAIRIES=await store.getRec('mairies');MAIRIES.l=MAIRIES.l||{}}catch(e){}
   try{CARNET=await store.getRec('carnet');CARNET.l=CARNET.l||{}}catch(e){}
   try{FSDIR=(await store.getRec('fsdir')).h||null}catch(e){}
