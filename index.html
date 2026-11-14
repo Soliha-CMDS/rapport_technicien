@@ -394,6 +394,10 @@ label.chip.erb{border-radius:10px;width:100%;align-items:flex-start}.erpad{heigh
 .trxl input{width:22px;height:22px;flex:none;margin-top:2px}
 .trxl small{display:block;color:var(--muted);font-size:.8rem}
 
+/* Case obligatoire : astérisque rouge ; texte réservé aux lecteurs d’écran. */
+.oblig{color:var(--danger)}
+.sronly{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
 </style>
 
 <div class="wrap">
@@ -1223,6 +1227,8 @@ const COM={
 
 const YN=['Oui','Non'];
 const isCAF=v=>v.f.dem==='CAF';
+// Case renseignée (liste non vide, texte non blanc) ; ici pour servir aussi aux auto-tests de data.js.
+const filled=x=>Array.isArray(x)?x.length>0:x!==undefined&&x!==null&&String(x).trim()!=='';
 // [clé, libellé, type, options, aide, condition d'affichage]
 const ADMIN=[
  ['h','Demande'],
@@ -1795,6 +1801,43 @@ const isCv=v=>isPdl(v)&&v.f.typeVis==='Contre-visite';
 // Visite de contrôle : la rubrique 8 « Contre-visite » est masquée.
 const RR=v=>isDeg(v)||isLoc(v)?[]:isPdl(v)?(isCv(v)?R_PDL:R_PDL.slice(0,7)):R;
 const ADM=v=>isDeg(v)?ADMIN_DEG:isPdl(v)?ADMIN_PDL:ADMIN;
+
+// Cases obligatoires avant le PDF (informations administratives et rubrique 1), choisies par l'utilisateur le 14/11/2026.
+// Règle : [clés, condition] ; plusieurs clés = au moins une des cases remplie. Sans condition, la règle s'applique toujours.
+const coll=v=>(v.f.lType||[]).includes('Collectif'),cvOn=v=>v.f.typeVis==='Contre-visite',agence=v=>filled(v.f.mAg);
+const OB=(...k)=>k.map(x=>[[x]]);
+const OBLIG_DEC=[...OB('dem','dateDem','dateVis','heureVis','typeVis'),[['alloc'],v=>v.f.dem==='CAF'],
+  ...OB('civ','nom','prenom','loyer','aide','adresse','cp','ville','telPort','mail','dateEntree','bailType','pCiv','pNom','pPrenom','pAdr','pCp','pVille','pTel','pMail','mrCiv','mrVille','mrAdr','mrCp','mrMail',
+   'lType'),[['lNbLog'],coll],...OB('lConstr','lAv49','lSurf','lP9','lNbPP','lNbCh','lNbSdb','lNbCuis','lNbWc','lAnim','lBail','lEdl','lNbOcc','lAdultes','lPresents')];
+const OBLIG_PDL=[...OB('commune','typeVis','refDos','dateDepot','dateDem','dateVis','dateRap'),
+  [['pSoc','pNom']],[['pSoc','pPrenom']],[['pCiv'],v=>filled(v.f.pNom)],...OB('pAdr','pCp','pVille'),[['pTelF','pTelP']],[['pMail']],
+  ...['mNom','mPrenom','mAdr','mCp','mVille','mMail'].map(k=>[[k],agence]),[['mTelF','mTelP'],agence],
+  ...OB('adresse','cp','ville','occ'),...['cvDateDem','cvDateVis','cvDateRap','lPresentsCv'].map(k=>[[k],cvOn]),
+  ...OB('lType'),[['lNbLog'],coll],...OB('lAv49','lSurf','lP9','lNbPP','lNbCh','lNbSdb','lNbCuis','lNbWc','lPresents')];
+// Décence et permis de louer seulement (la dégradation partage certaines clés).
+const obligR=v=>!v||v.type&&v.type!=='dec'&&!isPdl(v)?[]:(isPdl(v)?OBLIG_PDL:OBLIG_DEC).filter(([,c])=>!c||c(v));
+// La case porte un astérisque : elle fait partie d'une règle qui s'applique à cette visite.
+const oblig=(v,k)=>obligR(v).some(([K])=>K.includes(k));
+// Cases manquantes : [{t : « Bloc – libellé » (« ou » entre les cases possibles), vue : 'admin' ou 'r1'}], sans doublon.
+function obligManq(v){if(!obligR(v).length)return [];const A=ADM(v),R1=RR(v)[0].fields,lib=k=>{const i=A.findIndex(f=>f[0]===k);if(i<0)return R1.find(f=>f[0]===k)[1];
+    const h=A.slice(0,i).reverse().find(f=>f[0]==='h');return (h?h[1]+' – ':'')+A[i][1]};
+  const L=obligR(v).filter(([K])=>!K.some(k=>filled(v.f[k]))).map(([K])=>({t:K.map(lib).join(' ou '),vue:A.some(f=>f[0]===K[0])?'admin':'r1'}));
+  return L.filter((x,i)=>L.findIndex(y=>y.t===x.t)===i)}
+(()=>{const dec={f:{dem:'CAF',lType:['Collectif']}},n=obligManq(dec).length,T=obligManq(dec).map(x=>x.t);
+  console.assert(T.includes('Demande – N° allocataire')&&T.includes('Si collectif, nombre de logements')&&T.includes('Mairie (courrier d’information) – E-mail')&&!T.includes('Occupant – Tél. fixe')
+    &&obligManq(dec).find(x=>x.t==='Pièces principales').vue==='r1'&&obligManq({f:{dem:'DDT 79',lType:['Individuel']}}).length===n-2,'ASSERT FAIL obligManq décence');
+  const P=x=>obligManq({type:'pdl',f:x}).map(y=>y.t),a=P({});
+  console.assert(a.includes('Propriétaire – Société ou Propriétaire – Nom')&&a.includes('Propriétaire – Tél. fixe ou Propriétaire – Tél. portable')&&!a.some(t=>t.startsWith('Mandataire'))&&!a.includes('Propriétaire – Civilité')&&!a.some(t=>t.includes('contre-visite')),'ASSERT FAIL obligManq PDL vide');
+  const b=P({pSoc:'SCI X',pTelP:'06',mAg:'Agence',typeVis:'Contre-visite'});
+  console.assert(!b.some(t=>t.startsWith('Propriétaire – Société'))&&!b.some(t=>t.includes('Tél.')&&t.startsWith('Propriétaire'))&&b.includes('Mandataire – Nom du référent')&&b.includes('Mandataire – Tél. fixe ou Mandataire – Tél. portable')
+    &&b.includes('Contre-visite – Date de la contre-visite')&&b.includes('Personnes présentes lors de la contre-visite (nom, prénom, qualité)'),'ASSERT FAIL obligManq PDL société, agence, contre-visite');
+  console.assert(P({pNom:'DURAND'}).includes('Propriétaire – Civilité')&&!P({pNom:'DURAND',pPrenom:'Paul'}).some(t=>t.startsWith('Propriétaire – Société')),'ASSERT FAIL obligManq PDL nom');
+  // Toutes les clés des règles existent dans les champs de la visite (pas de faute de frappe).
+  for(const[v,O]of[[{f:{}},OBLIG_DEC],[{type:'pdl',f:{}},OBLIG_PDL]]){const K=[...ADM(v),...RR(v)[0].fields,...R_PDL[0].fields].map(f=>f[0]);console.assert(O.every(([k])=>k.every(x=>K.includes(x))),'ASSERT FAIL obligations : clé inconnue')}})();
+// Aucune ligne de désordre ni ligne à contrôler : la rubrique des travaux est terminée d'office.
+const toutRas=v=>RR(v).flatMap(r=>r.items||[]).every(d=>v.it[d.id]?.ras&&!v.it[d.id].on);
+(()=>{const ids=R.flatMap(r=>r.items||[]).map(d=>d.id),v={f:{},it:Object.fromEntries(ids.map(i=>[i,{ras:true}]))};
+  console.assert(toutRas(v)&&!toutRas({f:{},it:{...v.it,[ids[0]]:{on:true}}})&&!toutRas({f:{},it:{...v.it,[ids[1]]:{}}}),'ASSERT FAIL toutRas')})();
 
 // Correctifs avec leurs règles techniques, utilisés pour le permis de louer (clé = correctif court de la fiche décence).
 const TECH={
@@ -4067,7 +4110,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.13-2216';
+const APP_VER='2026.11.14-1947';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -4170,7 +4213,7 @@ function prog(v){
   if(isErgo(v)){const s=ERGO_SECS.filter(([k])=>k!=='eaides').map(([k])=>ergoEtat(v,k)==='complet');return {f:s.filter(Boolean).length,n:s.length,u:'sections'}}
   if(isLoc(v)){const D=v.loc,R=locR(v),s=[D.proprio.nom||D.proprio.sci,D.bien.insee,R.lgs.every(r=>r.eligible),R.comp.ok];return {f:s.filter(Boolean).length,n:s.length,u:'étapes'}}
   if(isDeg(v)){const E=v.g.flatMap(g=>GRILLES[g.k].els.map(e=>g.n[e.id]?.h!=null));return {f:E.filter(Boolean).length,n:E.length,u:'éléments notés'}}
-  const s=[...RR(v).map(r=>r.items?!r.items.some(d=>!v.it[d.id]?.on&&!v.it[d.id]?.ras||comManq(d,v.it[d.id]))&&!preManq(r,v).length:!!v.done[r.id]),filled(isPdl(v)?v.f.etat:v.f.cNd)];
+  const s=[...RR(v).map(r=>r.items?!r.items.some(d=>!v.it[d.id]?.on&&!v.it[d.id]?.ras||comManq(d,v.it[d.id]))&&!preManq(r,v).length:!!v.done[r.id]||r.gen&&toutRas(v)),filled(isPdl(v)?v.f.etat:v.f.cNd)];
   return {f:s.filter(Boolean).length,n:s.length,u:'étapes'}}
 function progHtml(v,num){const p=prog(v),pc=Math.round(100*p.f/(p.n||1));
   return `<div class="prog${num?' dash':''}"><div class="pbar${pc===100?' full':''}" role="progressbar" aria-valuemin="0" aria-valuemax="${p.n}" aria-valuenow="${p.f}" aria-label="Avancement du dossier"><span style="width:${pc}%"></span></div><span>${p.f}/${p.n} ${p.u}</span>${num&&v.num?`<span class="dnum">N° ${esc(v.num)}</span>`:''}</div>`}
@@ -4180,7 +4223,10 @@ function progHtml(v,num){const p=prog(v),pc=Math.round(100*p.f/(p.n||1));
 function controles(v){
   if(isErgo(v))return ergoControles(v);
   if(isFin(v))return finControles(v);
-  const f=v.f,pdl=isPdl(v),L=[],add=(n,t,vw)=>L.push([n,t,vw]),sg=(n,a,b)=>n+' '+(n>1?b:a);
+  const f=v.f,pdl=isPdl(v),L=[],add=(n,t,vw,bloc)=>L.push([n,t,vw,bloc]),sg=(n,a,b)=>n+' '+(n>1?b:a);
+  // Cases obligatoires vides : elles bloquent le PDF et l'envoi par mail, sans « Générer quand même » (4e élément).
+  for(const vue of ['admin','r1']){const m=obligManq(v).filter(x=>x.vue===vue);
+    if(m.length)add('ko',`${vue==='admin'?'Informations administratives':'Rubrique 1'} : ${sg(m.length,'case obligatoire vide','cases obligatoires vides')} (${m.map(x=>x.t).join(', ')})`,vue,1)}
   for(const [r,ds] of aControler(v)){const it_=ds.filter(d=>d.id),nl=it_.filter(d=>!v.it[d.id]?.on&&!v.it[d.id]?.ras).length,nc=it_.filter(d=>comManq(d,v.it[d.id])).length,nt=ds.length-it_.length;
     add('ko',`Rubrique ${r.n} : `+[nl&&sg(nl,'ligne ni Défaut ni RAS','lignes ni Défaut ni RAS'),nc&&sg(nc,'commentaire manquant','commentaires manquants'),nt&&(nt>1?'types':'type')+' d’équipement à renseigner'].filter(Boolean).join(', '),r.id)}
   if(pdl?!filled(f.etat):!filled(f.cNd))add('ko',pdl?'État global du logement non renseigné':'Conclusion : non-décence non renseignée','synth');
@@ -4188,12 +4234,10 @@ function controles(v){
   const gen=RR(v).find(r=>r.gen),bl=travaux(v),non=RR(v).flatMap(r=>r.items||[]).filter(d=>v.it[d.id]?.on).length;
   if(bl.length&&!filled(f.trav))add('ko',`Travaux préconisés vides alors que ${sg(non,'désordre est coché','désordres sont cochés')}`,gen?.id);
   if(!P.sig)add('ko','Signature de l’enquêteur absente (Mon profil)','profil');
-  if(!f.dateVis)add('ko','Date de visite manquante','admin');
-  if(!filled(f.adresse))add('ko','Adresse du logement manquante','admin');
   for(const r of RR(v)){const n=(r.items||[]).filter(d=>phReq(d,v.it[d.id])&&v.it[d.id]?.on&&!v.it[d.id].ph.length).length;if(n)add('av',`Rubrique ${r.n} : ${sg(n,'photo requise manquante','photos requises manquantes')}`,r.id)}
   if(bl.length&&filled(f.trav)){const n=travCalc(v).added;if(n)add('av',`Liste de travaux pas à jour : ${sg(n,'correctif manquant','correctifs manquants')}`,gen?.id)}
-  if(pdl){if(!filled(f.pNom)&&!filled(f.pSoc))add('av','Nom du propriétaire manquant','admin');if(!f[sigKey(v)])add('av','Signature du propriétaire absente','synth')}
-  else{if(!filled(f.nom))add('av','Nom de l’occupant manquant','admin');if(!filled(f.refDos))add('av','Référence du dossier vide','admin')}
+  if(pdl){if(!f[sigKey(v)])add('av','Signature du propriétaire absente','synth')}
+  else if(!filled(f.refDos))add('av','Référence du dossier vide','admin');
   return L}
 
 /* ---------- état ---------- */
@@ -4246,7 +4290,7 @@ function phDepl(v,from,i,to){const s=it(from,v),[p]=s.ph.splice(i,1),t=it(to,v),
  phDepl(v,b.id,0,'r7ph');console.assert(v.it.r7ph.ph[0].cap==='Cuisine — Fuite'&&v.it.r7ph.ph[0].com===undefined,'ASSERT FAIL phDepl vers la zone Commentaires')}
 
 /* ---------- statuts ---------- */
-const filled=x=>Array.isArray(x)?x.length>0:x!==undefined&&x!==null&&String(x).trim()!=='';
+const obVide=n=>n+(n>1?' cases obligatoires vides':' case obligatoire vide');
 function rstat(r,v=cur){
   if(r.items){const on=r.items.filter(i=>v.it[i.id]?.on);
     const dg=on.some(i=>v.it[i.id].d),miss=on.filter(i=>phReq(i,v.it[i.id])&&!v.it[i.id].ph.length).length;
@@ -4260,8 +4304,10 @@ function rstat(r,v=cur){
     if(miss)p.push([`${miss} photo${miss>1?'s':''} manquante${miss>1?'s':''}`,'warn']);
     if(!p.length)p.push(['À faire','']);
     return p}
-  const n=r.fields.filter(f=>filled(v.f[f[0]])).length;
-  return [[n?(v.done[r.id]?'Terminé':`${n}/${r.fields.length} renseignés`):'À faire',n?(v.done[r.id]?'ok':'info'):'']]
+  // Travaux : terminés d'office quand toutes les lignes sont en RAS.
+  if(r.gen&&toutRas(v))return [['Terminé','ok']];
+  const n=r.fields.filter(f=>filled(v.f[f[0]])).length,ob=r.id==='r1'?obligManq(v).filter(x=>x.vue==='r1').length:0;
+  return [[n?(v.done[r.id]?'Terminé':`${n}/${r.fields.length} renseignés`):'À faire',n?(v.done[r.id]?'ok':'info'):''],...(ob?[[obVide(ob),'warn']]:[])]
 }
 // Lignes de pathologie ni en défaut ni en RAS, par rubrique : elles bloquent le pré-remplissage des travaux.
 const preManq=(r,v=cur)=>(r.pre||[]).filter(f=>!filled(v.f[f[0]]));
@@ -4284,10 +4330,12 @@ function cpDL(c,v){const L=villesDe(c.value),C=c.value.trim()?[]:cpsDe(v.value);
   v.setAttribute('list',L.length?'cpv_'+v.id:v.id==='lcom'?'lcoms':'cp_all');const dv=$('#cpv_'+v.id);if(dv)dv.innerHTML=L.map(n=>`<option value="${esc(n)}">`).join('');
   const dc=$('#cpc_'+c.id);if(dc)dc.innerHTML=C.map(x=>`<option value="${x}">`).join('')}
 const cpInit=()=>document.querySelectorAll('[data-cpv]').forEach(c=>{const v=$('#'+c.dataset.cpv);if(v)cpDL(c,v)});
+// Cases en pleine largeur à la demande de l'utilisateur (rubrique 1).
+const PLEIN=['lType','lAv49','lP9'];
 function field([k,label,type,opts,hint,cond]){
   if(cond&&!cond(cur))return '';
   if(k==='h')return `<h3>${esc(label)}</h3>`;
-  const v=cur.f[k];const full=type==='ta'||(type==='c'||type==='r')&&opts.join('').length>40;
+  const v=cur.f[k];const full=type==='ta'||(type==='c'||type==='r')&&opts.join('').length>40||PLEIN.includes(k),ob=oblig(cur,k);
   let ctl;
   if(type==='r'||type==='c'){
     ctl=`<div class="chips" role="group" aria-label="${esc(label)}">${opts.map(o=>{const ch=type==='r'?v===o:(v||[]).includes(o);
@@ -4296,7 +4344,7 @@ function field([k,label,type,opts,hint,cond]){
   else if(type==='ta')ctl=`<textarea id="f_${k}" data-f="${k}" autocapitalize="sentences" ${k==='trav'||k.endsWith('_trav')?'class="big"':''}>${esc(v)}</textarea>`;
   else{const t={t:'text',n:'number',d:'date',tm:'time',tel:'tel',email:'email'}[type];
     ctl=`<input id="f_${k}" type="${t}" data-f="${k}" value="${esc(v)}" ${type==='n'?'inputmode="decimal" step="any"':''}${type==='t'?cbAttr(k):''}${(CPF[k]?cpA('f_'+k,'f_'+CPF[k]):VCP[k]?vA('f_'+k,'f_'+VCP[k]):[''])[0]}>${(CPF[k]?cpA('f_'+k,''):VCP[k]?vA('f_'+k,''):['',''])[1]}`}
-  return `<div class="field ${full?'full':''}"><span>${esc(label)}</span>${ctl}${hint?`<div class="hint">${esc(hint)}</div>`:''}</div>`;
+  return `<div class="field ${full?'full':''}"><span>${esc(label)}${ob?' <b class="oblig" title="Case obligatoire pour le rapport">*</b><span class="sronly"> (obligatoire)</span>':''}</span>${ctl}${hint?`<div class="hint">${esc(hint)}</div>`:''}</div>`;
 }
 // Saisie de la ligne « Diagnostics non à jour après travaux ».
 function dmHtml(d,s){
@@ -4577,22 +4625,22 @@ function render(){
   if(isFin(cur)&&finView(app,bar,bi))return;
   const logo=logoOf(cur),RV=RR(cur),pdl=isPdl(cur);
   if(view==='pieces'||view==='pctrl')return pcView(app,bar,bi,logo);
-  if(view==='avantpdf'){const C=controles(cur),ko=C.filter(c=>c[0]==='ko'),av=C.filter(c=>c[0]==='av');
+  if(view==='avantpdf'){const C=controles(cur),ko=C.filter(c=>c[0]==='ko'),av=C.filter(c=>c[0]==='av'),bloc=C.some(c=>c[3]);
     const li=ergoCtlLi;
     app.innerHTML=`${topbar('Avant de générer le rapport',[who(cur),cur.num&&'N° '+cur.num].filter(Boolean).join(' · '),'dash',logo)}
      ${ko.length?`<h2 class="sec ctlh ko">À corriger (${ko.length})</h2><div class="ctls">${ko.map(li).join('')}</div>`:''}
      ${av.length?`<h2 class="sec ctlh av">À vérifier (${av.length})</h2><div class="ctls">${av.map(li).join('')}</div>`:''}
      ${C.length?'':'<div class="empty">Tout est contrôlé.</div>'}
-     <p class="muted">${ko.length?'Vous pouvez générer le PDF quand même : le dossier restera dans les dossiers en cours.':'Ces points ne bloquent pas : le dossier passera dans les dossiers terminés.'}</p>`;
-    bar.hidden=false;bi.innerHTML=`<button data-act="dash">Retour au dossier</button><button class="${ko.length?'':'btn-primary'}" data-act="pdf" data-force="1">${svg('pdf')}${ko.length?'Générer quand même':'Générer le rapport PDF'}</button>`;
+     <p class="muted">${bloc?'Le rapport ne peut pas être généré tant que les cases obligatoires (*) ne sont pas remplies.':ko.length?'Vous pouvez générer le PDF quand même : le dossier restera dans les dossiers en cours.':'Ces points ne bloquent pas : le dossier passera dans les dossiers terminés.'}</p>`;
+    bar.hidden=false;bi.innerHTML=`<button data-act="dash">Retour au dossier</button>${bloc?'':`<button class="${ko.length?'':'btn-primary'}" data-act="pdf" data-force="1">${svg('pdf')}${ko.length?'Générer quand même':'Générer le rapport PDF'}</button>`}`;
     return}
   if(view==='dash'){
     const tile=(id,n,t,ic,st)=>`<button class="tile" data-act="go" data-v="${id}"><img class="ic" src="${ICO[ic]}" alt=""><span class="num">${n}</span><span class="lbl">${esc(t)}</span>${pills(st)}</button>`;
-    const aN=ADM(cur).filter(f=>f[0]!=='h'&&filled(cur.f[f[0]])).length;
+    const aN=ADM(cur).filter(f=>f[0]!=='h'&&filled(cur.f[f[0]])).length,aO=obligManq(cur).filter(x=>x.vue==='admin').length;
     app.innerHTML=`${topbar(who(cur),[cur.f.typeVis,where(cur)].filter(Boolean).join(' · '),'list',logo)}${progHtml(cur,1)}${pdlBandeau(cur)}
      ${pdl&&isCv(cur)?'':`<div class="row pcgo"><button class="btn-primary" data-act="pcgo">Visite par pièce${cur.cst?.length?` · ${cur.cst.length} défaut${cur.cst.length>1?'s':''}`:''}</button></div>`}
      <div class="tiles">
-      ${tile('admin','INFOS','Informations administratives','admin',[[aN?`${aN} champs`:'À faire',aN?'info':'']])}
+      ${tile('admin','INFOS','Informations administratives','admin',[[aN?`${aN} champs`:'À faire',aN?'info':''],...(aO?[[obVide(aO),'warn']]:[])])}
       ${pdl?'':tile('courriers','AVANT LA VISITE','Courriers d’information','courrier',[[(n=>n?`${n} à compléter`:'Prêts')(lettres(cur).filter(l=>l.manque.length).length),lettres(cur).some(l=>l.manque.length)?'warn':'ok']])}
       ${RV.map(r=>tile(r.id,'RUBRIQUE '+r.n,r.t,r.ic,rstat(r))).join('')}
       ${pdl?tile('synth','SYNTHÈSE','Résumé et commentaires','comm',[[cur.f.etat?'État : '+cur.f.etat:'À faire',{Bon:'ok',Passable:'warn',Mauvais:'danger'}[cur.f.etat]||'']])
@@ -4659,9 +4707,10 @@ function render(){
    ${r.fields?`<div class="form" style="margin-top:14px">${r.fields.map(field).join('')}</div>`:''}
    ${r.phId?phBlock(r.phId,it(r.phId),nums,false):''}`;
   bar.hidden=false;
-  const ri=RV.indexOf(r),next=RV[ri+1];
+  const ri=RV.indexOf(r),next=RV[ri+1],prev=RV[ri-1];
   // Rubriques à pathologies : les cases RAS remplacent « Marquer comme vérifiée ».
-  bi.innerHTML=`${r.items?'':`<button data-act="markdone" data-r="${r.id}">${cur.done[r.id]?'✓ Rubrique vérifiée':'Marquer comme vérifiée'}</button>`}
+  bi.innerHTML=`${r.items?'':`<button data-act="markdone" data-r="${r.id}">${cur.done[r.id]||r.gen&&toutRas(cur)?'✓ Rubrique vérifiée':'Marquer comme vérifiée'}</button>`}
+   <button data-act="go" data-v="${prev?prev.id:'admin'}">${prev?'← Rubrique '+prev.n:'← Infos admin'}</button>
    <button class="btn-primary" data-act="go" data-v="${next?next.id:'synth'}">${next?'Rubrique '+next.n+' →':'Synthèse →'}</button>`;
 }
 
@@ -5395,7 +5444,7 @@ document.addEventListener('click',async e=>{
     const C=isDeg(v)||isLoc(v)?[]:controles(v),ko=C.some(c=>c[0]==='ko');
     // Rapport ergothérapeute : les points à corriger bloquent le rapport (écran de synthèse).
     if(isErgo(v)&&ko){view='esynth';toast('Corrigez d’abord les points bloquants');return go()}
-    if(C.length&&!b.dataset.force){view='avantpdf';return go()}
+    if(C.length&&(!b.dataset.force||C.some(c=>c[3]))){view='avantpdf';return go()}
     return exportPdf(v).then(()=>{if(!window.jspdf)return;if(isDeg(v)?degFinal(v):!ko){v.pdfAt=Date.now();store.put(v).catch(()=>{})}else if(ko)toast('PDF généré : le dossier reste en cours tant que les points à corriger ne sont pas réglés');return fsSave(v,1)}).catch(err=>toast('PDF impossible : '+err.message))}
   if(a==='pmail'){await save(true);if(!window.jspdf){toast("Le module PDF n'est pas chargé : ouvrez l'application une fois avec internet.");return}
     if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur le rapport');view='profil';return go()}await numeroter();const v=cur;carnetMemo(v);
