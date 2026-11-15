@@ -403,6 +403,15 @@ label.chip.erb{border-radius:10px;width:100%;align-items:flex-start}.erpad{heigh
 .hd-av{display:inline-flex;gap:8px}
 /* Pictogramme d’absence : affiché en entier (le panneau rouge est dans un coin). */
 .phc img.pic{object-fit:contain;background:#fff}
+/* Écran verrouillé par code PIN : pavé numérique à grandes touches. */
+.verrou{max-width:360px;margin:40px auto;text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px}
+.verrou .logo{height:56px;background:#fff;border-radius:var(--r-sm);padding:4px 6px}
+.verrou h1{margin:0;font-size:1.5rem}
+.pinpts{display:flex;gap:14px;margin:6px 0}
+.pinpts span{width:16px;height:16px;border-radius:50%;border:2px solid var(--accent)}
+.pinpts span.on{background:var(--accent)}
+.pinpad{display:grid;grid-template-columns:repeat(3,72px);gap:12px}
+.pinpad button{width:72px;height:72px;border-radius:50%;font-size:1.5rem;font-weight:700}
 
 </style>
 
@@ -1683,6 +1692,11 @@ const soliactOf=v=>String((v.type==='loc'?v.loc?.proprio?.soliact:v.f?.soliact)|
 const bakNom=(v,date)=>{const n=x=>String(x||'').replace(/[\/\:*?"<>|\r\n\t]+/g,'-').replace(/\s+/g,' ').trim(),s=n(soliactOf(v));return [s?'SOLIACT '+s:'SOLIACT sans n°',n(v.num||v.id),date].filter(Boolean).join(' - ')+'.json'};
 console.assert(bakNom({num:'DEC-2026-JM-0042',f:{soliact:' 12345 '}},'2026-11-14')==='SOLIACT 12345 - DEC-2026-JM-0042 - 2026-11-14.json'&&bakNom({num:'DEG-2026-JM-0001',f:{}})==='SOLIACT sans n° - DEG-2026-JM-0001.json'
   &&bakNom({type:'loc',num:'LOC-2026-JM-0003',f:{},loc:{proprio:{soliact:'A/7'}}})==='SOLIACT A-7 - LOC-2026-JM-0003.json'&&bakNom({id:'x1',f:{soliact:'1:2'}})==='SOLIACT 1-2 - x1.json','ASSERT FAIL bakNom');
+// Purge (RGPD) : dossiers terminés depuis plus de `mois` mois ET sauvegardés depuis leur dernière modification ; jamais un dossier en cours ou non sauvegardé.
+function aPurger(L,mois,now=Date.now()){const d=new Date(now);d.setMonth(d.getMonth()-mois);return L.filter(v=>v.pdfAt&&v.pdfAt<d.getTime()&&v.savedAt&&(v.updated||0)<=v.savedAt)}
+(()=>{const N=Date.UTC(2026,10,15),j=864e5,V=(id,pdf,sav,upd)=>({id,pdfAt:pdf&&N-pdf*j,savedAt:sav&&N-sav*j,updated:N-upd*j});
+  const L=[V('vieux',200,190,195),V('recent',100,90,95),V('nonsauv',200,0,195),V('modifie',200,190,10),V('encours',0,190,195)];
+  console.assert(aPurger(L,6,N).map(v=>v.id).join()==='vieux'&&aPurger(L,3,N).map(v=>v.id).join()==='vieux,recent'&&!aPurger(L,12,N).length,'ASSERT FAIL aPurger')})();
 // Paramètres : oublie l'en-tête collé d'une commune (retour à l'ordre par défaut de PDL_TAB).
 const tabHOte=(p,c)=>{if(p.tabH){delete p.tabH[c];if(!Object.keys(p.tabH).length)delete p.tabH}};
 (()=>{const p={tabH:{Thouars:['a'],'Saint-Maixent-l’École':['b']}};tabHOte(p,'Thouars');const u=!p.tabH.Thouars&&p.tabH['Saint-Maixent-l’École'];tabHOte(p,'Saint-Maixent-l’École');const q={};tabHOte(q,'Thouars');
@@ -4132,7 +4146,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.14-2321';
+const APP_VER='2026.11.15-1749';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -4437,7 +4451,7 @@ function phBlock(id,s,nums,need,d){const mv=d||RR(cur).some(r=>r.phId===id);retu
       ${pictoOk(cur)?`<select class="btn cam" data-picto="${id}" aria-label="Insérer un pictogramme d’absence"><option value="">Pictogramme…</option>${PICTOS.map(([k,t])=>`<option value="${k}">${esc(t)}</option>`).join('')}</select>`:''}</div></div></div>`}
 console.assert(PICTOS.every(([k,t])=>/^data:image\/jpeg;base64,/.test(PICTO_IMG[k]||'')&&t.startsWith('Absence')),'ASSERT FAIL pictogrammes : image manquante');
 // Tableau de bord d'un dossier (retour vers la liste) : bouton « Sauvegarder » (fsSave).
-const pChoix=(k,l,L,aide)=>`<div class="field full"><span>${esc(l)}</span><div class="chips" role="radiogroup" aria-label="${esc(l)}">${L.map(o=>`<label class="chip"><input type="radio" name="p_${k}" data-p="${k}" value="${esc(o)}" ${(P[k]||L[0])===o?'checked':''}>${esc(o)}</label>`).join('')}</div>${aide?`<div class="hint">${esc(aide)}</div>`:''}</div>`;
+const pChoix=(k,l,L,aide,def=L[0])=>`<div class="field full"><span>${esc(l)}</span><div class="chips" role="radiogroup" aria-label="${esc(l)}">${L.map(o=>`<label class="chip"><input type="radio" name="p_${k}" data-p="${k}" value="${esc(o)}" ${(P[k]||def)===o?'checked':''}>${esc(o)}</label>`).join('')}</div>${aide?`<div class="hint">${esc(aide)}</div>`:''}</div>`;
 // Apparence et taille du texte choisies dans Paramètres (sans choix : réglage de l'appareil, texte normal).
 function appliqueAff(){const d=document.documentElement,t={Clair:'light',Sombre:'dark'}[P.theme];if(t)d.dataset.theme=t;else delete d.dataset.theme;d.classList.toggle('grand',P.texte==='Grand')}
 function topbar(title,sub,back,logo){const sv=cur&&back==='list'&&view==='dash'?`<button class="tb-sv${sauve(cur)?' ok':''}" data-act="fsave">${svg(sauve(cur)?'ok':'save')}<span>${sauve(cur)?'Sauvegardé':'Sauvegarder'}</span></button>`:'';
@@ -4517,6 +4531,16 @@ function tdbHtml(enc){const t=today(),now=new Date(),mois=t.slice(0,7);
    <section class="tdb-new"><h2 class="tdb-h">Nouvelle visite</h2><div class="tdb-types">${TDB_TYPES.map(tdbNew).join('')}</div></section>`}
 function render(){
   const app=$('#app'),bar=$('#bar'),bi=$('#barin');bar.hidden=true;$('.wrap').classList.remove('plein','tdbw','pcw');
+  if(verrou)return verrouView(app);
+  if(view==='purge'){const L=purgeL();
+    app.innerHTML=`${topbar('Dossiers à purger',`Terminés depuis plus de ${purgeMois()} mois et sauvegardés`,'list')}
+     <p class="muted">Ces dossiers sont déjà sauvegardés : les supprimer de la tablette n’efface pas leurs fichiers de sauvegarde, que l’on peut réimporter. Les dossiers en cours ou non sauvegardés ne sont jamais proposés.</p>
+     <div class="items">${L.length?L.map(v=>`<label class="item ${purgeSel.has(v.id)?'on':''}" style="display:flex;gap:12px;align-items:flex-start;padding:12px 14px;cursor:pointer">
+       <input type="checkbox" data-purge="${v.id}" ${purgeSel.has(v.id)?'checked':''} style="width:24px;height:24px;margin-top:2px">
+       <span class="grow"><b>${esc(who(v))}</b><br><span class="muted">${esc([TDB_LAB[v.type||'dec'],v.num&&'N° '+v.num,soliactOf(v)&&'SOLIACT '+soliactOf(v),'PDF du '+frDate(new Date(v.pdfAt).toISOString().slice(0,10)),'sauvegardé le '+frDate(new Date(v.savedAt).toISOString().slice(0,10))].filter(Boolean).join(' · '))}</span></span></label>`).join(''):'<div class="empty">Aucun dossier à purger.</div>'}</div>`;
+    const n=L.filter(v=>purgeSel.has(v.id)).length;
+    bar.hidden=false;bi.innerHTML=`<button data-act="list">Retour</button>${n?`<button class="btn-primary" data-act="purgego">Supprimer ${n} dossier${n>1?'s':''} de la tablette</button>`:''}`;
+    return}
   if(view==='list'){
     lq='';lt='';lf='';const rap=rappelSauv();
     const enc=visits.filter(v=>!v.pdfAt).length,ini=(P.nom||'').split(/\s+/).filter(Boolean).map(x=>x[0]).slice(0,2).join('').toUpperCase();
@@ -4530,6 +4554,7 @@ function render(){
         <button class="avatar" data-act="go" data-v="profil" aria-label="Mon profil">${ini?esc(ini):svg('admin')}</button></span></div></div>
      ${P.nom?'':`<div class="banner">Renseignez votre profil (nom, téléphone, e-mail, signature) : il figure sur chaque rapport. <button data-act="go" data-v="profil">Remplir mon profil</button></div>`}
      ${rap?`<div class="banner tdb-bak">${P.lastBak?'Dernière sauvegarde '+ilya(P.lastBak):'Aucune sauvegarde'} · ${rap.length} dossier${rap.length>1?'s':''} non sauvegardé${rap.length>1?'s':''}. Ils ne sont enregistrés que sur cet appareil. <button data-act="bak">Sauvegarder maintenant</button></div>`:''}
+     ${(n=>n?`<div class="banner">${n} dossier${n>1?'s':''} terminé${n>1?'s':''} depuis plus de ${purgeMois()} mois ${n>1?'peuvent':'peut'} être supprimé${n>1?'s':''} de la tablette (déjà sauvegardé${n>1?'s':''}). <button data-act="purgeopen">Voir les dossiers</button></div>`:'')(purgeL().length)}
      ${stoPlein()?`<div class="banner">Espace presque plein (${Math.round(100*STO.u/STO.q)} %). Sauvegardez puis supprimez des dossiers terminés pour pouvoir ajouter des photos. <button data-act="go" data-v="sauvegarde">Voir l’espace utilisé</button></div>`:''}
      ${STO.p===false&&visits.length?`<div class="banner">Stockage non protégé : le navigateur peut effacer les données si l’appareil manque de place. ${conseilSto()} <button data-act="persist">Réessayer</button></div>`:''}
      <h1 class="hello${couronne(prenom(P.nom))?' couronnee':''}">${!P.nom?'Bonjour':couronne(prenom(P.nom))?`Bonjour <span class="prenom"><img src="${IMG_COURONNE}" alt="">${esc(prenom(P.nom))}</span>`:'Bonjour '+esc(prenom(P.nom))}</h1><div class="tdb-date">${esc(new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).replace(/^./,c=>c.toUpperCase()))}</div>
@@ -4638,6 +4663,9 @@ function render(){
        :FSDIR?`<span>Dossier de sauvegarde : <b>${esc(FSDIR.name)}</b>. Chaque dossier y est enregistré (<i>n° du dossier</i>.json) quand vous le quittez, et après chaque PDF ou courrier.</span><div class="row"><button data-act="fsdir">Changer de dossier</button><button data-act="fsdirx">Arrêter</button></div>`
        :`<span class="muted">Choisissez une fois un dossier de l’appareil (ex. Documents/SoliTech) : chaque dossier y sera enregistré automatiquement.</span><div class="row"><button data-act="fsdir">Choisir le dossier</button></div>`}</div>
       <div class="field full">${stoHtml()||'<span>Espace de stockage</span><span class="muted">Non communiqué par ce navigateur.</span>'}<div class="row"><button data-act="go" data-v="sauvegarde">Sauvegarde et import</button></div></div>
+      ${pChoix('purgeMois','Proposer de supprimer les dossiers terminés depuis plus de',['3 mois','6 mois','12 mois'],'Seulement les dossiers déjà sauvegardés, après confirmation. Durée à confirmer avec le référent RGPD.','6 mois')}
+      <div class="field full"><div class="row"><button data-act="purgeopen">Dossiers à purger (${purgeL().length})</button></div></div>
+      <div class="field full"><span>Code PIN</span>${pinHtml()}</div>
       <div class="field full"><span>Tableaux de suivi du permis de louer (ordre des colonnes)</span>${tab}</div>
       <div class="field full"><span>Version</span><span>Version installée : <b>${esc(APP_VER)}</b></span><div class="row"><button data-act="majapp">${svg('sync')}Rechercher une mise à jour</button></div></div>
      </div>`;
@@ -5371,6 +5399,7 @@ document.addEventListener('change',async e=>{
     if(k==='o'||k==='t'){const i=+el.dataset.i;s[k]=s[k].filter(x=>x!==i);if(el.checked)s[k].push(i);s[k].sort((a,b)=>a-b);save();cmMaj(el.dataset.it);return}
   }
   // Pictogramme d'absence : ajouté comme une photo (légende modifiable), puis la liste revient à « Pictogramme… ».
+  if(el.dataset.purge){el.checked?purgeSel.add(el.dataset.purge):purgeSel.delete(el.dataset.purge);return keep()}
   if(el.dataset.picto){const k=el.value,id=el.dataset.picto;el.value='';const t=PICTOS.find(x=>x[0]===k);if(!t)return;
     const s=it(id),vide=!s.ph.length,d=itemOf(id);s.ph.push({src:PICTO_IMG[k],w:320,h:320,cap:t[1],pic:k});
     if(vide&&d&&!d.dm&&s.note.trim()){s.ph[0].com=s.note;s.note=''}
@@ -5385,6 +5414,13 @@ document.addEventListener('change',async e=>{
 });
 document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
+  // Écran verrouillé : seules les touches du code PIN répondent.
+  if(a.startsWith('pin'))return pinAct(a,b);
+  if(verrou)return;
+  if(a==='purgeopen'){purgeSel=new Set(purgeL().map(v=>v.id));view='purge';return go()}
+  if(a==='purgego'){if(!armed(b,'Confirmer la suppression'))return;const ids=purgeL().filter(v=>purgeSel.has(v.id)).map(v=>v.id);
+    for(const id of ids){await store.del(id);exSel.delete(id)}visits=visits.filter(v=>!ids.includes(v.id));purgeSel.clear();
+    toast(`${ids.length} dossier${ids.length>1?'s':''} supprimé${ids.length>1?'s':''} de la tablette`);view='list';return go()}
   if(a.startsWith('au-')&&cur&&isAud(cur))return audAct(a,b);
   if(a.startsWith('er-'))return ergoAct(a,b);
   if(a.startsWith('an-'))return annAct(a,b);
@@ -6342,7 +6378,7 @@ async function locPdf(v,envoi){
     const B=[["LOC'AVANTAGES",cp.la.bilan],['LOYER LIBRE',cp.ll.bilan],...(M?[["MAPRIMERÉNOV'",M.bilan]]:[])].sort((a,b)=>b[1]-a[1]);
     y+=3;need(16);doc.setFillColor(...ACC);doc.rect(ML,y,CW,15,'F');font(9.5,'bold',WHITE);doc.text(T(`MEILLEUR BILAN SUR ${cp.duree} ANS : ${B[0][0]}`),ML+6,y+6.5);
     font(7.5,'normal',[214,232,242]);doc.text(T(`Écart avec ${B[1][0].toLowerCase().replace("maprimerénov'","MaPrimeRénov'").replace("loc'avantages","Loc'Avantages")}`),ML+6,y+11);font(17,'bold',WHITE);doc.text(E(B[0][1]-B[1][1]),ML+CW-6,y+10,{align:'right'});y+=19;
-    need(84);locPdfChart(doc,cp,ML,y,CW,78,{T,font,ACC,LL,INK,MUT,LINE,SKYT},M);y+=81;
+    need(100);y+=locPdfChart(doc,cp,ML,y,CW,78,{T,font,ACC,LL,INK,MUT,LINE,SKYT},M)+3;
     para(`Bilan cumulé = revenus cumulés (loyers + réduction d’impôt) − investissement du propriétaire. Hypothèse : loyer conventionné Loc’Avantages et réduction d’impôt maintenus sur toute la période, loyers constants.${M?' MaPrimeRénov’ : loyer libre, sans réduction d’impôt ; engagement de location de 6 ans.':''} Comparaison indicative, hors charges, taxe foncière, assurance, vacance locative et imposition des revenus fonciers.`,{sz:7.5,c:MUT})}
   /* --- l'essentiel et prochaines étapes --- */
   {const cw=(CW-8)/2,A=['Vous signez une convention avec l’Anah pour 6 ans minimum.','Le logement est loué nu, en résidence principale, à un ménage sous plafonds de ressources.','Le loyer respecte le plafond du niveau choisi (Loc 1, Loc 2 ou Loc 3) pendant toute la convention.','En contrepartie, vous bénéficiez d’une réduction d’impôt sur le revenu, plus forte en Loc 3 et avec l’intermédiation locative.','Avec l’intermédiation locative, un organisme agréé gère la location pour vous.'],
@@ -6405,6 +6441,47 @@ const locAvec=f=>({...locFA(),dispositifs:[...locFA().dispositifs.filter(g=>g.id
 async function pbkdf2(code,sel,iter){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(code),'PBKDF2',false,['deriveBits']);
   const b=await crypto.subtle.deriveBits({name:'PBKDF2',salt:new Uint8Array(sel.match(/../g).map(x=>parseInt(x,16))),iterations:iter,hash:'SHA-256'},k,256);
   return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+/* ---------- RGPD : purge et code PIN ---------- */
+// Purge : durée choisie dans Paramètres (6 mois par défaut), dossiers cochés sur l'écran « Dossiers à purger ».
+let purgeSel=new Set();
+const purgeMois=()=>parseInt(P.purgeMois)||6,purgeL=()=>aPurger(visits,purgeMois());
+// Code PIN (4 chiffres, empreinte PBKDF2 dans P.pin) : à l'ouverture et après 15 min sans utilisation. Il cache l'écran, il ne chiffre pas les données.
+let verrou=false,pinSaisie='',pinErr=0,pinBloque=0,pinOubli=false,derAct=Date.now();
+const PIN_DELAI=15*60e3;
+const pinOk=async(c,p=P.pin)=>!!p&&/^\d{4}$/.test(c)&&await pbkdf2(c,p.sel,p.iter)===p.h;
+function verrouiller(){verrou=true;pinSaisie='';pinOubli=false;document.activeElement?.blur?.();render();scrollTo(0,0)}
+['pointerdown','keydown'].forEach(t=>addEventListener(t,()=>{if(!verrou)derAct=Date.now()},{capture:true,passive:true}));
+// unref : le minuteur ne retient pas Node pendant les auto-tests.
+setInterval(()=>{if(P.pin&&!verrou&&Date.now()-derAct>=PIN_DELAI)verrouiller()},20000).unref?.();
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&P.pin&&!verrou&&Date.now()-derAct>=PIN_DELAI)verrouiller()});
+function pinHtml(){
+  if(!P.pin)return `<div class="row"><input id="pin1" type="password" inputmode="numeric" maxlength="4" autocomplete="off" aria-label="Nouveau code PIN, 4 chiffres" placeholder="4 chiffres" style="max-width:9rem">
+    <input id="pin2" type="password" inputmode="numeric" maxlength="4" autocomplete="off" aria-label="Confirmer le code PIN" placeholder="Confirmer" style="max-width:9rem"><button data-act="pindef">Activer le code PIN</button></div>
+    <span class="muted">Demandé à l’ouverture et après 15 minutes sans utilisation. Il cache l’écran mais ne chiffre pas les données : le verrouillage de la tablette reste indispensable.</span>`;
+  return `<div class="banner ok" style="margin:0">Code PIN activé : demandé à l’ouverture et après 15 minutes sans utilisation.</div>
+    <div class="row"><input id="pinc" type="password" inputmode="numeric" maxlength="4" autocomplete="off" aria-label="Code PIN actuel" placeholder="PIN actuel" style="max-width:9rem"><button data-act="pinchg">Changer</button><button data-act="pinoff">Désactiver</button></div>`}
+function verrouView(app){const att=Math.ceil((pinBloque-Date.now())/1000);
+  app.innerHTML=`<div class="verrou"><img class="logo" src="${LOGO}" alt="SOLiHA Charente-Maritime Deux-Sèvres"><h1>SoliTech verrouillé</h1><p>Saisissez votre code PIN</p>
+   <div class="pinpts" role="status" aria-label="${pinSaisie.length} chiffre${pinSaisie.length>1?'s':''} saisi${pinSaisie.length>1?'s':''} sur 4">${[0,1,2,3].map(i=>`<span class="${i<pinSaisie.length?'on':''}"></span>`).join('')}</div>
+   ${att>0?`<p role="alert">Trop d’essais : réessayez dans ${att} s.</p>`:''}
+   <div class="pinpad">${['1','2','3','4','5','6','7','8','9','','0','⌫'].map(k=>k?`<button data-act="pinkey" data-k="${k}"${k==='⌫'?' aria-label="Effacer"':''}${att>0?' disabled':''}>${k}</button>`:'<span></span>').join('')}</div>
+   <button class="lnk" data-act="pinoubli">Code oublié</button>
+   ${pinOubli?(LOC_SUPER?`<div class="row"><input id="pins" type="password" autocomplete="off" aria-label="Code super-administrateur" placeholder="Code super-administrateur"><button data-act="pinraz">Débloquer</button></div>`
+     :'<p class="muted">Aucun code super-administrateur dans cette version : demandez à votre référent.</p>'):''}</div>`}
+async function pinAct(a,b){
+  if(a==='pinkey'&&verrou){if(Date.now()<pinBloque)return;const k=b.dataset.k;pinSaisie=k==='⌫'?pinSaisie.slice(0,-1):(pinSaisie+k).slice(0,4);render();if(pinSaisie.length<4)return;
+    if(await pinOk(pinSaisie)){verrou=false;pinSaisie='';pinErr=0;derAct=Date.now();return render()}
+    pinSaisie='';if(++pinErr>=5){pinErr=0;pinBloque=Date.now()+30e3;setTimeout(render,30100)}toast('Code PIN incorrect');return render()}
+  if(a==='pinoubli'){pinOubli=!pinOubli;return render()}
+  if(a==='pinraz'){const c=($('#pins')||{}).value||'';if(!LOC_SUPER||await pbkdf2(c,LOC_SUPER.sel,LOC_SUPER.iter)!==LOC_SUPER.h){toast('Code super-administrateur incorrect');return}
+    delete P.pin;await saveP();verrou=false;pinOubli=false;pinSaisie='';derAct=Date.now();view='param';toast('Code PIN supprimé : définissez-en un nouveau');return go()}
+  if(verrou)return;
+  if(a==='pindef'){const p1=$('#pin1').value,p2=$('#pin2').value;if(!/^\d{4}$/.test(p1)){toast('Le code PIN compte 4 chiffres');return}if(p1!==p2){toast('Les deux codes sont différents');return}
+    const sel=selAleatoire();P.pin={sel,iter:100000,h:await pbkdf2(p1,sel,100000)};await saveP();derAct=Date.now();toast('Code PIN activé');return keep()}
+  if(a==='pinoff'||a==='pinchg'){if(!await pinOk(($('#pinc')||{}).value||'')){toast('Code PIN actuel incorrect');return}
+    delete P.pin;await saveP();toast(a==='pinoff'?'Code PIN désactivé':'Saisissez le nouveau code PIN');return keep()}}
+(async()=>{const s='ab'.repeat(16),p={sel:s,iter:1000,h:await pbkdf2('1234',s,1000)};
+  console.assert(await pinOk('1234',p)&&!await pinOk('1235',p)&&!await pinOk('123',p)&&!await pinOk('1234',null),'ASSERT FAIL pinOk')})();
 const selAleatoire=()=>[...crypto.getRandomValues(new Uint8Array(16))].map(x=>x.toString(16).padStart(2,'0')).join('');
 // Fiches et barème actifs : versions de l'appareil validées par-dessus les versions déposées.
 // Une version locale identique à la version déposée disparaît (fiche intégrée) ; plus ancienne qu'une version déposée différente : repasse en brouillon.
@@ -6776,6 +6853,15 @@ function locMail(v){const b=v.loc.bien,adr=[b.adresse,[b.cp,b.communeTxt].filter
   return {sujet:'Étude de financement de votre projet'+(adr?' – '+adr:''),
     corps:`Bonjour,\n\nVous trouverez ci-joint l’étude de financement de votre projet${adr?' au '+adr:''}. Elle présente les aides mobilisables et le reste à charge estimé ; il s’agit d’une simulation indicative, établie à partir des barèmes en vigueur.\n\nJe reste à votre disposition pour toute question.\n`}}
 // Graphique du bilan cumulé (revenus cumulés − investissement), redessiné d'après chartBilan du simulateur.
+// Repères écrits sous le graphique (jamais dans le tracé : ils s'y chevauchaient). Renvoie [[courbe, texte]].
+function locChartReperes(cp,M,N){const S=cp.duree,an=t=>t.toFixed(1).replace('.',',')+' ans',ec=cp.la.revenu*S-cp.la.invest-(cp.ll.revenu*S-cp.ll.invest),R=[];
+  if(!M&&S<=N)R.push(['e',`Écart à ${S} ans : ${locEur(Math.abs(ec))} en faveur ${ec>=0?"de Loc'Avantages":'du loyer libre'}`]);
+  [['la',cp.la.retour,"Loc'Avantages"],['ll',cp.ll.retour,'Loyer libre'],['m',M&&M.retour,"MaPrimeRénov'"]].forEach(([k,t,n])=>{if(t!=null&&t!==false&&t<=N)R.push([k,`${n} : rentabilisé en ${an(t)}`])});
+  if(cp.croisement!=null&&cp.croisement>0&&cp.croisement<=N)R.push(['x',`Le loyer libre rattrape Loc'Avantages à ${an(cp.croisement)}`]);
+  return R}
+{const c={duree:9,la:{revenu:14000,invest:190000,retour:13.4},ll:{revenu:23000,invest:335000,retour:14.3},croisement:15.9},R=locChartReperes(c,null,17);
+  console.assert(R.length===4&&R[0][0]==='e'&&R[0][1].includes("de Loc'Avantages")&&R[1][1]==="Loc'Avantages : rentabilisé en 13,4 ans"&&R[3][1].endsWith('15,9 ans'),'Repères du graphique Loc’Avantages',JSON.stringify(R));
+  console.assert(locChartReperes({...c,la:{...c.la,retour:null},croisement:null},{retour:25},17).length===1,'Repères du graphique : valeurs absentes ou hors graphique')}
 function locPdfChart(doc,cp,x0,y0,w,h,{T,font,ACC,LL,INK,MUT,LINE,SKYT},M){
   const la=cp.la,ll=cp.ll,S=cp.duree,fLA=t=>la.revenu*t-la.invest,fLL=t=>ll.revenu*t-ll.invest,fM=t=>M.revenu*t-M.invest,MC=[0,122,90];
   const beLA=la.retour==null?Infinity:la.retour,beLL=ll.retour==null?Infinity:ll.retour,beM=!M||M.retour==null?Infinity:M.retour;
@@ -6790,22 +6876,23 @@ function locPdfChart(doc,cp,x0,y0,w,h,{T,font,ACC,LL,INK,MUT,LINE,SKYT},M){
   for(let v=yMin;v<=yMax+1e-6;v+=step){ln(v===0?[158,162,166]:[230,232,234],v===0?.35:.2);doc.line(x0+m.l,Y(v),x0+w-m.r,Y(v));font(6.5,'normal',MUT);doc.text(T(v===0?'0':k(v)),x0+m.l-2,Y(v)+1.1,{align:'right'})}
   const xt=N<=12?1:2;for(let t=0;t<=N;t+=xt){font(6.5,'normal',MUT);doc.text(String(t),X(t),y0+h-m.b+4,{align:'center'})}
   doc.text('Années de location',(X(0)+X(N))/2,y0+h-1.5,{align:'center'});
-  if(cp.croisement!=null&&cp.croisement>0&&cp.croisement<=N){const xc=X(cp.croisement);ln(MUT,.2,[.6,.9]);doc.line(xc,y0+m.t+12,xc,Y(fLA(cp.croisement))-2);
-    font(6.5,'normal',MUT);doc.text(T(`Le loyer libre rattrape Loc'Avantages à ${an(cp.croisement)}`),xc,y0+m.t+11,{align:xc>x0+w-m.r-25?'right':'center'})}
   ln(LL,.7,[2.2,1.6]);doc.line(X(0),Y(fLL(0)),X(N),Y(fLL(N)));
   if(M){ln(MC,.7,[.8,.8]);doc.line(X(0),Y(fM(0)),X(N),Y(fM(N)))}
   ln(ACC,.7);doc.line(X(0),Y(fLA(0)),X(Math.min(S,N)),Y(fLA(Math.min(S,N))));doc.line(X(Math.min(S,N)),Y(fLA(Math.min(S,N))),X(N),Y(fLA(N)));ln(INK,.2);
   const dot=(x,yy,c,r=1.3)=>{doc.setFillColor(...c);doc.setDrawColor(255,255,255);doc.setLineWidth(.5);doc.circle(x,yy,r,'FD')};
-  if(S<=N){const ya=Y(fLA(S)),yl=Y(fLL(S)),ec=fLA(S)-fLL(S);dot(xs,ya,ACC);dot(xs,yl,LL);if(M)dot(xs,Y(fM(S)),MC);
-    font(7,'normal',INK);if(!M)doc.text(T(`Écart à ${S} ans : ${locEur(Math.abs(ec))} en faveur ${ec>=0?"de Loc'Avantages":'du loyer libre'}`),X(0)+2,y0+m.t+8)}
-  [[beLA,ACC,false,0],[beLL,LL,true,0],[beM,MC,true,9]].forEach(([t,c,below,dy])=>{if(!isFinite(t)||t>N)return;dot(X(t),Y(0),c,1.4);font(7,'bold',c);doc.text(T(`Rentabilisé en ${an(t)}`),X(t)+(below?2.5:-2.5),Y(0)+(below?4.5+dy:-2.5),{align:below?'left':'right'})});
+  if(S<=N){const ya=Y(fLA(S)),yl=Y(fLL(S)),ec=fLA(S)-fLL(S);dot(xs,ya,ACC);dot(xs,yl,LL);if(M)dot(xs,Y(fM(S)),MC)}
+  [[beLA,ACC],[beLL,LL],[beM,MC]].forEach(([t,c])=>{if(isFinite(t)&&t<=N)dot(X(t),Y(0),c,1.4)});
+  if(cp.croisement!=null&&cp.croisement>0&&cp.croisement<=N)dot(X(cp.croisement),Y(fLA(cp.croisement)),MUT,1.4);
   // Étiquettes de fin de courbe écartées d'au moins 8 mm.
   const E3=[[fLA(N),ACC,"Loc'Avantages"],[fLL(N),LL,'Loyer libre'],...(M?[[fM(N),MC,"MaPrimeRénov'"]]:[])].map(e=>[...e,Y(e[0])]).sort((a,b)=>a[3]-b[3]);
   E3.forEach((e,k)=>{if(k&&e[3]-E3[k-1][3]<8)e[3]=E3[k-1][3]+8});
-  E3.forEach(([val,c,name,yy])=>{dot(X(N),Y(val),c,1);font(7,'bold',INK);doc.text(T(name),X(N)+2.5,yy-.5);font(6.5,'normal',MUT);doc.text(T(`${locEur(val)} à ${N} ans`),X(N)+2.5,yy+2.8)});
+  E3.forEach(([val,c,name,yy])=>{dot(X(N),Y(val),c,1);font(7,'bold',c);doc.text(T(name),X(N)+2.5,yy-.5);font(6.5,'normal',MUT);doc.text(T(`${locEur(val)} à ${N} ans`),X(N)+2.5,yy+2.8)});
   ln(ACC,.7);doc.line(x0+m.l,y0+3,x0+m.l+6,y0+3);font(7,'normal',INK);doc.text(T("Loc'Avantages (avec subventions)"),x0+m.l+8,y0+4);
   ln(LL,.7,[2.2,1.6]);doc.line(x0+m.l+62,y0+3,x0+m.l+68,y0+3);doc.text('Loyer libre (sans subvention)',x0+m.l+70,y0+4);
   if(M){ln(MC,.7,[.8,.8]);doc.line(x0+m.l+114,y0+3,x0+m.l+120,y0+3);doc.text(T("MaPrimeRénov' + loyer libre"),x0+m.l+122,y0+4)}ln(INK,.2);
+  const R=locChartReperes(cp,M,N),CO={e:ACC,la:ACC,ll:LL,m:MC,x:MUT},cw=(w-m.l)/2;
+  R.forEach(([k,t],i)=>{const x=x0+m.l+(i%2)*cw,yy=y0+h+4+(i>>1)*5;if(k!=='e')dot(x+1.2,yy-1,CO[k],1.2);font(7.5,k==='e'?'bold':'normal',k==='e'?ACC:INK);doc.text(T(t),x+(k==='e'?0:4),yy)});
+  return h+(R.length?2+Math.ceil(R.length/2)*5:0);
 }
 
 /* ---------- démarrage ---------- */
@@ -6814,7 +6901,7 @@ function locPdfChart(doc,cp,x0,y0,w,h,{T,font,ACC,LL,INK,MUT,LINE,SKYT},M){
   try{visits=(await store.all()).map(migrate)}catch(e){visits=[]}
   for(const v of visits)if(v._aEnr){delete v._aEnr;store.put(v).catch(()=>{})}
   try{P=await store.getProfil()}catch(e){}
-  appliqueAff();
+  appliqueAff();if(P.pin)verrou=true;
   try{MAIRIES=await store.getRec('mairies');MAIRIES.l=MAIRIES.l||{}}catch(e){}
   try{CARNET=await store.getRec('carnet');CARNET.l=CARNET.l||{}}catch(e){}
   try{FSDIR=(await store.getRec('fsdir')).h||null}catch(e){}
