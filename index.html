@@ -4146,7 +4146,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.15-1749';
+const APP_VER='2026.11.15-1820';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -4460,7 +4460,7 @@ const cpv=v=>[v.f.cp,v.f.ville].filter(Boolean).join(' ');
 const who=v=>isFin(v)?v.f.pNom||[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Propriétaire non renseigné':isErgo(v)?v.f.noms||'Demandeur non renseigné':isAud(v)?[v.f.pNom,v.f.pPrenom].filter(Boolean).join(' ')||[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Propriétaire non renseigné':isLoc(v)?locWho(v):isDeg(v)?v.f.pNom||[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Propriétaire non renseigné':isPdl(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Logement non renseigné':[v.f.nom,v.f.prenom].filter(Boolean).join(' ')||'Occupant non renseigné';
 const where=v=>isFin(v)||isErgo(v)||isAud(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', '):isLoc(v)?locWhere(v):isDeg(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', '):isPdl(v)?(v.f.pNom||v.f.pSoc?'Propriétaire : '+(v.f.pSoc||[v.f.pNom,v.f.pPrenom].filter(Boolean).join(' ')):''):[v.f.adresse,cpv(v)].filter(Boolean).join(', ');
 const logoOf=v=>isPdl(v)?COMMUNES[v.f.commune]?.logo:COM[v.f.dem]?.logo;
-const kind=v=>isFin(v)?'Fin de travaux'+(v.f.srcNum?' · '+v.f.srcNum:''):isErgo(v)?'Rapport ergothérapeute':isAud(v)?'Audit énergétique · '+(v.f.dispositif||'maison individuelle'):isLoc(v)?'Loc’Avantages · '+v.loc.logements.length+' logement'+(v.loc.logements.length>1?'s':''):isDeg(v)?['Dégradation',v.bien==='imm'?`Immeuble · ${v.g.length-1} logement${v.g.length>2?'s':''}`:'Maison individuelle',v.f.op].filter(Boolean).join(' · '):isPdl(v)?'Permis de louer · '+v.f.commune+' · '+(v.f.typeVis||''):(COM[v.f.dem]?.label||'')+' · '+(v.f.typeVis||'');
+const kind=v=>isFin(v)?'Fin de travaux'+(v.f.srcNum?' · '+v.f.srcNum:''):isErgo(v)?'Rapport ergothérapeute':isAud(v)?'Audit énergétique · '+(v.f.dispositif||'maison individuelle'):isLoc(v)?'Loc’Avantages · '+v.loc.logements.length+' logement'+(v.loc.logements.length>1?'s':'')+(v.loc.variante?' · '+v.loc.variante:''):isDeg(v)?['Dégradation',v.bien==='imm'?`Immeuble · ${v.g.length-1} logement${v.g.length>2?'s':''}`:'Maison individuelle',v.f.op].filter(Boolean).join(' · '):isPdl(v)?'Permis de louer · '+v.f.commune+' · '+(v.f.typeVis||''):(COM[v.f.dem]?.label||'')+' · '+(v.f.typeVis||'');
 
 // Dossiers en cours ou terminés, filtrés par type et par les mots recherchés (tous présents, sans accents ni casse).
 const dosCle=v=>mkey([who(v),where(v),kind(v),v.num,v.f.refDos,frDate(v.f.dateVis),v.f.nom,v.f.pNom,v.f.pSoc].join(' '));
@@ -4482,6 +4482,7 @@ function caseHtml(v){
    <div class="row"><button class="btn-primary" data-act="open" data-id="${v.id}">${v.pdfAt?'Ouvrir':'Reprendre'}</button>
     ${v.pdfAt?`<button data-act="reopen" data-id="${v.id}">Remettre en cours</button>`:''}
     <button data-act="fsave" data-id="${v.id}">${sauve(v)?'Sauvegardé ✓':'Sauvegarder'}</button>
+    <button data-act="lvar" data-id="${v.id}">Créer une variante</button>
     <button class="btn-danger" data-act="delv" data-id="${v.id}">Supprimer</button></div></div>`}
   const deg=isDeg(v),rs=RR(v),manq=rs.reduce((n,r)=>n+(r.items||[]).filter(d=>phReq(d,v.it[d.id])&&v.it[d.id]?.on&&!v.it[d.id].ph.length).length,0);
   return `<div class="case"><span class="tag ${isPdl(v)?'pdl':deg?'deg':isAud(v)?'aud':''}">${esc(kind(v))}</span>
@@ -5083,7 +5084,10 @@ console.assert(JSON.stringify(annPt({x:100,y:50,w:800,h:600},.5,40,20))==='[180,
 const locLg=i=>({nom:'Logement '+i,surface:'',annexes:'',thematique:'TD',loc:2,iml:false,travaux:'',montant:'',ttc:'',loyerLibre:'',vacant:false,gain35:false,passoire:false,rdc:false,montantRdc:'',aidesManu:[],mprMontant:'',mprGain:2});
 const locVide=()=>({proprio:{nom:'',prenoms:'',email:'',tel:'',adresse:'',cp:'',ville:'',soliact:'',statut:'NP',sci:'',mprOn:false,rfr:'',foyer:'',mprCat:''},
  bien:{adresse:'',cp:'',insee:'',communeTxt:'',description:'',ravalement:false,ori:false,pacteSol:true,force:'AUTO',tva:'10',moe:false,moeTaux:'',photo:''},
- logements:[locLg(1)],aidesProjet:[],obs:'',compDuree:9});
+ logements:[locLg(1)],aidesProjet:[],obs:'',variante:'',compDuree:9});
+// N° d'une variante : celui du dossier d'origine suivi de la première lettre libre (B, C…). Le compteur du profil n'avance pas.
+const locVarNum=(num,nums)=>{const base=String(num||'').replace(/-[A-Z]$/,'');if(!base)return '';let c=66;while(c<90&&nums.includes(base+'-'+String.fromCharCode(c)))c++;return base+'-'+String.fromCharCode(c)};
+console.assert(locVarNum('LOC-2026-AB-0011',['LOC-2026-AB-0011'])==='LOC-2026-AB-0011-B'&&locVarNum('LOC-2026-AB-0011-B',['LOC-2026-AB-0011','LOC-2026-AB-0011-B'])==='LOC-2026-AB-0011-C'&&locVarNum('',[])==='','N° de variante Loc’Avantages');
 const locEur=x=>Math.round(x).toLocaleString('fr-FR')+' €';
 const locEur2=x=>(+x).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
 const locNum=x=>(Math.round(x*100)/100).toLocaleString('fr-FR');
@@ -5255,6 +5259,7 @@ function locView(app,bar,bi){
     locBar(bi,R,fini);return true}
   if(view==='lcomp'){
     app.innerHTML=`${topbar('Comparaison et observations',who(cur),'dash')}<div class="form">
+      ${lin('variante','Nom de la variante (facultatif, repris dans le document)',{full:1,ph:'Ex. : 3 logements'})}
       ${lin('compDuree','Durée de comparaison (années)',{im:'numeric'})}
       <div class="hint full ${R.comp.ok?'':'warn'}" id="lcmp">${esc(locCmpTxt(R))}</div>
       ${D.proprio.statut==='NP'?locMprBloc(D.proprio,R):'<div class="hint full">La comparaison avec MaPrimeRénov’ est réservée aux propriétaires en nom propre.</div>'}
@@ -5455,6 +5460,10 @@ document.addEventListener('click',async e=>{
   if(a==='ctrl'){const src=visits.find(v=>v.id===b.dataset.id);cur=structuredClone(src);Object.assign(cur,{id:newVisit().id,created:Date.now(),done:{},sig:''});cur.pcs?.forEach(p=>delete p.vu);delete cur.num;delete cur.savedAt;delete cur.pdfAt;if(numDos(cur))saveP();cur.f.typeVis='Visite de contrôle';cur.f.dateVis=today();visits.push(cur);await save(true);view='dash';toast('Visite de contrôle créée à partir de la visite initiale');return go()}
   if(a==='delv'){if(!armed(b,'Confirmer la suppression'))return;await store.del(b.dataset.id);visits=visits.filter(v=>v.id!==b.dataset.id);return render()}
   if(a==='list'){await save(true);if(cur){carnetMemo(cur);if(!sauve(cur))await fsSave(cur,1)}cur=null;view='list';return go()}
+  // Variante Loc'Avantages : copie du dossier (bailleur, bien, logements) ; PDF, sauvegarde et règles figées non repris.
+  if(a==='lvar'){const src=visits.find(v=>v.id===b.dataset.id);if(!src)return;const n=locVarNum(src.num,visits.map(v=>v.num));cur=structuredClone(src);
+    Object.assign(cur,{id:newVisit().id,created:Date.now(),done:{},sig:''});delete cur.savedAt;delete cur.pdfAt;delete cur.loc.regles;delete cur.num;if(n)cur.num=n;
+    cur.loc.variante=n?'Variante '+n.slice(-1):'Variante';cur.f.dateVis=today();visits.push(cur);await save(true);view='dash';toast('Variante créée : modifiez ses logements, puis son nom dans « Comparaison »');return go()}
   if(a==='reopen'){const v=visits.find(x=>x.id===b.dataset.id);delete v.pdfAt;await store.put(v);toast('Dossier remis en cours');return render()}
   if(a==='dash'){view='dash';return go()}
   if(a==='lfx'){lf='';return keep()}
@@ -5668,7 +5677,7 @@ async function importFichier(f,T){
       const m=migrate(v),x=loc.get(m.id);if(x&&(x.updated||0)>=(m.updated||0)){T.ni++;continue}
       await store.put(m);visits=visits.filter(y=>y.id!==m.id).concat(m);x?T.nu++:T.na++;
       // Compteur de n° calé sur les dossiers du même technicien créés sur un autre appareil.
-      const k=/^([A-Z]{3}-\d{4})-([A-Z]*)-(\d+)$/.exec(m.num||'');if(k&&ini&&k[2]===ini&&+k[3]>((P.seq||{})[k[1]]||0)){P.seq={...P.seq,[k[1]]:+k[3]};seq=true}}
+      const k=/^([A-Z]{3}-\d{4})-([A-Z]*)-(\d+)(?:-[A-Z])?$/.exec(m.num||'');if(k&&ini&&k[2]===ini&&+k[3]>((P.seq||{})[k[1]]||0)){P.seq={...P.seq,[k[1]]:+k[3]};seq=true}}
     if(seq)saveP();
     let nm=0,nc=0;if(d.mairies&&typeof d.mairies==='object')for(const [k,m] of Object.entries(d.mairies))if(m&&typeof m.ville==='string'&&!MAIRIES.l[k]){MAIRIES.l[k]=m;nm++}
     if(nm)saveMairies();
@@ -6293,7 +6302,7 @@ async function locPdf(v,envoi){
   let rx=ML+CW;rx-=await img(LOC_LOGOS.anah,rx,y,26,20,true)+5;if(locLogo(disp.logo))await img(locLogo(disp.logo),rx,y,40,20,true);
   y+=26;
   /* --- bandeau de titre --- */
-  {const TL=lines("VOS AIDES POUR RÉNOVER ET LOUER EN LOC'AVANTAGES",CW-14,15,'bold'),meta=[`Établi le ${dateTxt}`,p.soliact?`Dossier Soliact ${p.soliact}`:'',`Dispositif : ${dispLong}`].filter(Boolean).join('   ·   '),ML2=lines(meta,CW-14,8.5);
+  {const TL=lines("VOS AIDES POUR RÉNOVER ET LOUER EN LOC'AVANTAGES",CW-14,15,'bold'),meta=[`Établi le ${dateTxt}`,D.variante,p.soliact?`Dossier Soliact ${p.soliact}`:'',`Dispositif : ${dispLong}`].filter(Boolean).join('   ·   '),ML2=lines(meta,CW-14,8.5);
    const h=8+5+TL.length*LH(15)+2+ML2.length*LH(8.5)+4;doc.setFillColor(...ACC);doc.rect(ML,y,CW,h,'F');
    font(7.5,'bold',[191,224,244]);doc.text('INFORMATION PROPRIÉTAIRE BAILLEUR',ML+7,y+7);let yy=y+9;
    font(15,'bold',WHITE);TL.forEach(l=>{doc.text(l,ML+7,yy+LH(15)*.8);yy+=LH(15)});yy+=2;font(8.5,'normal',[214,232,242]);ML2.forEach(l=>{doc.text(l,ML+7,yy+LH(8.5)*.8);yy+=LH(8.5)});y+=h+6}
