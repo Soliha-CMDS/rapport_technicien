@@ -2,8 +2,8 @@
 // Avec réseau, la dernière version est toujours chargée (sans passer par le cache du navigateur) :
 // une nouvelle version déposée sur le serveur s'affiche dès l'ouverture. Sans réseau, la copie en cache est utilisée.
 // « no-cache » : le navigateur demande au serveur si le fichier a changé (ETag) et ne le retélécharge que dans ce cas.
-const CACHE='constat-decence-v4';
-const FILES=['./','index.html','jspdf.umd.min.js','manifest.webmanifest','icon-192.png','icon-512.png'];
+const CACHE='constat-decence-v7';
+const FILES=['./','index.html','jspdf.umd.min.js','pdf-lib.min.js','cerfa-convention.js','cerfa-plan.js','cerfa-cee.js','formulaire-iml.js','manifest.webmanifest','icon-192.png','icon-512.png'];
 const WAIT=4000; // réseau trop lent : on se rabat sur la copie en cache au bout de 4 s
 
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES.map(f=>new Request(f,{cache:'reload'})))).then(()=>self.skipWaiting()))});
