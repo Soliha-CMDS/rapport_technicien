@@ -966,6 +966,16 @@ function mprDossier(d, R, eur) {
   console.assert(r.total === 17600 && r.lignes.length === 6, "MPR Val de Gâtine vacance", r);
 })();
 
+// Préparation au dépôt : documents à produire ; l'engagement IML seulement si un logement est en intermédiation locative.
+function locDocsDepot(d) {
+  const nb = d.logements.filter((l) => l.iml).length;
+  return [{ k: "conv", n: "CONVENTION", t: "Convention Anah avec travaux", cerfa: "Cerfa n° 14039*06" },
+    { k: "plan", n: "PLAN DE FINANCEMENT", t: "Plan de financement prévisionnel", cerfa: "Cerfa n° 13461*03" },
+    { k: "cee", n: "ENGAGEMENT CEE", t: "Engagements complémentaires (CEE)", cerfa: "Cerfa n° 14566*04" },
+    ...(nb ? [{ k: "iml", n: "ENGAGEMENT IML", t: "Prime d’intermédiation locative", cerfa: "Formulaire Anah", nb }] : [])];
+}
+console.assert(locDocsDepot({ logements: [{ iml: false }] }).map((x) => x.k).join() === "conv,plan,cee" && locDocsDepot({ logements: [{ iml: true }, { iml: false }, { iml: true }] }).at(-1).nb === 2, "locDocsDepot : IML selon les logements");
+
 // Dernière page du PDF : déroulé du dossier et pièces à fournir, selon le dossier (pièces listées par l'utilisateur le 08/11/2026).
 // Acomptes : règles du formulaire Anah de demande d'acompte (Cerfa n° 13466*03).
 const locNbAcomptes = s => s <= 1500 ? 0 : s <= 15000 ? 1 : s <= 30000 ? 2 : 3;
@@ -1004,7 +1014,7 @@ function locDeroule(d, anah, locales, eur) {
 })();
 // Fiches dispositif : seuls les types d'aide et les conditions connus du moteur sont admis.
 // Questions d'une fiche : identifiant simple, niveau dossier ou logement, type connu ; aucune réponse ne doit écraser un champ du dossier.
-const LOC_CHAMPS = new Set(["nom", "surface", "annexes", "thematique", "loc", "iml", "travaux", "montant", "ttc", "loyerLibre", "vacant", "gain35", "passoire", "aidesManu", "mprMontant", "mprGain",
+const LOC_CHAMPS = new Set(["nom", "surface", "annexes", "thematique", "loc", "iml", "travaux", "montant", "ttc", "loyerLibre", "vacant", "gain35", "passoire", "aidesManu", "mprMontant", "mprGain", "dep", "depot",
   "adresse", "cp", "insee", "communeTxt", "description", "force", "tva", "moe", "moeTaux", "moeMontant", "moeTTC", "photo", "numero", "voie"]);
 console.assert([LOC_FICHES, LOC_FICHES_V1].every((F) => F.dispositifs.every((f) => (f.questions || []).every((q) => /^[A-Za-z][A-Za-z0-9_]{0,30}$/.test(q.id) && !LOC_CHAMPS.has(q.id)
   && ["dossier", "logement"].includes(q.niveau) && ["oui", "liste", "nombre"].includes(q.type) && q.texte))), "Fiches dispositif : question mal décrite");
@@ -1258,6 +1268,307 @@ function locPeutValiderAnah(A, F) { const E = locValideAnah(A), G = { ...F, anah
   const A = structuredClone(LOC_FICHES.anah); A.th.TD.taux = 0.53; A.mpr.plaf[0] = [3, 2, 1]; A.sansPrimeVacance.push("99999");
   const E2 = locPeutValiderAnah(A, LOC_FICHES);
   console.assert(["Cas de contrôle de l’Anah faux", "très modeste < modeste", "commune inconnue"].every((m) => E2.some((e) => e.includes(m))), "Règles de l’Anah : erreurs non détectées", JSON.stringify(E2));
+})();
+;
+// Convention Anah avec travaux (cerfa 14039*06) de la préparation au dépôt Loc'Avantages.
+// Contrôles et remplissage repris de l'outil à part convention-anah/ (remplacé) ; données lues dans le dossier SoliTech (locConvention).
+// Modèle (cerfa-convention.js, CERFA_B64) et bibliothèque (pdf-lib.min.js, PDFLib) chargés à la demande.
+const CONV = (() => {
+const MAX_PAR_NIVEAU = 6; // colonnes du tableau X, une page par niveau de loyer
+const NIVEAUX = { 1: 'Loc 1 – intermédiaire', 2: 'Loc 2 – social', 3: 'Loc 3 – très social' };
+const TAILLE = 8; // même police (Helvetica) et même taille dans toutes les cases
+
+/* ---------- Calculs ---------- */
+const num = v => { v = String(v ?? '').replace(/[\s €]/g, '').replace(',', '.'); if (v === '') return null; const n = Number(v); return isFinite(n) && n >= 0 ? n : NaN };
+const r2 = n => Math.round(n * 100) / 100;
+// Espaces insécables des milliers remplacées : la police du PDF ne les connaît pas.
+const fr = (n, dec = 0) => n.toLocaleString('fr-FR', { minimumFractionDigits: dec, maximumFractionDigits: 2 }).replace(/[  ]/g, ' ');
+console.assert(fr(1200.5) === '1 200,5' && fr(620, 2) === '620,00', 'format des nombres à la française');
+// Notice, I-C et I-D : annexes retenues = moitié de leur surface, dans la limite de 8 m² (métropole) ; surface fiscale = habitable + annexes retenues.
+const annexesRetenues = ann => ann == null || isNaN(ann) ? 0 : r2(Math.min(ann / 2, 8));
+function surfaces(l) {
+  const s = num(l.shab), a = num(l.ann);
+  if (s == null || isNaN(s) || isNaN(a)) return null;
+  return { ann: annexesRetenues(a), fis: r2(s + annexesRetenues(a)) };
+}
+console.assert(surfaces({ shab: '70,7', ann: '6' }).fis === 73.7, 'surface fiscale : 70,7 + 6/2');
+console.assert(surfaces({ shab: '50', ann: '20' }).fis === 58, 'annexes retenues plafonnées à 8 m²');
+console.assert(surfaces({ shab: '45', ann: '' }).fis === 45 && surfaces({ shab: '', ann: '4' }) === null, 'sans annexes ou sans surface habitable');
+const plafondMensuel = l => { const s = surfaces(l), m = num(l.lmax); return s && m != null && !isNaN(m) ? r2(m * s.fis) : null };
+console.assert(plafondMensuel({ shab: '70,7', ann: '6', lmax: '8,5' }) === 626.45, 'loyer plafond = loyer max au m² × surface fiscale');
+
+/* ---------- Contrôles : erreurs (à corriger) et avertissements ---------- */
+const CP = ['b_cp', 's_cp', 'r_cp', 'l_cp'];
+function verifier(o) {
+  const err = [], avert = [], champsKo = new Set();
+  const e = (msg, k) => { err.push(msg); if (k) champsKo.add(k) };
+  for (const k of CP) if (o[k] && !/^\d{5}$/.test(o[k])) e('Code postal à 5 chiffres.', k);
+  const tel = String(o.tel || '').replace(/[\s.]/g, '');
+  if (tel && !/^\d{10}$/.test(tel)) e('N° de téléphone : 10 chiffres.', 'tel');
+  if (o.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(o.email)) e('Adresse de messagerie incorrecte.', 'email');
+  const d = String(o.duree ?? '').trim();
+  if (!/^\d{1,2}$/.test(d) || +d < 6) e('Durée de la convention : 6 ans au minimum (notice, III).', 'duree');
+  for (const n of [1, 2, 3]) { const c = o.lg.filter(l => l.loc == n).length; if (c > MAX_PAR_NIVEAU) e(`${NIVEAUX[n]} : ${c} logements, le cerfa n'a que ${MAX_PAR_NIVEAU} colonnes.`) }
+  o.lg.forEach((l, i) => {
+    for (const k of ['shab', 'ann', 'sapres', 'lmax', 'loyer']) if (isNaN(num(l[k]))) e(`Logement ${i + 1} : nombre incorrect.`, `${i}.${k}`);
+    const p = plafondMensuel(l), y = num(l.loyer);
+    if (p != null && y != null && !isNaN(y) && y > p) avert.push(`Logement ${i + 1} : loyer de ${fr(y, 2)} € supérieur au maximum de ${fr(p, 2)} € (${fr(num(l.lmax), 2)} €/m² × ${fr(surfaces(l).fis)} m²).`);
+  });
+  return { err, avert, champsKo };
+}
+
+/* ---------- Texte réparti sur deux cases (nom du bailleur en tête de la page 2) ---------- */
+function couper(txt, largeur1, mesure) {
+  const mots = txt.split(/\s+/).filter(Boolean);
+  let l1 = '';
+  while (mots.length && mesure((l1 ? l1 + ' ' : '') + mots[0]) <= largeur1) l1 = (l1 ? l1 + ' ' : '') + mots.shift();
+  return [l1, mots.join(' ')];
+}
+console.assert(JSON.stringify(couper('SCI Les Trois Chênes', 9, s => s.length)) === '["SCI Les","Trois Chênes"]', 'découpe du nom sur deux cases');
+
+/* ---------- PDF : le cerfa reste modifiable (cases remplies, non figées) ---------- */
+async function construirePdf(o, PDFLib, b64) {
+  const { PDFDocument, StandardFonts, PDFName } = PDFLib;
+  const doc = await PDFDocument.load(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
+  const f = doc.getForm(), helv = await doc.embedFont(StandardFonts.Helvetica), trop = [];
+  let rempli = null; // une case remplie, pour lire le nom de police donné par pdf-lib
+  // pdf-lib ne lit pas le réglage de police écrit par preparer-modele.py : on le redonne à chaque case.
+  for (const c of f.getFields()) c.acroField.setDefaultAppearance(`/Helv ${TAILLE} Tf 0 g`);
+  const net = s => [...String(s ?? '')].map(c => { try { helv.encodeText(c); return c } catch (e) { return '?' } }).join('');
+  const largeur = nom => f.getTextField(nom).acroField.getWidgets()[0].getRectangle().width - 4;
+  const put = (nom, v, lib) => {
+    v = net(v); if (!v.trim()) return;
+    const t = f.getTextField(nom), m = t.getMaxLength();
+    if (m ? v.length > m : helv.widthOfTextAtSize(v, TAILLE) > largeur(nom)) { trop.push(lib); return }
+    t.acroField.getWidgets().forEach(w => w.getOrCreateBorderStyle().setWidth(0)); // cases déjà dessinées sur le cerfa
+    t.setText(v); rempli = nom;
+  };
+  const soc = o.type === 'soc';
+  // Page 1 : coordonnées du bailleur (l'encadré « Réservé à l'Anah » reste vide)
+  put('tel', String(o.tel || '').replace(/\D/g, ''), 'Téléphone');
+  put('email', o.email, 'Adresse de messagerie');
+  // Page 2 : nom du bailleur sur la ligne d'en-tête, puis identité et adresses, chacune dans ses propres cases
+  const nom = net(soc ? o.s_raison : o.b_nom).trim();
+  const [e1, e2] = couper(nom, largeur('entete1'), s => helv.widthOfTextAtSize(s, TAILLE));
+  put('entete1', e1, "Nom du bailleur (en-tête)"); put('entete2', e2, "Nom du bailleur (en-tête)");
+  const bloc = soc ? ['s_raison', 's_adresse', 's_cp', 's_commune', 'r_nom', 'r_adresse', 'r_cp', 'r_commune'] : ['b_nom', 'b_adresse', 'b_cp', 'b_commune'];
+  const LIB = { b_nom: 'Nom du bailleur', b_adresse: 'Adresse du bailleur', b_commune: 'Commune du bailleur', s_raison: 'Raison sociale', s_adresse: 'Adresse du siège', s_commune: 'Commune du siège',
+    r_nom: 'Nom du représentant', r_adresse: 'Adresse du représentant', r_commune: 'Commune du représentant', l_numero: 'N° du logement', l_voie: 'Voie du logement', l_commune: 'Commune du logement', l_cadastre: 'Référence cadastrale' };
+  for (const k of [...bloc, 'l_numero', 'l_voie', 'l_cp', 'l_commune', 'l_cadastre']) put(k, o[k], LIB[k] || 'Code postal');
+  const duree = String(o.duree ?? '').trim();
+  put('duree', duree.padStart(2, ' '), 'Durée');
+  // Pages 5 à 7 : une page par niveau de loyer, les logements dans l'ordre de saisie
+  for (const n of [1, 2, 3]) {
+    o.lg.map((l, i) => [l, i]).filter(([l]) => l.loc == n).slice(0, MAX_PAR_NIVEAU).forEach(([l, i], c) => {
+      const k = x => `loc${n}_${x}_${c + 1}`, lib = x => `Logement ${i + 1} : ${x}`, s = surfaces(l);
+      const nb = (v, dec) => { const x = num(v); return x == null || isNaN(x) ? '' : fr(x, dec) };
+      put(k('porte'), l.porte, lib('porte')); put(k('bat'), l.bat, lib('bâtiment')); put(k('esc'), l.esc, lib('escalier')); put(k('etage'), l.etage, lib('étage'));
+      if (n > 1) put(k('reserve'), l.reserve, lib('logement réservé'));
+      if (duree) put(k('duree'), `${+duree} ans`, lib('durée'));
+      put(k('shab'), nb(l.shab), lib('surface habitable'));
+      if (s && num(l.ann)) put(k('sann'), fr(s.ann), lib('annexes'));
+      if (s) put(k('sfis'), fr(s.fis), lib('surface fiscale'));
+      put(k('sapres'), nb(l.sapres), lib('surface après travaux'));
+      put(k('lmax'), nb(l.lmax, 2), lib('loyer maximal au m²'));
+      put(k('loyer'), nb(l.loyer, 2), lib('loyer mensuel'));
+    });
+  }
+  // Page 7 : lieu et date de signature du bailleur (la partie Anah reste vide)
+  put('fait_bailleur_a', o.fait_a, 'Fait à');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(o.fait_le || '')) { const [a, m, j] = o.fait_le.split('-'); put('fait_bailleur_jj', j, 'Date'); put('fait_bailleur_mm', m, 'Date'); put('fait_bailleur_aaaa', a, 'Date') }
+  if (trop.length) throw new Error('texte trop long pour sa case : ' + [...new Set(trop)].join(', ') + '. Abréger ces champs.');
+  f.updateFieldAppearances(helv);
+  // La police des cases remplies doit être déclarée dans le formulaire, sinon Acrobat en change quand on retouche une case.
+  const da = rempli ? f.getTextField(rempli).acroField.getDefaultAppearance() : '', police = (da.match(/\/(\S+) [\d.]+ Tf/) || [])[1];
+  if (police) f.acroForm.dict.lookup(PDFName.of('DR')).lookup(PDFName.of('Font')).set(PDFName.of(police), helv.ref);
+  // Sans pause entre les lots d'objets : avec les pauses par défaut, l'enregistrement prenait 10 s dans le navigateur (0,1 s sans).
+  return doc.save({ objectsPerTick: Infinity });
+}
+
+/* ---------- Données du cerfa lues dans le dossier Loc'Avantages ---------- */
+// d : v.loc (saisie brute) ; R : son calcul (locR), qui donne le loyer au m² et le loyer plafond de chaque logement (surface utile = surface fiscale).
+// SCI (hypothèse reprise de l'outil à part, à confirmer) : adresse du propriétaire = siège, nom et prénom = représentant.
+function locConvention(d, R) {
+  const t = x => x == null ? '' : String(x).trim(), dec = x => String(x).replace('.', ','), p = d.proprio || {}, b = d.bien || {}, D = d.depot || {};
+  const nom = [t(p.nom), t(p.prenoms)].filter(Boolean).join(' ');
+  const o = { duree: t(D.duree) || '6', tel: t(p.tel), email: t(p.email), l_cadastre: t(D.cadastre), fait_a: t(D.faitA), fait_le: t(D.faitLe) };
+  if (p.statut && p.statut !== 'NP') Object.assign(o, { type: 'soc', s_raison: t(p.sci), s_adresse: t(p.adresse), s_cp: t(p.cp), s_commune: t(p.ville), r_nom: nom, r_adresse: t(D.rAdresse), r_cp: t(D.rCp), r_commune: t(D.rCommune) });
+  else Object.assign(o, { type: 'pp', b_nom: nom, b_adresse: t(p.adresse), b_cp: t(p.cp), b_commune: t(p.ville) });
+  // Adresse du bien : « 12 bis rue … » coupé en n° et voie
+  const m = /^(\d+\s*(?:bis|ter|quater|[a-d])?)\b[\s,]*(.*)$/i.exec(t(b.adresse));
+  Object.assign(o, { l_numero: m ? m[1].trim() : '', l_voie: m ? m[2] : t(b.adresse), l_cp: t(b.cp), l_commune: t(b.communeTxt) });
+  o.lg = (d.logements || []).map((l, i) => {
+    const e = l.dep || {}, loc = [1, 2, 3].includes(+l.loc) ? +l.loc : 2, r = R && R.lgs && R.lgs[i], niv = r && r.loyer ? r.loyer.niveaux[loc - 1] : null;
+    return { loc: String(loc), porte: t(e.porte) || (/^(L|Logement \d+)$/.test(t(l.nom)) ? '' : t(l.nom)), bat: t(e.bat), esc: t(e.esc), etage: t(e.etage), reserve: loc > 1 ? t(e.reserve) : '',
+      shab: dec(t(l.surface)), ann: dec(t(l.annexes)), sapres: t(e.sapres), lmax: niv ? dec(niv.m2) : '', loyer: t(e.loyer) || (niv ? dec(niv.mensuel) : '') };
+  });
+  return o;
+}
+console.assert((() => {
+  const R = { lgs: [{ loyer: { niveaux: [{ m2: 9 }, { m2: 8.12, mensuel: 598.44 }, { m2: 6 }] } }, { loyer: { niveaux: [{ m2: 9 }, { m2: 8 }, { m2: 6.3, mensuel: 252 }] } }] };
+  const o = locConvention({ proprio: { statut: 'SCI_IR', nom: 'ESSAI', prenoms: 'Camille', sci: 'SCI Fictive', adresse: '3 rue A', cp: '79000', ville: 'Niort' },
+    bien: { adresse: '12 bis rue B', cp: '79400', communeTxt: 'Saint-Maixent-l\'École' }, depot: { duree: '', cadastre: 'AB 12', rAdresse: '5 rue C' },
+    logements: [{ nom: 'Logement 1', surface: '70.7', annexes: '6', loc: 2, dep: { bat: 'A', reserve: 'oui' } }, { nom: 'T2 étage', surface: '40', annexes: '', loc: 3, dep: { loyer: '240' } }] }, R);
+  return o.type === 'soc' && o.s_raison === 'SCI Fictive' && o.r_nom === 'ESSAI Camille' && o.s_adresse === '3 rue A' && o.r_adresse === '5 rue C' && !o.b_nom && o.duree === '6'
+    && o.l_numero === '12 bis' && o.l_voie === 'rue B' && o.l_cadastre === 'AB 12' && o.lg[0].porte === '' && o.lg[0].shab === '70,7' && o.lg[0].lmax === '8,12' && o.lg[0].loyer === '598,44'
+    && o.lg[0].bat === 'A' && o.lg[1].porte === 'T2 étage' && o.lg[1].loc === '3' && o.lg[1].lmax === '6,3' && o.lg[1].loyer === '240' && plafondMensuel(o.lg[0]) === 598.44 && !verifier(o).err.length;
+})(), 'locConvention : SCI, deux niveaux, loyer au m² et plafond repris du calcul');
+/* ---------- Plan de financement prévisionnel (cerfa 13461*03, propriétaire bailleur) ---------- */
+// Lignes d'aides du cerfa, dans l'ordre du formulaire.
+const PLAN_LIGNES = [['anah', "Aide de l'Anah"], ['hm', 'Prime Habiter Mieux'], ['com', 'Commune ou EPCI'], ['dep', 'Département'], ['reg', 'Région'], ['etat', 'État'], ['ue', 'Union européenne'],
+  ['autre', 'Autre aide publique'], ['retraite', 'Caisses de retraite ou CAF'], ['aero', "Riverains d'aérodromes"], ['prive', 'Autres aides (non publiques)']];
+const HM = 'Anah – Prime Habiter Mieux';
+const planCle = fin => fin.replace(/\./g, ' '); // clé du choix de ligne (chemin de saisie sans point)
+// Rangement proposé d'après le nom du financeur (décision du 17/11/2026 : automatique, modifiable, à faire valider par un instructeur).
+const planDefaut = fin => fin === 'Anah' ? 'anah' : fin === HM ? 'hm' : /^(Commune|CC |Agglo|Communaut|Métropole)/i.test(fin) ? 'com' : /^Département/i.test(fin) ? 'dep'
+  : /^Région/i.test(fin) ? 'reg' : /^État/i.test(fin) ? 'etat' : /^Union européenne/i.test(fin) ? 'ue' : 'autre';
+// d : v.loc ; R : son calcul. Reste à financer (total TTC − aides) entièrement en apport ou en prêt (décision du 17/11/2026). AMO : HT saisi, TTC avec la TVA du projet.
+function locPlan(d, R) {
+  const t = x => x == null ? '' : String(x).trim(), p = d.proprio || {}, b = d.bien || {}, D = d.depot || {}, sci = p.statut && p.statut !== 'NP';
+  const nom = [t(p.nom), t(p.prenoms)].filter(Boolean).join(' '), err = [], avert = [];
+  const amoHT = Math.max(0, Math.round(num(D.amoHT) || 0)), amoTTC = Math.round(amoHT * (1 + (R.opts ? R.opts.tva : 0)));
+  const travaux = Math.round(R.travauxHT || 0), moe = Math.round(R.honTotal || 0), totalHT = travaux + amoHT + moe;
+  if (!R.tousTTC) err.push("Un logement de l'étude n'a pas de surface ou de thématique : le coût TTC du projet n'est pas connu.");
+  const totalTTC = Math.round((R.ttcTotal || 0) + amoTTC);
+  // Aides par financeur : celles des logements (prime Habiter Mieux mise à part) et celles du projet.
+  const hm = (R.lgs || []).reduce((a, r) => a + r.lignes.filter(l => l.fin === 'Anah' && l.lib === 'Prime Habiter Mieux').reduce((s, l) => s + l.m, 0), 0), par = {};
+  for (const [f, m] of Object.entries(R.parFin || {})) par[f] = (par[f] || 0) + m;
+  for (const a of R.projet || []) par[a.fin] = (par[a.fin] || 0) + a.m;
+  if (hm) { par.Anah -= hm; par[HM] = hm; }
+  const choix = D.rangement || {}, financeurs = Object.entries(par).filter(([, m]) => Math.round(m) > 0).map(([fin, m]) => ({ fin, m: Math.round(m), ligne: PLAN_LIGNES.some(([k]) => k === choix[planCle(fin)]) ? choix[planCle(fin)] : planDefaut(fin), cle: planCle(fin) }));
+  const lignes = Object.fromEntries(PLAN_LIGNES.map(([k]) => [k, 0]));
+  financeurs.forEach(f => { lignes[f.ligne] += f.m; });
+  const aidesPub = Object.entries(lignes).filter(([k]) => k !== 'prive').reduce((a, [, m]) => a + m, 0), aides = aidesPub + lignes.prive;
+  const reste = Math.max(0, totalTTC - aides), enPret = D.resteEn === 'pret';
+  if (aides > totalTTC) avert.push(`Les aides (${fr(aides)} €) dépassent le coût TTC du projet (${fr(totalTTC)} €).`);
+  if (travaux <= 100000) avert.push('Travaux de 100 000 € HT ou moins : le cerfa ne demande le plan prévisionnel qu’au-dessus de ce montant.');
+  const o = { nom: sci ? t(p.sci) : nom, adresse: t(p.adresse), cp: t(p.cp), commune: t(p.ville), l_adresse: t(b.adresse), l_cp: t(b.cp), l_commune: t(b.communeTxt), signataire: nom,
+    fait_a: t(D.faitA), fait_le: t(D.faitLe), travaux, amoHT, amoTTC, moe, totalHT, totalTTC, financeurs, lignes, aidesPub, pret: enPret ? reste : 0, apport: enPret ? 0 : reste, totalRes: aides + reste, err, avert };
+  if ([travaux, amoHT, moe, totalHT, totalTTC, o.totalRes].some(x => x > 999999)) err.push('Montant supérieur à 999 999 € : il ne tient pas dans les 6 cases du cerfa.');
+  return o;
+}
+console.assert((() => {
+  const R = { opts: { tva: 0.1 }, tousTTC: true, travauxHT: 120000, honTotal: 9600, ttcTotal: 142560, parFin: { Anah: 40000, 'CC Val de Gâtine': 8000, "Commune d'Ardin": 2000, 'Pacte des solidarités (2026)': 3000 },
+    projet: [{ fin: 'Département des Deux-Sèvres', m: 1500 }], lgs: [{ lignes: [{ fin: 'Anah', lib: 'Prime Habiter Mieux', m: 2000 }, { fin: 'Anah', lib: 'Aide', m: 38000 }] }] };
+  const d = { proprio: { statut: 'SCI_IR', nom: 'ESSAI', prenoms: 'Camille', sci: 'SCI Fictive' }, bien: {}, depot: { amoHT: '1 000', rangement: { 'Pacte des solidarités (2026)': 'dep' } } };
+  const o = locPlan(d, R), L = o.lignes;
+  const ok1 = o.nom === 'SCI Fictive' && o.signataire === 'ESSAI Camille' && o.amoTTC === 1100 && o.totalHT === 130600 && o.totalTTC === 143660 && L.anah === 38000 && L.hm === 2000 && L.com === 10000 && L.dep === 4500
+    && o.aidesPub === 54500 && o.apport === 89160 && o.pret === 0 && o.totalRes === 143660 && !o.err.length && o.avert.length === 0;
+  d.depot.resteEn = 'pret'; d.depot.rangement = {}; const q = locPlan(d, R);
+  return ok1 && q.pret === 89160 && q.apport === 0 && q.lignes.autre === 3000 && q.lignes.dep === 1500;
+})(), 'locPlan : coûts, AMO avec la TVA du projet, rangement des aides, reste à financer en apport puis en prêt');
+
+// Remplissage du cerfa 13461*03 : noms de champs d'origine sans signification, repérés par leur position sur le formulaire.
+const PLAN_CHAMPS = { anah: ['€_3', 118], hm: ['€_4', 120], com: ['€_5', 122], dep: ['€_6', 124], reg: ['€_7', 126], etat: ['€_8', 128], ue: ['€_9', 130], autre: ['€_10', 132], retraite: ['€_11', 134], aero: ['€_12', 136], prive: ['€_14', 138] };
+async function construirePlan(o, PDFLib, b64) {
+  const { PDFDocument, StandardFonts, PDFName } = PDFLib;
+  const doc = await PDFDocument.load(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
+  const f = doc.getForm(), helv = await doc.embedFont(StandardFonts.Helvetica), trop = [];
+  for (const c of f.getFields()) if (c.acroField.setDefaultAppearance) c.acroField.setDefaultAppearance(`/Helv ${TAILLE} Tf 0 g`);
+  const net = s => [...String(s ?? '')].map(c => { try { helv.encodeText(c); return c } catch (e) { return '?' } }).join('');
+  const put = (nom, v, lib) => {
+    v = net(v); if (!v.trim()) return;
+    const tf = f.getTextField(nom), m = tf.getMaxLength(), w = tf.acroField.getWidgets()[0].getRectangle().width - 4;
+    if (m ? v.length > m : helv.widthOfTextAtSize(v, TAILLE) > w) { trop.push(lib); return }
+    tf.setText(v);
+  };
+  // Montants en euros entiers dans les 6 cases dessinées (le champ d'origine n'en accepte que 5).
+  const eur = (nom, v, lib) => { const tf = f.getTextField(nom); tf.setMaxLength(6); if (v > 0) put(nom, String(Math.round(v)).padStart(6, ' '), lib) }; // calé à droite dans les cases
+  const coche = n => f.getCheckBox('Check Box' + n).check();
+  coche(104); // prévisionnel
+  // Une adresse trop longue pour sa ligne continue sur la ligne suivante.
+  const adr = (v, n1, n2, lib) => { const w = f.getTextField(n1).acroField.getWidgets()[0].getRectangle().width - 4, [a, b] = couper(net(v), w, s => helv.widthOfTextAtSize(s, TAILLE)); put(n1, a, lib); put(n2, b, lib) };
+  put('Text107', o.nom, 'Nom ou raison sociale'); adr(o.adresse, 'Text108', 'Text109', 'Adresse du demandeur'); put('Commune', o.cp, 'Code postal du demandeur'); put('Text110', o.commune, 'Commune du demandeur');
+  adr(o.l_adresse, 'Text111', 'Text112', "Adresse de l'immeuble"); put('Code postal', o.l_cp, "Code postal de l'immeuble"); put('Text113', o.l_commune, "Commune de l'immeuble");
+  eur('€ HT', o.travaux, 'Travaux'); eur('€ HT_2', o.amoHT, 'AMO'); eur('€ HT_3', o.moe, "Maîtrise d'œuvre"); eur('€ HT_4', o.totalHT, 'Total HT'); eur('€ TTC', o.totalTTC, 'Total TTC');
+  if (o.travaux) coche(114); if (o.amoHT) coche(115); if (o.moe) coche(116); coche(117);
+  eur('€', o.pret, 'Prêt'); eur('€_2', o.apport, 'Apport');
+  for (const [k, [champ, n]] of Object.entries(PLAN_CHAMPS)) { const m = o.lignes[k]; coche(m > 0 ? n + 1 : n); eur(champ, m, PLAN_LIGNES.find(x => x[0] === k)[1]) }
+  eur('€_13', o.aidesPub, 'Total des aides publiques'); eur('€_15', o.totalRes, 'Total des ressources');
+  put('Text140', o.signataire, 'Signataire'); put('Text141', o.fait_a, 'Fait à');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(o.fait_le || '')) { const [a, m, j] = o.fait_le.split('-'); put('le', j, 'Date'); put('certifie sur lhonneur3 lexactitude des renseignements cidessus', m, 'Date'); put('undefined_4', a, 'Date') }
+  if (trop.length) throw new Error('texte trop long pour sa case : ' + [...new Set(trop)].join(', ') + '. Abréger ces champs.');
+  f.updateFieldAppearances(helv);
+  const dr = f.acroForm.dict.lookup(PDFName.of('DR')), fonts = dr && dr.lookup(PDFName.of('Font'));
+  if (fonts) fonts.set(PDFName.of('Helv'), helv.ref);
+  return doc.save({ objectsPerTick: Infinity });
+}
+
+/* ---------- Engagements CEE (cerfa 14566*04) et IML (formulaire Anah) : formulaires sans cases, texte écrit par-dessus ---------- */
+// Choix du 17/11/2026 : PDF non modifiable (on corrige la saisie et on régénère) ; IML : un engagement par logement en IML ; pas de SIREN (cases laissées à la main).
+const tv = x => x == null ? '' : String(x).trim();
+const adresseTxt = (a, cp, c) => [tv(a), [tv(cp), tv(c)].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+const porteDe = l => tv((l.dep || {}).porte) || (/^(L|Logement \d+)$/.test(tv(l.nom)) ? '' : tv(l.nom));
+function locCee(d) {
+  const p = d.proprio || {}, b = d.bien || {}, D = d.depot || {}, sci = p.statut && p.statut !== 'NP', err = [];
+  const nom = [tv(p.nom), tv(p.prenoms)].filter(Boolean).join(' '), adr = adresseTxt(p.adresse, p.cp, p.ville), log = adresseTxt(b.adresse, b.cp, b.communeTxt);
+  if (!nom) err.push('Nom du propriétaire (ou du représentant de la SCI) à saisir dans l’étude.');
+  if (sci && !tv(p.sci)) err.push('Nom de la SCI à saisir dans l’étude.');
+  const n = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return { nom, morale: sci ? tv(p.sci) : '', adresse: adr, logement: n(log) && n(log) !== n(adr) ? log : '', fait_a: tv(D.faitA), fait_le: tv(D.faitLe), err };
+}
+function locIml(d) {
+  const p = d.proprio || {}, b = d.bien || {}, D = d.depot || {}, sci = p.statut && p.statut !== 'NP', err = [];
+  const nom = [tv(p.nom), tv(p.prenoms)].filter(Boolean).join(' ');
+  const lg = (d.logements || []).filter(l => l.iml).map(l => ({ nom: tv(l.nom), bat: tv((l.dep || {}).bat), esc: tv((l.dep || {}).esc), porte: porteDe(l), etage: tv((l.dep || {}).etage) }));
+  if (!lg.length) err.push('Aucun logement en intermédiation locative dans l’étude.');
+  if (!nom) err.push('Nom du propriétaire (ou du représentant de la SCI) à saisir dans l’étude.');
+  return { sci, civ: sci ? '' : tv(D.civilite), nom: sci ? '' : nom, designation: sci ? tv(p.sci) : '', representant: sci ? [nom, tv(D.rQualite)].filter(Boolean).join(', ') : '',
+    adresse: tv(p.adresse), cp: tv(p.cp), commune: tv(p.ville), tel: tv(p.tel), email: tv(p.email), l_adresse: tv(b.adresse), l_cp: tv(b.cp), l_commune: tv(b.communeTxt), lg, fait_a: tv(D.faitA), fait_le: tv(D.faitLe), err };
+}
+console.assert((() => {
+  const d = { proprio: { statut: 'SCI_IR', nom: 'ESSAI', prenoms: 'Camille', sci: 'SCI Fictive', adresse: '3 rue A', cp: '79000', ville: 'Niort', tel: '0500000000' },
+    bien: { adresse: '12 rue B', cp: '79160', communeTxt: 'Ardin' }, depot: { rQualite: 'gérante', civilite: 'Mme', faitA: 'Niort' },
+    logements: [{ nom: 'Logement 1', iml: false }, { nom: 'T2 combles', iml: true, dep: { bat: 'A', etage: '2' } }] };
+  const c = locCee(d), m = locIml(d);
+  const ok = c.nom === 'ESSAI Camille' && c.morale === 'SCI Fictive' && c.adresse === '3 rue A, 79000 Niort' && c.logement === '12 rue B, 79160 Ardin' && !c.err.length
+    && m.sci && m.designation === 'SCI Fictive' && m.representant === 'ESSAI Camille, gérante' && m.civ === '' && m.lg.length === 1 && m.lg[0].porte === 'T2 combles' && m.lg[0].bat === 'A' && !m.err.length;
+  d.proprio.statut = 'NP'; d.bien = { adresse: '3 rue A', cp: '79000', communeTxt: 'Niort' }; d.logements[1].iml = false;
+  const c2 = locCee(d), m2 = locIml(d);
+  return ok && c2.morale === '' && c2.logement === '' && m2.civ === 'Mme' && m2.nom === 'ESSAI Camille' && m2.err.length === 1;
+})(), 'locCee / locIml : SCI et nom propre, adresse du logement seulement si différente, logements en IML');
+
+// Positions (points PDF, origine en bas à gauche) relevées sur les formulaires fournis : x, y de la ligne de base, largeur disponible.
+// CEE : mesures exactes sur le texte et les cases du cerfa (page 2). IML : formulaire en tracés, positions relevées sur son rendu.
+const CEE_POS = { nom: [100, 764, 445], morale: [53, 710, 490], adresse: [84, 644, 461], logement: [53, 620, 490], fait_a: [62, 342.5, 198],
+  coche_morale: [54.3, 722], coche_bailleur: [54.3, 578.6], jj: [283.3, 293.1], mm: [307.5, 317.3], aaaa: [331.7, 341.5, 351.3, 361.1], date_y: 341.5 };
+const IML_POS = { m: [174, 563], mme: [211, 563], mmme: [268, 563], nom: [133, 549, 400], societe: [238, 526], association: [303, 526], indivision: [359, 526],
+  designation: [290, 512, 240], representant: [72, 487, 455], adresse: [113, 449.5, 420], cp: [130, 437, 110], commune: [299, 437, 230], tel: [93, 424.5, 195], email: [319, 424.5, 210],
+  l_adresse: [113, 348, 420], l_cp: [130, 335, 110], l_commune: [294, 335, 235], bat: [114, 322.5, 75], esc: [239, 322.5, 90], porte: [372, 322.5, 70], etage: [483, 322.5, 50], fait_a: [99, 504, 210], fait_le: [326, 504, 200] };
+async function ecrivain(PDFLib, doc) {
+  const helv = await doc.embedFont(PDFLib.StandardFonts.Helvetica), T = 9, trop = [];
+  const net = s => [...String(s ?? '')].map(c => { try { helv.encodeText(c); return c } catch (e) { return '?' } }).join('');
+  const ecrire = (page, [x, y, w], v, lib) => { v = net(v).trim(); if (!v) return; if (w && helv.widthOfTextAtSize(v, T) > w) { trop.push(lib); return } page.drawText(v, { x, y, size: T, font: helv }) };
+  const croix = (page, [x, y]) => page.drawText('X', { x: x - helv.widthOfTextAtSize('X', 8) / 2, y: y - 2.8, size: 8, font: helv });
+  const chiffres = (page, xs, y, v) => [...String(v)].forEach((c, i) => xs[i] != null && page.drawText(c, { x: xs[i] - helv.widthOfTextAtSize(c, T) / 2, y, size: T, font: helv }));
+  const fin = () => { if (trop.length) throw new Error('texte trop long pour sa ligne : ' + [...new Set(trop)].join(', ') + '. Abréger ces champs.') };
+  return { ecrire, croix, chiffres, fin };
+}
+const charger = (PDFLib, b64) => PDFLib.PDFDocument.load(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
+async function construireCee(o, PDFLib, b64) {
+  const doc = await charger(PDFLib, b64), pg = doc.getPage(1), P = CEE_POS, E = await ecrivain(PDFLib, doc);
+  E.ecrire(pg, P.nom, o.nom, 'Nom et prénom');
+  if (o.morale) { E.croix(pg, P.coche_morale); E.ecrire(pg, P.morale, o.morale, 'Bailleur personne morale') }
+  E.ecrire(pg, P.adresse, o.adresse, 'Adresse'); E.ecrire(pg, P.logement, o.logement, 'Adresse du logement');
+  E.croix(pg, P.coche_bailleur); E.ecrire(pg, P.fait_a, o.fait_a, 'Fait à');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(o.fait_le || '')) { const [a, m, j] = o.fait_le.split('-'); E.chiffres(pg, P.jj, P.date_y, j); E.chiffres(pg, P.mm, P.date_y, m); E.chiffres(pg, P.aaaa, P.date_y, a) }
+  E.fin(); return doc.save({ objectsPerTick: Infinity });
+}
+async function construireIml(o, PDFLib, b64) {
+  const tpl = await charger(PDFLib, b64), doc = await PDFLib.PDFDocument.create(), P = IML_POS, E = await ecrivain(PDFLib, doc);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(o.fait_le || '') ? o.fait_le.split('-').reverse().join('/') : '';
+  for (const l of o.lg) {
+    const [p1, p2] = await doc.copyPages(tpl, [0, 1]); doc.addPage(p1); doc.addPage(p2);
+    if (o.sci) { E.croix(p1, P.societe); E.ecrire(p1, P.designation, o.designation, 'Désignation'); E.ecrire(p1, P.representant, o.representant, 'Représentant') }
+    else { if ({ M: 1, Mme: 1, MMme: 1 }[o.civ]) E.croix(p1, P[o.civ.toLowerCase()]); E.ecrire(p1, P.nom, o.nom, 'Nom, prénom') }
+    for (const k of ['adresse', 'cp', 'commune', 'tel', 'email', 'l_adresse', 'l_cp', 'l_commune']) E.ecrire(p1, P[k], o[k], k);
+    for (const k of ['bat', 'esc', 'porte', 'etage']) E.ecrire(p1, P[k], l[k], `${l.nom || 'Logement'} : ${k}`);
+    E.ecrire(p2, P.fait_a, o.fait_a, 'Fait à'); E.ecrire(p2, P.fait_le, date, 'Date');
+  }
+  E.fin(); return doc.save({ objectsPerTick: Infinity });
+}
+
+  return { NIVEAUX, MAX_PAR_NIVEAU, num, fr, surfaces, plafondMensuel, verifier, construirePdf, locConvention, PLAN_LIGNES, locPlan, construirePlan, locCee, locIml, construireCee, construireIml };
 })();
 
 // Communes par code postal (79 et 17), générée par build.py depuis codes_postaux_79_17.json : ne pas modifier à la main.
@@ -4395,7 +4706,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.17-1156';
+const APP_VER='2026.11.17-1457';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -4449,7 +4760,7 @@ function migrate(v){
     if(l.proprio&&l.proprio.cp===undefined&&l.proprio.ville===undefined){const a=splitAdr(l.proprio.adresse);Object.assign(l.proprio,{adresse:a.adr,cp:a.cp,ville:a.ville})}v.loc={...d,...l,proprio:{...d.proprio,...l.proprio},bien:{...d.bien,...l.bien}};
     // Dossier remis avant le gel des règles (13/11/2026) : figé avec la copie de la version 1, celle qui a produit son PDF.
     if(v.pdfAt&&!l.regles){v._fige=1}
-    if(!Array.isArray(v.loc.logements)||!v.loc.logements.length)v.loc.logements=[locLg(1)];v.loc.logements=v.loc.logements.map((x,i)=>({...locLg(i+1),...x}));if(!Array.isArray(v.loc.aidesProjet))v.loc.aidesProjet=[];if(v._fige){delete v._fige;v.loc.regles=locFiger(v,LOC_FICHES_V1);v._aEnr=1}return v}
+    if(!Array.isArray(v.loc.logements)||!v.loc.logements.length)v.loc.logements=[locLg(1)];v.loc.logements=v.loc.logements.map((x,i)=>({...locLg(i+1),...x,dep:{...LOC_DEP,...x.dep}}));v.loc.depot=locDepot(v.loc.depot);if(!Array.isArray(v.loc.aidesProjet))v.loc.aidesProjet=[];if(v._fige){delete v._fige;v.loc.regles=locFiger(v,LOC_FICHES_V1);v._aEnr=1}return v}
   if(isPdl(v)){for(const x of ['p','m'])if(v.f[x+'Cp']===undefined&&v.f[x+'Ville']===undefined){const a=splitAdr(v.f[x+'Adr']);v.f[x+'Adr']=a.adr;v.f[x+'Cp']=a.cp;v.f[x+'Ville']=a.ville}
     if(!COMMUNES[v.f.commune])v.f.commune='Thouars';if(!v.f.typeVis)v.f.typeVis=v.f.cvDateVis?'Contre-visite':'Visite de contrôle'}else if(!COM[v.f.dem])v.f.dem='CAF';
   // Code postal et ville séparés ; bât., entrée, étage et courée regroupés dans l'adresse.
@@ -5330,10 +5641,13 @@ console.assert(JSON.stringify(annPt({x:100,y:50,w:800,h:600},.5,40,20))==='[180,
 /* ---------- événements ---------- */
 /* ---------- Simulation Loc'Avantages ---------- */
 // Dossier : v.loc = {proprio, bien, logements, aidesProjet, obs, compDuree}, même structure que le simulateur d'origine.
-const locLg=i=>({nom:'Logement '+i,surface:'',annexes:'',thematique:'TD',loc:2,iml:false,travaux:'',montant:'',ttc:'',loyerLibre:'',vacant:false,gain35:false,passoire:false,rdc:false,montantRdc:'',aidesManu:[],mprMontant:'',mprGain:2});
+const locLg=i=>({nom:'Logement '+i,surface:'',annexes:'',thematique:'TD',loc:2,iml:false,travaux:'',montant:'',ttc:'',loyerLibre:'',vacant:false,gain35:false,passoire:false,rdc:false,montantRdc:'',aidesManu:[],mprMontant:'',mprGain:2,dep:{...LOC_DEP}});
+// Préparation au dépôt : convention (dossier : depot ; logement : dep). convLe = date de la dernière convention générée.
+const LOC_DEP={porte:'',bat:'',esc:'',etage:'',reserve:'',sapres:'',loyer:''},LOC_DEPOT={duree:'6',cadastre:'',rAdresse:'',rCp:'',rCommune:'',faitA:'',faitLe:'',convLe:0,amoHT:'',resteEn:'apport',planLe:0,civilite:'',rQualite:'',ceeLe:0,imlLe:0};
+const locDepot=x=>({...LOC_DEPOT,...x,rangement:{...(x&&x.rangement)}}); // rangement : ligne du plan de financement choisie par financeur
 const locVide=()=>({proprio:{nom:'',prenoms:'',email:'',tel:'',adresse:'',cp:'',ville:'',soliact:'',statut:'NP',sci:'',mprOn:false,rfr:'',foyer:'',mprCat:''},
  bien:{adresse:'',cp:'',insee:'',communeTxt:'',description:'',ravalement:false,ori:false,pacteSol:true,force:'AUTO',tva:'10',moe:false,moeTaux:'',moeMontant:'',moeTTC:'',photo:''},
- logements:[locLg(1)],aidesProjet:[],obs:'',variante:'',compDuree:9});
+ logements:[locLg(1)],aidesProjet:[],obs:'',variante:'',compDuree:9,depot:locDepot()});
 // N° d'une variante : celui du dossier d'origine suivi de la première lettre libre (B, C…). Le compteur du profil n'avance pas.
 const locVarNum=(num,nums)=>{const base=String(num||'').replace(/-[A-Z]$/,'');if(!base)return '';let c=66;while(c<90&&nums.includes(base+'-'+String.fromCharCode(c)))c++;return base+'-'+String.fromCharCode(c)};
 console.assert(locVarNum('LOC-2026-AB-0011',['LOC-2026-AB-0011'])==='LOC-2026-AB-0011-B'&&locVarNum('LOC-2026-AB-0011-B',['LOC-2026-AB-0011','LOC-2026-AB-0011-B'])==='LOC-2026-AB-0011-C'&&locVarNum('',[])==='','N° de variante Loc’Avantages');
@@ -5402,12 +5716,23 @@ const locMprLg=x=>`<span>MaPrimeRénov’ · ${locEur(x.ht)} HT éligibles${x.li
 // Mise à jour en direct pendant la saisie, sans réafficher l'écran (le champ garde le curseur).
 function locLive(){const R=locR();
   const t=$('#ltot'),r=$('#lrac');if(t)t.textContent=locEur(R.total);if(r)r.textContent=locRac(R);
+  const cm=$('#lconvmsg');if(cm)cm.innerHTML=locConvMsg(R);const pm=$('#lplanmsg');if(pm)pm.innerHTML=locPlanResume(R);
   R.lgs.forEach((x,i)=>{const e=$('#lres'+i);if(e)e.innerHTML=locResLg(x);const s=$('#lsu'+i);if(s)s.textContent=locSuTxt(x)});
   const c=$('#lcmp');if(c){c.textContent=locCmpTxt(R);c.classList.toggle('warn',!R.comp.ok)}
   const m=$('#lmprcat');if(m){m.textContent=locMprCatTxt(R);m.classList.toggle('warn',!!R.mpr&&R.mpr.cat==null)}
   R.mpr?.lgs?.forEach((x,i)=>{const e=$('#lmpr'+i);if(e)e.innerHTML=locMprLg(x)});
   // Encadré du dispositif (rue, numéro) : réaffiché sauf pendant la saisie d'un de ses champs.
   const d=$('#ldisp');if(d&&!d.contains(document.activeElement))d.outerHTML=locDispBox(R)}
+// Convention Anah : contrôles de l'outil d'origine (CONV.verifier) sur les données lues dans le dossier.
+const locConvEtat=R=>{const o=CONV.locConvention(cur.loc,R),{err,avert}=CONV.verifier(o);o.lg.forEach((l,i)=>{if(!l.lmax)avert.push(`Logement ${i+1} : loyer maximal au m² non calculé (commune hors barème), case laissée vide.`)});return {o,err:[...new Set(err)],avert}};
+const locConvMsg=R=>{const {err,avert}=locConvEtat(R);return err.map(t=>`<div class="banner danger" role="alert">${esc(t)}</div>`).join('')+avert.map(t=>`<div class="banner">Attention : ${esc(t)}</div>`).join('')};
+// Plan de financement : totaux du cerfa et contrôles, mis à jour pendant la saisie.
+const locPlanResume=R=>{const o=CONV.locPlan(cur.loc,R),L=Object.fromEntries(CONV.PLAN_LIGNES),r=(l,x,b)=>`<tr><td>${b?'<b>':''}${esc(l)}${b?'</b>':''}</td><td style="text-align:right">${b?'<b>':''}${locEur(x)}${b?'</b>':''}</td></tr>`;
+  return `<h3>Plan obtenu</h3><div class="ertab"><table><tbody>${r('Travaux',o.travaux)}${o.amoHT?r('Assistance à maîtrise d’ouvrage',o.amoHT):''}${o.moe?r('Honoraires de maîtrise d’œuvre',o.moe):''}${r('Total des dépenses HT',o.totalHT,1)}${r('Total des dépenses TTC',o.totalTTC,1)}
+   ${o.pret?r('Prêt bancaire',o.pret):''}${o.apport?r('Apport de fonds personnels',o.apport):''}${Object.entries(o.lignes).filter(([,m])=>m>0).map(([k,m])=>r(L[k],m)).join('')}${r('Total des aides publiques',o.aidesPub,1)}${r('Total des ressources',o.totalRes,1)}</tbody></table></div>`
+   +o.err.map(t=>`<div class="banner danger" role="alert">${esc(t)}</div>`).join('')+o.avert.map(t=>`<div class="banner">Attention : ${esc(t)}</div>`).join('')};
+// Bibliothèque pdf-lib et modèle du cerfa : fichiers à part (1,4 Mo), chargés seulement pour produire un document du dépôt.
+const locJs={};const chargerJs=src=>locJs[src]||=new Promise((ok,ko)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=()=>{delete locJs[src];s.remove();ko(new Error('fichier '+src+' introuvable : ouvrez l’application une fois avec internet'))};document.head.append(s)});
 const locBar=(bi,R,btn)=>{bi.innerHTML=`<div class="locsum"><span>Aides estimées</span><b id="ltot">${locEur(R.total)}</b></div><div class="locsum"><span>Reste à charge</span><b id="lrac">${locRac(R)}</b></div>${btn}`};
 const locAids=(base,list,R)=>`${(list||[]).map((a,k)=>`<div class="laid">
    <input type="text" list="lfin" aria-label="Financeur" placeholder="Financeur" data-lk="${base}.${k}.fin" id="lk_${base.replace(/\./g,'_')}_${k}_fin" value="${esc(a.fin)}">
@@ -5435,11 +5760,70 @@ async function locPhoto(file){const url=URL.createObjectURL(file);
 function locView(app,bar,bi){
   const D=cur.loc,R=locR(),ctx=R.ctx;bar.hidden=false;
   const fini=`<button class="btn-primary" data-act="dash">Terminé</button>`;
+  // Deux entrées du dossier : étude de financement (dash) et préparation au dépôt (ldepot)
+  const locSeg=dep=>`<div class="seg" role="group" aria-label="Partie du dossier"><button data-act="go" data-v="dash" aria-pressed="${!dep}">Étude de financement</button><button data-act="go" data-v="ldepot" aria-pressed="${dep}">Préparation au dépôt</button></div>`;
+  if(view==='ldepot'){
+    const ICD={conv:ICO.admin,plan:ICO.synth,cee:ICO.trav,iml:ICO.logement},cv=locConvEtat(R);
+    // Tuiles actives : convention (jalon 2) et plan de financement (jalon 3) ; les engagements viendront ensuite.
+    const st=(ko,le)=>[ko?['À compléter','warn']:le?['Générée le '+frDate(new Date(le).toISOString().slice(0,10)),'ok']:['Prête','ok']];
+    const etat={conv:st(cv.err.length,D.depot.convLe),plan:st(CONV.locPlan(D,R).err.length,D.depot.planLe),cee:st(CONV.locCee(D).err.length,D.depot.ceeLe),iml:st(CONV.locIml(D).err.length,D.depot.imlLe)};
+    app.innerHTML=`${topbar(who(cur),kind(cur),'list')}${locSeg(true)}
+     <p class="muted">Les documents du dépôt sont remplis avec les données de l’étude de financement.</p>
+     <div class="tiles">${locDocsDepot(D).map(x=>{const st=[...(etat[x.k]||[['À venir','']]),...(x.nb?[[x.nb+' logement'+(x.nb>1?'s':'')+' en IML','info']]:[]),[x.cerfa,'']],c=`<img class="ic" src="${ICD[x.k]}" alt=""><span class="num">${esc(x.n)}</span><span class="lbl">${esc(x.t)}</span>${pills(st)}`;
+       return etat[x.k]?`<button class="tile" data-act="go" data-v="l${x.k}">${c}</button>`:`<div class="tile" aria-disabled="true">${c}</div>`}).join('')}</div>`;
+    locBar(bi,R,'');return true}
+  if(view==='lconv'){const o=CONV.locConvention(D,R),sci=o.type==='soc',dep=D.depot;
+    const ro=(l,x)=>`<div><span class="muted">${esc(l)}</span><br><b>${esc(x||'—')}</b></div>`;
+    app.innerHTML=`${topbar('Convention Anah',who(cur),'ldepot')}
+     <p class="muted">Cerfa n° 14039*06, convention avec travaux. Le PDF reste modifiable ; les cases réservées à l’Anah restent vides.</p>
+     <h3>Repris de l’étude</h3>
+     <div class="form">${ro(sci?'Société (siège)':'Bailleur',sci?[o.s_raison,o.s_adresse,o.s_cp,o.s_commune].filter(Boolean).join(', '):[o.b_nom,o.b_adresse,o.b_cp,o.b_commune].filter(Boolean).join(', '))}
+      ${sci?ro('Représentant',o.r_nom):''}${ro('Téléphone et e-mail',[o.tel,o.email].filter(Boolean).join(' · '))}
+      ${ro('Logement conventionné',[[o.l_numero,o.l_voie].filter(Boolean).join(' '),o.l_cp,o.l_commune].filter(Boolean).join(', '))}
+      <div class="row full"><button data-act="go" data-v="lprop">Modifier le propriétaire</button><button data-act="go" data-v="lbien">Modifier le bien</button><button data-act="go" data-v="llg">Modifier les logements</button></div></div>
+     <h3>À compléter</h3>
+     <div class="form">${lin('depot.duree','Durée de la convention (ans, 6 au minimum)',{im:'numeric'})}${lin('depot.cadastre','Référence cadastrale')}
+      ${sci?lin('depot.rAdresse','Adresse du représentant',{full:1})+lin('depot.rCp','Code postal du représentant',{im:'numeric'})+lin('depot.rCommune','Commune du représentant'):''}
+      ${lin('depot.faitA','Fait à')}${lin('depot.faitLe','Le',{type:'date'})}</div>
+     ${D.logements.map((l,i)=>{const x=o.lg[i],s=CONV.surfaces(x),b=`logements.${i}.dep.`;return `<h3>${esc(l.nom||'Logement '+(i+1))} · ${esc(CONV.NIVEAUX[x.loc])}</h3>
+      <div class="form">${ro('Surface habitable · surface fiscale',s?`${CONV.fr(CONV.num(x.shab))} m² · ${CONV.fr(s.fis)} m²`:'Surface à saisir dans l’étude')}${ro('Loyer maximal au m² (barème de l’étude)',x.lmax?CONV.fr(CONV.num(x.lmax),2)+' €':'Non calculé : commune hors barème')}
+       ${lin(b+'porte','N° logement / porte')}${lin(b+'bat','Bâtiment')}${lin(b+'esc','Escalier')}${lin(b+'etage','Étage')}${x.loc>1?lin(b+'reserve','Logement réservé'):''}
+       ${lin(b+'sapres','Nouvelle surface après travaux (m², si modifiée)',{im:'decimal'})}${lin(b+'loyer','Loyer mensuel hors charges (€)',{im:'decimal',ph:x.lmax&&s?'Plafond : '+CONV.fr(CONV.plafondMensuel(x),2)+' €':''})}</div>`}).join('')}
+     <div id="lconvmsg">${locConvMsg(R)}</div>`;
+    locBar(bi,R,`<button class="btn-primary" data-act="lconvpdf">${svg('pdf')}Générer la convention (PDF)</button>`);return true}
+  if(view==='lplan'){const o=CONV.locPlan(D,R),ro=(l,x)=>`<div><span class="muted">${esc(l)}</span><br><b>${esc(x)}</b></div>`,ops=CONV.PLAN_LIGNES;
+    app.innerHTML=`${topbar('Plan de financement',who(cur),'ldepot')}
+     <p class="muted">Cerfa n° 13461*03, propriétaire bailleur, plan prévisionnel. Montants repris de l’étude, en euros entiers ; l’encadré réservé à l’Anah reste vide.</p>
+     <h3>Dépenses</h3>
+     <div class="form">${ro('Coût des travaux (étude)',locEur(o.travaux)+' HT')}${ro('Honoraires de maîtrise d’œuvre (étude)',o.moe?locEur(o.moe)+' HT':'Aucun')}
+      ${lin('depot.amoHT','Assistance à maîtrise d’ouvrage (€ HT, TTC avec la TVA du projet)',{im:'decimal',ph:'Vide : pas d’AMO'})}</div>
+     <h3>Aides de l’étude et ligne du plan</h3>
+     ${o.financeurs.length?`<p class="muted">Rangement proposé d’après le nom du financeur, à corriger si besoin.</p><div class="form">${o.financeurs.map(f=>`<div class="field full"><span>${esc(f.fin)} · ${locEur(f.m)}</span><select data-lk="depot.rangement.${esc(f.cle)}" aria-label="Ligne du plan pour ${esc(f.fin)}">${ops.map(([k,l])=>`<option value="${k}"${k===f.ligne?' selected':''}>${esc(l)}</option>`).join('')}</select></div>`).join('')}</div>`:'<p class="muted">Aucune aide dans l’étude.</p>'}
+     <h3>Reste à financer et signature</h3>
+     <div class="form">${lrad('depot.resteEn','Reste à financer (total TTC − aides)',[['apport','Apport personnel'],['pret','Prêt bancaire']])}
+      ${lin('depot.faitA','Fait à')}${lin('depot.faitLe','Le',{type:'date'})}</div>
+     <div id="lplanmsg">${locPlanResume(R)}</div>`;
+    locBar(bi,R,`<button class="btn-primary" data-act="lplanpdf">${svg('pdf')}Générer le plan (PDF)</button>`);return true}
+  // Engagements CEE et IML : formulaires sans cases, texte écrit sur le modèle (PDF non modifiable : corriger la saisie puis régénérer).
+  if(view==='lcee'||view==='liml'){const cee=view==='lcee',o=cee?CONV.locCee(D):CONV.locIml(D),sci=D.proprio.statut!=='NP',ro=(l,x)=>`<div><span class="muted">${esc(l)}</span><br><b>${esc(x||'—')}</b></div>`;
+    const msg=o.err.map(t=>`<div class="banner danger" role="alert">${esc(t)}</div>`).join('');
+    app.innerHTML=`${topbar(cee?'Engagements complémentaires (CEE)':'Engagement IML',who(cur),'ldepot')}
+     <p class="muted">${cee?'Cerfa n° 14566*04, case « propriétaire bailleur » cochée.'+(sci?' Le n° SIREN de la SCI reste à écrire à la main.':''):'Prime d’intermédiation locative, engagement spécifique du bailleur : un engagement par logement en IML.'} Le texte est écrit sur le formulaire : pour corriger, modifiez la saisie et régénérez.</p>
+     <h3>Repris de l’étude</h3>
+     <div class="form">${cee?ro('Signataire',o.nom)+(o.morale?ro('Bailleur personne morale',o.morale):'')+ro('Adresse',o.adresse)+ro('Adresse du logement',o.logement||'Identique à l’adresse du demandeur')
+       :ro(sci?'Société':'Bailleur',sci?o.designation:o.nom)+ro('Coordonnées',[[o.adresse,o.cp,o.commune].filter(Boolean).join(', '),o.tel,o.email].filter(Boolean).join(' · '))+ro('Logement',[o.l_adresse,o.l_cp,o.l_commune].filter(Boolean).join(', '))}
+      <div class="row full"><button data-act="go" data-v="lprop">Modifier le propriétaire</button><button data-act="go" data-v="lbien">Modifier le bien</button></div></div>
+     <h3>À compléter</h3>
+     <div class="form">${cee?'':sci?lin('depot.rQualite','Qualité du représentant (ex. gérant)'):lrad('depot.civilite','Civilité',[['M','M.'],['Mme','Mme'],['MMme','M. et Mme']])}
+      ${lin('depot.faitA','Fait à')}${lin('depot.faitLe','Le',{type:'date'})}</div>
+     ${cee?'':D.logements.map((l,i)=>l.iml?`<h3>${esc(l.nom||'Logement '+(i+1))} · en IML</h3><div class="form">${['porte','N° logement / porte','bat','Bâtiment','esc','Escalier','etage','Étage'].reduce((a,x,k,A)=>k%2?a:a+lin(`logements.${i}.dep.${x}`,A[k+1]),'')}</div>`:'').join('')}
+     ${msg}`;
+    locBar(bi,R,`<button class="btn-primary" data-act="${cee?'lceepdf':'limlpdf'}">${svg('pdf')}Générer ${cee?'l’engagement CEE':'l’engagement IML'} (PDF)</button>`);return true}
   if(view==='dash'){
     const tile=(v,n,t,ic,st)=>`<button class="tile" data-act="go" data-v="${v}"><img class="ic" src="${ic}" alt=""><span class="num">${n}</span><span class="lbl">${esc(t)}</span>${pills(st)}</button>`;
     const p=D.proprio,nl=D.logements.length,inel=R.lgs.filter(r=>!r.eligible).length,np=(D.aidesProjet||[]).length;
     const chg=locChange(cur);
-    app.innerHTML=`${topbar(who(cur),kind(cur),'list')}${progHtml(cur,1)}
+    app.innerHTML=`${topbar(who(cur),kind(cur),'list')}${locSeg(false)}${progHtml(cur,1)}
      ${chg?`<div class="banner">Les règles ont changé depuis cette simulation (${esc(chg.L.join(', '))}). Elle garde les montants du ${esc(frDate(cur.loc.regles.le))}${cur.pdfAt?', ceux du PDF remis':''}.<div class="row"><button data-act="go" data-v="lregles">Voir ce qui change</button><button data-act="lrecalc">Recalculer avec les règles actuelles</button></div></div>`:''}
      <div class="tiles">
       ${tile('lprop','PROPRIÉTAIRE','Le propriétaire',ICO.admin,[[p.nom||p.sci?'Renseigné':'À faire',p.nom||p.sci?'ok':'']])}
@@ -5712,7 +6096,7 @@ document.addEventListener('click',async e=>{
   if(a==='list'){await save(true);if(cur){carnetMemo(cur);if(!sauve(cur))await fsSave(cur,1)}cur=null;view='list';return go()}
   // Variante Loc'Avantages : copie du dossier (bailleur, bien, logements) ; PDF, sauvegarde et règles figées non repris.
   if(a==='lvar'){const src=visits.find(v=>v.id===b.dataset.id);if(!src)return;const n=locVarNum(src.num,visits.map(v=>v.num));cur=structuredClone(src);
-    Object.assign(cur,{id:newVisit().id,created:Date.now(),done:{},sig:''});delete cur.savedAt;delete cur.pdfAt;delete cur.loc.regles;delete cur.num;if(n)cur.num=n;
+    Object.assign(cur,{id:newVisit().id,created:Date.now(),done:{},sig:''});delete cur.savedAt;delete cur.pdfAt;delete cur.loc.regles;delete cur.num;if(n)cur.num=n;if(cur.loc.depot)Object.assign(cur.loc.depot,{convLe:0,planLe:0,ceeLe:0,imlLe:0});
     cur.loc.variante=n?'Variante '+n.slice(-1):'Variante';cur.f.dateVis=today();visits.push(cur);await save(true);view='dash';toast('Variante créée : modifiez ses logements, puis son nom dans « Comparaison »');return go()}
   if(a==='reopen'){const v=visits.find(x=>x.id===b.dataset.id);delete v.pdfAt;await store.put(v);toast('Dossier remis en cours');return render()}
   if(a==='dash'){view='dash';return go()}
@@ -5799,6 +6183,24 @@ document.addEventListener('click',async e=>{
     // Un rapport avec des points à corriger ne part pas : retour à l'écran de contrôle.
     if(controles(v).some(c=>c[0]==='ko')){view='avantpdf';toast('Corrigez d’abord les points à corriger');return go()}
     try{const r=await exportPdf(v,1),m=pdlMail(v);if(await envoiMail(r.nom,r.blob,m.a,m.sujet,m.corps)){v.pdfAt=Date.now();await store.put(v);fsSave(v,1)}}catch(err){toast('Envoi impossible : '+err.message)}return}
+  if(a==='lconvpdf'){await save(true);const {o,err}=locConvEtat(locR());
+    if(err.length){toast('Convention non générée : corrigez d’abord les points signalés');return go()}
+    try{await chargerJs('pdf-lib.min.js');await chargerJs('cerfa-convention.js');
+      const pdf=await CONV.construirePdf(o,PDFLib,CERFA_B64);cur.loc.depot.convLe=Date.now();await save(true);
+      await offer(`Convention Anah - ${slug(cur.num||who(cur))}.pdf`,new Blob([pdf],{type:'application/pdf'}))}
+    catch(e){toast('Convention non générée : '+e.message)}return go()}
+  if(a==='lceepdf'||a==='limlpdf'){await save(true);const cee=a==='lceepdf',o=cee?CONV.locCee(cur.loc):CONV.locIml(cur.loc),nom=cee?'Engagement CEE':'Engagement IML';
+    if(o.err.length){toast(nom+' non généré : corrigez d’abord les points signalés');return go()}
+    try{await chargerJs('pdf-lib.min.js');await chargerJs(cee?'cerfa-cee.js':'formulaire-iml.js');
+      const pdf=cee?await CONV.construireCee(o,PDFLib,CERFA_CEE_B64):await CONV.construireIml(o,PDFLib,FORM_IML_B64);cur.loc.depot[cee?'ceeLe':'imlLe']=Date.now();await save(true);
+      await offer(`${nom} - ${slug(cur.num||who(cur))}.pdf`,new Blob([pdf],{type:'application/pdf'}))}
+    catch(e){toast(nom+' non généré : '+e.message)}return go()}
+  if(a==='lplanpdf'){await save(true);const o=CONV.locPlan(cur.loc,locR());
+    if(o.err.length){toast('Plan de financement non généré : corrigez d’abord les points signalés');return go()}
+    try{await chargerJs('pdf-lib.min.js');await chargerJs('cerfa-plan.js');
+      const pdf=await CONV.construirePlan(o,PDFLib,CERFA_PLAN_B64);cur.loc.depot.planLe=Date.now();await save(true);
+      await offer(`Plan de financement - ${slug(cur.num||who(cur))}.pdf`,new Blob([pdf],{type:'application/pdf'}))}
+    catch(e){toast('Plan de financement non généré : '+e.message)}return go()}
   if(a==='lmail'){await save(true);if(!window.jspdf){toast("Le module PDF n'est pas chargé : ouvrez l'application une fois avec internet.");return}
     if(!P.nom){toast('Renseignez d’abord votre profil : il figure sur le document');view='profil';return go()}await numeroter();const v=cur;carnetMemo(v);
     try{const r=await locPdf(v,1),m=locMail(v);if(await envoiMail(r.nom,r.blob,v.loc.proprio.email,m.sujet,m.corps)){v.pdfAt=Date.now();await store.put(v);fsSave(v,1)}}catch(err){toast('Envoi impossible : '+err.message)}return}
