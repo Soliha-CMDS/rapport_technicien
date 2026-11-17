@@ -285,7 +285,7 @@ button.lnk{min-height:44px;padding:0 4px;border:0;background:none;font-size:.85r
 .tile:disabled{opacity:.55;cursor:default}
 .banner.danger{background:var(--danger-bg);color:var(--danger)}.case.off{opacity:.65}
 .erl{border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;margin:8px 0;background:var(--surface)}.erl.off{background:transparent;border-style:dashed}
-label.chip.erb{border-radius:10px;width:100%;align-items:flex-start}.erpad{height:60vh}
+label.chip.erb{border-radius:10px;width:100%;align-items:flex-start}
 .ertab{overflow-x:auto;margin-bottom:8px}.ertab table{width:100%;border-collapse:collapse;font-size:.9rem}.ertab th,.ertab td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}.ertab th{background:var(--chip)}
 .banner button{display:block;margin-top:8px}
 .ver{font-size:.8rem;margin-top:var(--sp-2)}
@@ -412,6 +412,17 @@ label.chip.erb{border-radius:10px;width:100%;align-items:flex-start}.erpad{heigh
 .pinpts span.on{background:var(--accent)}
 .pinpad{display:grid;grid-template-columns:repeat(3,72px);gap:12px}
 .pinpad button{width:72px;height:72px;border-radius:50%;font-size:1.5rem;font-weight:700}
+
+/* Plan de la pièce (rapport ergo) : dessin à gauche, réglages et palette à droite sur tablette */
+.wrap.epw{max-width:1400px}
+.eplay{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px;align-items:start}
+@media (max-width:900px){.eplay{grid-template-columns:1fr}}
+.epsvg{display:block;width:100%;height:auto;background:#fff;border:1px solid var(--line);border-radius:8px;max-height:calc(100dvh - 190px);touch-action:none;user-select:none;-webkit-user-select:none}
+.epsvg .sel{filter:drop-shadow(0 0 3px #1b6d96) drop-shadow(0 0 2px #1b6d96)}
+.eppal{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.eppal button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:84px;min-height:84px;padding:4px;font-size:.78rem;line-height:1.15;white-space:normal;text-align:center}
+.eppal button svg{width:60px;height:40px;background:#fff;border-radius:4px}
+.eppal button[aria-pressed="true"]{outline:3px solid var(--accent);outline-offset:1px}
 
 </style>
 
@@ -691,8 +702,13 @@ const LOC_ENGINE = (() => {
     if (lg.vacant && !sansVacance) add("Anah", "Prime de sortie de vacance", "Logement vacant depuis plus de 2 ans", P.vacance);
     if (lg.vacant && sansVacance) out.notes.push(`Pas de prime de sortie de vacance de l'Anah ${aCommune(ctx.commune)}.`);
     if (lg.iml) add("Anah", "Prime d'intermédiation locative (IML)", S < P.imlSeuil ? `${eur(P.iml)} + ${eur(P.imlPetit)} (logement < 40 m²)` : "Forfait par logement", P.iml + (S < P.imlSeuil ? P.imlPetit : 0));
-    // Aide à la maîtrise d'œuvre : montant retenu HT × taux de maîtrise d'œuvre × taux Anah de la thématique
-    if (opts.moe) add("Anah", "Maîtrise d'œuvre", `${pct(opts.moe)} × ${eur(assAnah)} × ${pct(th.taux)}`, assAnah * opts.moe * th.taux);
+    // Aide à la maîtrise d'œuvre (méthode OPAL, instructeur, 17/11/2026) : taux de maîtrise d'œuvre × montant retenu HT limité au plafond × taux Anah ;
+    // ce plafond se calcule sur la surface utile sans la limite de 80 m² (décision de l'utilisateur, 17/11/2026).
+    if (opts.moe) {
+      const plafMoe = th.pm2 * SU, assMoe = Math.min(montantRef, plafMoe);
+      const tx = opts.moeHT ? `${pct(opts.moe)} (${eur(opts.moeHT)} ÷ ${eur(opts.moeTravaux)} de travaux)` : pct(opts.moe);
+      add("Anah", "Maîtrise d'œuvre", `${tx} × ${eur(assMoe)}${SU > A.surfMax && montantRef > plafMoe ? " (plafond : " + eur(th.pm2) + "/m² × " + fmtN(SU) + " m², sans limite de surface)" : ""} × ${pct(th.taux)}`, assMoe * opts.moe * th.taux);
+    }
     if (lg.gain35) add("Anah", "Prime Habiter Mieux", lg.passoire ? `Gain énergétique ≥ 35 % + sortie de passoire thermique (${eur(P.passoire)})` : "Gain énergétique ≥ 35 % après travaux", P.hm + (lg.passoire ? P.passoire : 0));
 
     // --- Aides locales de la fiche du dispositif
@@ -717,7 +733,8 @@ const LOC_ENGINE = (() => {
     out.coutHT = out.montantRef + out.hon;
     out.ttcCalc = out.ttc == null;
     out.ttcTravaux = out.ttc != null ? out.ttc : Math.round(out.montantRef * (1 + opts.tva));
-    out.ttcEff = out.ttcTravaux + Math.round(out.hon * (1 + opts.tva));
+    // Honoraires TTC : part du montant TTC saisi (au prorata du HT), sinon TVA du projet
+    out.ttcEff = out.ttcTravaux + Math.round(out.hon * (opts.moeTTC && opts.moeHT ? opts.moeTTC / opts.moeHT : 1 + opts.tva));
     out.taux = out.coutHT ? out.total / out.coutHT : 0;
     out.reste = r2(out.coutHT - out.total);
     out.resteTTC = r2(out.ttcEff - out.total);
@@ -740,6 +757,12 @@ const LOC_ENGINE = (() => {
     // Catégorie de ressources du propriétaire (très modeste à supérieur), calculée seulement si une aide Loc'Avantages du dispositif en dépend ; SCI : aucune.
     const fk = fiche(data, ctx.key), besoinCat = !!fk && fk.aides.some((a) => (a.portee || "la") !== "mpr" && usesCat(a.si));
     if (besoinCat) Object.defineProperty(opts, "cat", { value: catProprio(d.proprio, FI(data).anah.mpr) });
+    // Montant des honoraires connu : taux réel = honoraires HT ÷ travaux HT de tous les logements (calcul à blanc pour les connaître)
+    const moeHT = d.bien.moe ? Math.max(0, pnum(d.bien.moeMontant, 0)) : 0;
+    if (moeHT) {
+      const travaux = d.logements.map((lg) => calcLogement(data, ctx, lg, opts).montantRef || 0).reduce((a, x) => a + x, 0);
+      if (travaux > 0) Object.assign(opts, { moe: moeHT / travaux, moeHT, moeTravaux: travaux, moeTTC: Math.max(0, pnum(d.bien.moeTTC, 0)) });
+    }
     const lgs = d.logements.map((lg) => calcLogement(data, ctx, lg, opts));
     const parFin = {};
     let total = 0, montantTotal = 0, tousMontants = true, refTotal = 0, ecrete = 0, ttcTotal = 0, tousTTC = lgs.length > 0, honTotal = 0, travauxHT = 0, ttcCalc = false;
@@ -869,6 +892,13 @@ const cases=[
  console.assert(ag('Moncoutant-sur-Sèvre','TD').join()==='28000,8000,12000',"Agglo2B : Moncoutant en très dégradé",ag('Moncoutant-sur-Sèvre','TD'));
  console.assert(ag('Cerizay','SEC').join()==='21000,6000,6000',"Agglo2B : commune à 10 %",ag('Cerizay','SEC'));
  console.assert(ag('Boismé','ENE').join()==='15000,6000',"Agglo2B : commune sans abondement",ag('Boismé','ENE'));
+ // Maîtrise d'œuvre au montant connu (exemple fictif) : taux réel 32 400 ÷ 400 000 = 8,1 % ; plafond de la maîtrise d'œuvre sur 210,3 m² sans limite de 80 m²
+ // (1 000 × 210,3 = 210 300), aide = 8,1 % × 210 300 × 35 % = 5 962 ; l'aide aux travaux reste limitée à 80 m² ; TTC des honoraires repris tel que saisi.
+ {const R=LOC_ENGINE.calcDossier(LOC_DATA,dos({force:'NONE',moe:true,moeTaux:'10',moeMontant:'32400',moeTTC:'38880',tva:'20'},[lg({surface:'210.3',montant:'400000'})]),x=>x),r=R.lgs[0],m=r.lignes.find(l=>l.lib==="Maîtrise d'œuvre");
+  console.assert(R.opts.moe===0.081&&m&&m.m===5962&&r.lignes[0].m===28000&&r.hon===32400&&r.coutHT===432400&&r.ttcEff===480000+38880,"Loc'Avantages : maîtrise d'œuvre au montant connu",r);
+  // Sans montant : le taux saisi, et la même limite de surface levée (8 % × min(400 000, 210 300) × 35 % = 5 888)
+  const s=LOC_ENGINE.calcDossier(LOC_DATA,dos({force:'NONE',moe:true,moeTaux:'8',tva:'20'},[lg({surface:'210.3',montant:'400000'})]),x=>x).lgs[0];
+  console.assert(s.lignes.find(l=>l.lib==="Maîtrise d'œuvre").m===5888&&s.hon===32000&&s.ttcEff===480000+38400,"Loc'Avantages : maîtrise d'œuvre au taux saisi",s)}
  // Prime de vacance communale du Pacte Mellois : en plus des 5 000 € de la CC, seulement pour un logement vacant.
  const pv=(insee,vacant)=>LOC_ENGINE.calcDossier(LOC_DATA,dos({insee},[lg({surface:'50',montant:'30000',vacant})]),x=>x).lgs[0].lignes.filter(l=>/vacance/.test(l.lib)).map(l=>l.fin+':'+l.m).filter(x=>!x.startsWith('Anah'));
  console.assert(pv('79150',true).join()==="CC Mellois en Poitou:5000,Commune de Limalonges:5000"&&pv('79251',true).join()==="CC Mellois en Poitou:5000,Commune de Marcillé:2000"&&pv('79150',false).length===0&&pv('79136',true).join()==="CC Mellois en Poitou:5000","ASSERT FAIL prime commune Mellois",pv('79150',true));
@@ -975,7 +1005,7 @@ function locDeroule(d, anah, locales, eur) {
 // Fiches dispositif : seuls les types d'aide et les conditions connus du moteur sont admis.
 // Questions d'une fiche : identifiant simple, niveau dossier ou logement, type connu ; aucune réponse ne doit écraser un champ du dossier.
 const LOC_CHAMPS = new Set(["nom", "surface", "annexes", "thematique", "loc", "iml", "travaux", "montant", "ttc", "loyerLibre", "vacant", "gain35", "passoire", "aidesManu", "mprMontant", "mprGain",
-  "adresse", "cp", "insee", "communeTxt", "description", "force", "tva", "moe", "moeTaux", "photo", "numero", "voie"]);
+  "adresse", "cp", "insee", "communeTxt", "description", "force", "tva", "moe", "moeTaux", "moeMontant", "moeTTC", "photo", "numero", "voie"]);
 console.assert([LOC_FICHES, LOC_FICHES_V1].every((F) => F.dispositifs.every((f) => (f.questions || []).every((q) => /^[A-Za-z][A-Za-z0-9_]{0,30}$/.test(q.id) && !LOC_CHAMPS.has(q.id)
   && ["dossier", "logement"].includes(q.niveau) && ["oui", "liste", "nombre"].includes(q.type) && q.texte))), "Fiches dispositif : question mal décrite");
 console.assert(LOC_FICHES.dispositifs.every((f) => /^[A-Z0-9_]+$/.test(f.id) && f.nom && f.logo && Object.keys(f.communes).every((c) => /^\d{5}$/.test(c))
@@ -3359,7 +3389,8 @@ const ERGO_PHG={acc:'exterieur_preco',menu:'menuiseries_preco',niv:'interieur_pr
 const ERGO_ELIG=[[70,'ok','Éligible au critère d’âge (70 ans ou plus).'],[60,'warn','Éligible sous condition de GIR (60 à 69 ans).'],[0,'warn','Critère d’éligibilité à vérifier : taux d’incapacité ≥ 50 % ou PCH.']];
 
 /* --- Lot 2 : relevé du logement et préconisations ---
-   Zone : {k, t (titre du bandeau), s (sous-titre), g (listes : [clé, titre, éléments]) ou bloc (bloc standard), croquis, larg}.
+   Zone : {k, t (titre du bandeau), s (sous-titre), g (listes : [clé, titre, éléments]) ou bloc (bloc standard), croquis, larg,
+   plan (bouton « Plan de la pièce », ergo-plan.js)}.
    Élément : [id, libellé, options]. Dans le libellé, {clé:Libellé du champ=valeur par défaut} est un paramètre à saisir,
    « ! » à la fin le rend obligatoire. Options : m = modifie l'aspect extérieur (alerte mairie), off = décoché dans le bloc standard,
    aucun = « pas d'aménagement à prévoir » (urgence « Aucun » par défaut), seul = exclut les autres lignes du bloc (existant adapté). */
@@ -3396,7 +3427,7 @@ const ERGO_ZONES=[
     ['pas1','Élargissement des portes à 83 cm minimum'],
     ['pas2','Inversion du sens d’ouverture des portes'],
     ['pas3','Pose de portes coulissantes / à galandage']]]]},
-  {k:'douche',t:'SALLE DE BAIN',s:'Espace douche',croquis:1,bloc:[
+  {k:'douche',t:'SALLE DE BAIN',s:'Espace douche',croquis:1,plan:1,bloc:[
     ['d0','Douche existante adaptée aux capacités actuelles, pas de préconisation',{off:1,seul:1,aucun:1}],
     ['d1','Modification éventuelle des arrivées et évacuation des appareils sanitaires'],
     ['d2','Pose d’un receveur extraplat antidérapant, encastré/sans marche si techniquement faisable ou création d’une douche à l’italienne avec revêtement antidérapant. Dimensions : {L:Longueur (cm)=!} × {l:Largeur (cm)=!} cm'],
@@ -3421,7 +3452,7 @@ const ERGO_ZONES=[
     ['l2','Pose d’un miroir posé au ras de la vasque avec éclairage adapté'],
     ['l3','Pose d’un meuble sur le côté'],
     ['l4','Réfection du sol avec revêtement antidérapant suite à la dépose des appareils sanitaires']]},
-  {k:'wc',t:'TOILETTES',s:'',g:[['wc','WC',[
+  {k:'wc',t:'TOILETTES',s:'',plan:1,g:[['wc','WC',[
     ['wc0','WC adapté aux capacités actuelles, pas d’aménagement à prévoir',{aucun:1}],
     ['wc1','Pose de WC surélevés ou suspendus, hauteur {h:Hauteur (cm)=45 à 50} cm ({emp:Emplacement=})'],
     ['wc2','Pose de WC surélevés ou suspendus avec barre(s) d’appui coudée(s)'],
@@ -3559,11 +3590,11 @@ function ergoView(app,bar,bi){const v=cur,f=v.f;bar.hidden=false;
      <h2 class="sec">Bilan fonctionnel</h2>
      ${P2.length>1?`<div class="seg" role="tablist">${P2.map(([k,l])=>`<label class="chip"><input type="radio" name="ergop" data-act="er-p" data-p="${k}" ${k===p?'checked':''}>${esc(l)}</label>`).join('')}</div>`:''}
      ${grille}`;bi.innerHTML=done;return true}
-  return ergoViewS(app,bar,bi)||ergoViewZ(app,bar,bi)}
+  return ergoViewS(app,bar,bi)||ergoViewZ(app,bar,bi)||ergoViewPlan(app,bar,bi)}
 
 /* --- saisie : phrase type, réaffichage des champs calculés, valeurs par défaut --- */
 // Renvoie true si l'événement est traité ici.
-function ergoChg(el){const f=cur.f,k=el.dataset.f;if(ergoChgZ(el))return true;
+function ergoChg(el){const f=cur.f,k=el.dataset.f;if(ergoPlanChg(el)||ergoChgZ(el))return true;
   if(el.dataset.niv){const i=el.value;el.value='';if(i==='')return true;const c=el.dataset.niv;f[c]=ergoPhr(cur,ERGO_PH.bilan_niveau[+i].t,ergoWho(c));save();keep();
     const ta=$('#f_'+c);if(ta)ergoCro(ta);return true}
   if(el.dataset.ins){const i=el.value;el.value='';if(i==='')return true;const c=el.dataset.ins,t=ergoPhr(cur,ERGO_PH[el.dataset.ph][+i].t,ergoWho(c)),d=filled(f[c])?f[c].replace(/\s+$/,'').length+1:0;
@@ -3585,8 +3616,11 @@ function ergoObsGen(f,p,b){const L=ERGO_BILAN.find(x=>x[0]===b)[2].filter(([l])=
     if(ah.length)t.push(`Par ${ah.map(x=>'un '+min(x)).join(' et ')}${ahT?` (${ahT})`:''}.`);else if(ahT)t.push(`Aide humaine : ${ahT}.`);
     if(t.length){const s=t.join(' ');G.set(s,[...(G.get(s)||[]),lab])}}
   return [...G].map(([s,labs])=>labs.length===L.length||L.length===1?s:`${[labs[0],...labs.slice(1).map(min)].join(', ')} : ${min(s)}`).join('\n')}
+// Actions des zones. « er-d… » n'en fait plus partie : « er-dup » (dupliquer le rapport) y partait et restait sans effet.
+const ERGO_ACTZ=/^er-(z|l|b|ph)/;
 async function ergoAct(a,b){
-  if(/^er-(z|l|b|ph|d)/.test(a))return ergoActZ(a,b);
+  if(a.startsWith('er-pl'))return ergoPlanAct(a,b);
+  if(ERGO_ACTZ.test(a))return ergoActZ(a,b);
   if(a==='er-p'){ergoP=b.dataset.p;return keep()}
   if(a==='er-retonly'){ergoRetOnly=!ergoRetOnly;return keep()}
   if(a==='er-gir70'){cur.f.gir='Pas nécessaire, plus de 70 ans';save();return keep()}
@@ -3623,7 +3657,7 @@ function ergoZOk(v,z){const vu=filled(z.obs)||!!v.it['z:'+z.id]?.ph.length;
   return vu&&(z.b?z.b.on.length>0&&ergoLOk(z.b):z.L.length>0&&z.L.every(l=>ergoLOk(l)&&filled(ergoLigneTxt(l))))}
 function ergoEtatZ(v){const Z=(v.z||[]).filter(z=>z.actif);if(!Z.some(z=>ergoZTouche(v,z)))return 'vide';return Z.every(z=>ergoZOk(v,z))?'complet':'incomplet'}
 const ergoMaxPh=id=>/^z:/.test(id)?6:/^zc:/.test(id)?2:Infinity;
-let ergoZ=null,ergoDessin=null;
+let ergoZ=null;
 const ergoZcur=()=>cur.z.find(z=>z.id===ergoZ);
 
 /* --- écrans des zones --- */
@@ -3678,16 +3712,11 @@ function ergoViewZ(app,bar,bi){const v=cur,done=`<button class="btn-primary" dat
       ${d.larg?zFld('Largeur des passages (cm)',zIn(z,'larg',z.larg,'inputmode="decimal"'),'','<div class="hint">Reprise dans le rapport : « Les passages intérieurs sont de … cm. »</div>'):''}</div>
      <h2 class="sec">Préconisations</h2>${d.bloc?bloc():d.g.map(grp).join('')}
      ${ergoMairie(z)?`<div class="banner danger">${esc(ERGO_MAIRIE)}<div class="chips">${zChk(z,'mairieOff',z.mairieOff,'Ne pas l’afficher dans le rapport')}</div></div>`:''}
-     ${d.croquis?`<h2 class="sec">Croquis et observations complémentaires</h2><p class="muted">Deux images au plus : croquis importé, photo d’un croquis papier ou dessin à main levée.</p>
-      ${phBlock('zc:'+z.id,it('zc:'+z.id),ergoPhNums('zc:'+z.id),false)}<div class="row"><button data-act="er-dessin">${svg('plus')}Dessiner un croquis</button></div>
-      <div class="form">${zFld('Observations complémentaires',zTa(z,'croqTxt',z.croqTxt))}${zIns(z,'croqTxt','croquis')}</div>`:''}`;
+     ${d.plan?`<h2 class="sec">Plan de la pièce</h2><p class="muted">${esc(epResume(z))}</p><div class="row"><button data-act="er-plan">${svg('plus')}${z.plan?'Modifier le plan':'Dessiner le plan'}</button></div>`:''}
+     ${d.croquis?(()=>{const n=it('zc:'+z.id).ph.length;return `<h2 class="sec">${n?'Croquis et observations complémentaires':'Observations complémentaires'}</h2>
+      ${n?`<p class="muted">Croquis enregistrés avant le plan de la pièce : ils restent dans le rapport tant qu’ils ne sont pas supprimés.</p>${phBlock('zc:'+z.id,it('zc:'+z.id),ergoPhNums('zc:'+z.id),false)}`:''}
+      <div class="form">${zFld('Observations complémentaires',zTa(z,'croqTxt',z.croqTxt))}${zIns(z,'croqTxt','croquis')}</div>`})():''}`;
     bi.innerHTML=`<button data-act="er-zdup" data-z="${z.id}">Dupliquer la zone</button><button class="btn-primary" data-act="er-zback">Terminé</button>`;return true}
-  if(view==='edessin'){ergoDessin=null;
-    app.innerHTML=`${topbar('Croquis à main levée',ergoZTitre(ergoZcur()),'er-zret')}
-     <canvas class="pad erpad" id="pad" style="--ink:#111;background:#fff" aria-label="Zone de dessin du croquis"></canvas>
-     <div class="row"><button data-act="er-dclr">Effacer</button></div><p class="muted">Dessinez au doigt ou au stylet. Le croquis est ajouté aux images de la salle de bain.</p>`;
-    initPad(null,u=>ergoDessin=u);
-    bi.innerHTML=`<button data-act="er-zret">Annuler</button><button class="btn-primary" data-act="er-dsave">Ajouter le croquis</button>`;return true}
   if(view==='eaides'){app.innerHTML=`${topbar('5. Conseils et aides techniques',who(v),'dash')}<p class="muted">Conseils donnés et aides techniques préconisées lors de la visite (non financées par l’Anah). Une partie laissée vide n’apparaîtra pas dans le rapport.</p>
      <div class="form">${field(['conseils','Conseils donnés lors de la visite','ta'])}${ergoIns('conseils','conseils','Insérer un conseil type')}</div>
      <div class="form">${[['at','Aides techniques préconisées','c',ERGO_AT],['atTxt','Précisions','ta']].map(field).join('')}${ergoIns('atTxt','aides','Insérer une phrase type')}</div>`;bi.innerHTML=done;return true}
@@ -3728,8 +3757,8 @@ async function ergoActZ(a,b){const z=()=>cur.z.find(x=>x.id===b.dataset.z);
   if(a==='er-zback'){view='ezones';return go()}
   if(a==='er-zobs'){const s=z();s.obs=ergoPhr(cur,ergoPhZ(s)[0].t);save();keep();const ta=document.querySelector(`[data-zk="${s.id}"][data-zp="obs"]`);if(ta)ergoCro(ta);return}
   if(a==='er-zret'){view='ezone';return go()}
-  // Copie d'une zone (deux salles de bain…) : préconisations reprises, observation, photos et croquis vides.
-  if(a==='er-zdup'){const s=z(),c=structuredClone(s),i=cur.z.indexOf(s);Object.assign(c,{id:ergoId(),obs:'',croqTxt:'',n:Math.max(1,...cur.z.filter(x=>x.k===s.k&&(x.k!=='libre'||x.t===s.t)).map(x=>x.n||1))+1});
+  // Copie d'une zone (deux salles de bain…) : préconisations reprises, observation, photos, croquis et plan vides.
+  if(a==='er-zdup'){const s=z(),c=structuredClone(s),i=cur.z.indexOf(s);Object.assign(c,{id:ergoId(),obs:'',croqTxt:'',n:Math.max(1,...cur.z.filter(x=>x.k===s.k&&(x.k!=='libre'||x.t===s.t)).map(x=>x.n||1))+1});delete c.plan;
     c.L.forEach(l=>l.id=ergoId());cur.z.splice(i+1,0,c);ergoZ=c.id;view='ezone';save();toast('Zone dupliquée');return go()}
   if(a==='er-zdel'){if(!armed(b,'Confirmer la suppression'))return;const s=z();cur.z=cur.z.filter(x=>x!==s);delete cur.it['z:'+s.id];delete cur.it['zc:'+s.id];save();return keep()}
   if(a==='er-zadd'){const c=ergoZNew(ERGO_ZLIBRE);cur.z.push(c);ergoZ=c.id;view='ezone';save();return go()}
@@ -3737,11 +3766,6 @@ async function ergoActZ(a,b){const z=()=>cur.z.find(x=>x.id===b.dataset.z);
   if(a==='er-ldel'){if(!armed(b,'Confirmer'))return;z().L.splice(+b.dataset.i,1);save();return keep()}
   if(a==='er-bstd'){const s=z();s.b.on=ergoBlocStd(ergoZDef(s));save();return keep()}
   if(a==='er-phup'){const ph=it(b.dataset.it).ph,i=+b.dataset.i;[ph[i-1],ph[i]]=[ph[i],ph[i-1]];save();return keep()}
-  if(a==='er-dessin'){view='edessin';return go()}
-  if(a==='er-dclr')return keep();
-  if(a==='er-dsave'){if(!ergoDessin){toast('Dessinez d’abord le croquis');return}const s=it('zc:'+ergoZ);if(s.ph.length>=2){toast('Deux croquis au plus : supprimez-en un');return}
-    const im=await loadImg(ergoDessin),c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0);
-    s.ph.push({src:c.toDataURL('image/jpeg',.8),w:c.width,h:c.height,cap:'Croquis'});await save(true);view='ezone';toast('Croquis ajouté');return go()}
 }
 
 /* ---------- Lot 3 : synthèse, contrôles avant export, rapport PDF (30/10/2026) ---------- */
@@ -3941,7 +3965,9 @@ async function ergoPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',fo
     lab('OBSERVATION DE L’EXISTANT');const obs=ergoObsTxt(z);para(filled(obs)?obs:'/');y+=2;
     if(z.b&&ergoBSeul(z.b))prec('',ergoLib(ergoItem(z.b.on[0])[1]),z.b);else if(z.b&&z.b.on.length)prec('',z.b.on.map(id=>ergoLib(ergoItem(id)[1],z.b.p[id])),z.b,true);else for(const l of z.L)prec('',ergoLigneTxt(l)||'Ligne libre',l);
     if(ergoMairie(z)&&!z.mairieOff){y+=1;alerte(ERGO_MAIRIE)}
-    if(d.croquis){const cp=it('zc:'+z.id).ph;if(cp.length||filled(z.croqTxt)){y+=2;need(cp.length?62:14);lab('CROQUIS ET OBSERVATIONS COMPLÉMENTAIRES');const C=[];for(const p of cp)C.push(await ergoPdfImg(p));photos(C,80);para(filled(z.croqTxt)?z.croqTxt:'/')}}
+    // Plan de la pièce : avant et après côte à côte, ou l'existant seul (ergo-plan.js).
+    if(d.plan&&epAImprimer(z.plan)){const P=z.plan,L=[await epImg(P,P.av,P.ap?'Avant (existant)':'Existant')];if(P.ap)L.push(await epImg(P,P.ap,'Après (aménagement proposé)'));y+=2;need(70);lab('PLAN DE LA PIÈCE');photos(L,95)}
+    if(d.croquis){const cp=it('zc:'+z.id).ph;if(cp.length||filled(z.croqTxt)){y+=2;need(cp.length?62:14);lab(cp.length?'CROQUIS ET OBSERVATIONS COMPLÉMENTAIRES':'OBSERVATIONS COMPLÉMENTAIRES');const C=[];for(const p of cp)C.push(await ergoPdfImg(p));photos(C,80);para(filled(z.croqTxt)?z.croqTxt:'/')}}
     y+=2;cadre(y);carte=null;y+=5}
 
   /* --- accompagnateur AMO, conseils, aides techniques --- */
@@ -3985,10 +4011,233 @@ console.assert(ergoAdapte('Porte adaptée aux capacités actuelles, pas de préc
 console.assert(ergoObsGen({b_p1_transf_at:['Déambulateur 2 roues'],b_p1_transf_ah:['Aidant familial'],b_p1_transf_ahT:'son fils',b_p1_depInt_at:['Déambulateur 2 roues'],b_p1_depInt_ah:['Aidant familial'],b_p1_depInt_ahT:'son fils'},'p1','mob')
   ==='Transferts, déplacements intérieurs : avec aide technique : déambulateur 2 roues. Par un aidant familial (son fils).'
   &&ergoObsGen({b_p1_haut_ah:['Organisme'],b_p1_haut_ahT:'ADMR',b_p1_bas_ah:['Organisme'],b_p1_bas_ahT:'ADMR'},'p1','toil')==='Par un organisme (ADMR).'&&ergoObsGen({},'p1','rep')==='','ASSERT FAIL ergoObsGen');
+console.assert(ERGO_ACTZ.test('er-zdup')&&ERGO_ACTZ.test('er-phup')&&!ERGO_ACTZ.test('er-dup')&&!ERGO_ACTZ.test('er-plan'),'ASSERT FAIL ERGO_ACTZ : er-dup doit rester à ergoAct');
 console.assert(ergoApos('Difficultés d installer, il n y a pas l eau qu il faut, s il pleut.')==='Difficultés d’installer, il n’y a pas l’eau qu’il faut, s’il pleut.'
   &&ergoApos('D abord. L entrée')==='D’abord. L’entrée'&&ergoApos('Barre en T ou L avec appui, ballon de 200 l avec 1 m au sol.')==='Barre en T ou L avec appui, ballon de 200 l avec 1 m au sol.'
   &&ergoApos('l, d ')==='l, d ','ASSERT FAIL ergoApos');
 console.assert(ERGO_SANTE('anam')&&ERGO_SANTE('b_p1_transf')&&!ERGO_SANTE('noms')&&!ERGO_SANTE('lType'),'ASSERT FAIL ERGO_SANTE');});
+/* Plan de pièce du rapport ergothérapeute (jalon 2 du PRD plan-ergo) : symboles vus de dessus, à l'échelle (cm),
+   repris de la maquette validée le 17/11/2026. Tout est enfermé dans EPL pour ne pas croiser les noms de l'application. */
+const EPL=(()=>{
+// Matières communes (dégradés, motifs, ombre), insérées une fois dans le dessin du plan.
+const DEFS=`<linearGradient id="ep-cer" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dfe5e9"/></linearGradient>
+<radialGradient id="ep-bol" cx=".5" cy=".42" r=".6"><stop offset="0" stop-color="#ffffff"/><stop offset=".7" stop-color="#e3e9ed"/><stop offset="1" stop-color="#b9c4cc"/></radialGradient>
+<linearGradient id="ep-chr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5f7f8"/><stop offset=".45" stop-color="#9aa5ad"/><stop offset=".6" stop-color="#e8ecee"/><stop offset="1" stop-color="#7d8890"/></linearGradient>
+<linearGradient id="ep-eau" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d7e9f4"/><stop offset="1" stop-color="#a9cde3"/></linearGradient>
+<pattern id="ep-carr" width="15" height="15" patternUnits="userSpaceOnUse"><rect width="15" height="15" fill="#e6f0f6"/><path d="M15 0V15H0" fill="none" stroke="#b7cfde" stroke-width=".7"/></pattern>
+<pattern id="ep-bois" width="40" height="7" patternUnits="userSpaceOnUse"><rect width="40" height="7" fill="#e7cb9d"/><path d="M0 2.5C12 1.5 25 3.5 40 2.2M0 6C15 5.2 28 6.8 40 5.8" fill="none" stroke="#c8a36b" stroke-width=".6"/></pattern>
+<pattern id="ep-tole" width="16" height="16" patternUnits="userSpaceOnUse"><rect width="16" height="16" fill="#c4c9cd"/><g stroke-linecap="round" stroke-width="1.4"><path d="M2 5l4 -3M3.5 6.5l4 -3" stroke="#eef1f3"/><path d="M10 10l4 4M8.5 11.5l4 4" stroke="#eef1f3"/></g><g stroke-linecap="round" stroke-width=".6" stroke="#8f989f"><path d="M2.4 5.6l4 -3M10.6 10.4l4 4"/></g></pattern>
+<filter id="ep-omb" x="-15%" y="-15%" width="140%" height="140%"><feDropShadow dx=".8" dy="1.4" stdDeviation="1.3" flood-color="#14212b" flood-opacity=".28"/></filter>`;
+// Unités : centimètres. Repère local d'un symbole : x le long du mur, y vers la pièce (y=0 = face intérieure du mur, mur entre y=-12 et 0).
+const T='#14212b',VERT='#2e7d4f',O='filter="url(#ep-omb)"';
+// Cuvette vue de dessus : dos plat en y0, avant arrondi en y1
+const cuv=(w,y0,y1,dx=0)=>`M${dx} ${y0}H${w-dx}C${w+1-dx*.3} ${y0+(y1-y0)*.35} ${w*.82} ${y1} ${w/2} ${y1}C${w*.18} ${y1} ${dx*.3-1} ${y0+(y1-y0)*.35} ${dx} ${y0}Z`;
+// Receveur surélevé : bord en faïence, fond incliné vers la bonde (bx, by)
+const rcv=(p,bx,by)=>`<g ${O}><path d="${p}" fill="url(#ep-cer)" stroke="${T}" stroke-width="1.1"/></g><path d="${p}" fill="#eef4f8" stroke="#9fb3c1" stroke-width=".7" transform="translate(4 4) scale(.93)"/><circle cx="${bx}" cy="${by}" r="5" fill="url(#ep-chr)" stroke="${T}" stroke-width=".6"/><path d="M${bx-3} ${by}h6M${bx} ${by-3}v6" stroke="#55606a" stroke-width=".7"/>`;
+// Meuble vasque : plan de toilette, façade bois, une vasque par position x
+const mv=(w,d,xs)=>`<g ${O}><rect x="0" y="0" width="${w}" height="${d}" rx="2" fill="url(#ep-cer)" stroke="${T}" stroke-width="1.1"/></g><rect x="1" y="${d-4}" width="${w-2}" height="3.5" fill="url(#ep-bois)"/>`+xs.map(x=>`<rect x="${x-21}" y="9" width="42" height="${d-19}" rx="9" fill="url(#ep-bol)" stroke="#8a97a1" stroke-width=".7"/><circle cx="${x}" cy="${d/2+3}" r="2" fill="#fff" stroke="#6b7780" stroke-width=".6"/><circle cx="${x}" cy="5" r="3.2" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/><rect x="${x-1.3}" y="5" width="2.6" height="8" rx="1.2" fill="url(#ep-chr)" stroke="${T}" stroke-width=".4"/>`).join('');
+// Pastille montrant la forme d'une barre vue de face (vue de dessus, toutes les barres se ressemblent)
+const badge=(w,p)=>`<g transform="translate(${w/2-10} 13)"><rect width="20" height="16" rx="3" fill="#fff" stroke="#8a97a1" stroke-width=".6"/><path d="${p}" transform="translate(2 2)" stroke="${T}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+// Vitrage d'une paroi, de x0 à x1, épaisseur 2 cm
+const verre=(x0,x1)=>`<g ${O}><rect x="${x0}" y="1" width="${x1-x0}" height="2.5" fill="#cfe6f3" fill-opacity=".85" stroke="#4b88ad" stroke-width=".8"/></g>`;
+const ouv=(w)=>`<rect x="0" y="-12" width="${w}" height="12" fill="#fff"/><path d="M0 -12V0M${w} -12V0" stroke="${T}" stroke-width="1.6"/>`; // baie dans le mur
+const S={
+ wc:{n:'WC posé',w:38,d:68,f:(w,d)=>`<g ${O}><rect x="1" y="0" width="${w-2}" height="17" rx="3" fill="url(#ep-cer)" stroke="${T}" stroke-width="1.1"/><path d="${cuv(w,19,d,2)}" fill="url(#ep-cer)" stroke="${T}" stroke-width="1.1"/></g><path d="${cuv(w-10,24,d-5,0)}" transform="translate(5 0)" fill="#f7f9fa" stroke="${T}" stroke-width=".7"/><ellipse cx="${w/2}" cy="${(24+d)/2+3}" rx="${w/2-9}" ry="${(d-24)/2-8}" fill="url(#ep-bol)" stroke="#8a97a1" stroke-width=".6"/><ellipse cx="${w/2}" cy="${(24+d)/2+6}" rx="5" ry="6" fill="url(#ep-eau)"/><rect x="${w/2-9}" y="18" width="18" height="3" rx="1.2" fill="url(#ep-chr)"/><rect x="${w/2-5}" y="5" width="10" height="7" rx="2" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/>`},
+ wcs:{n:'WC suspendu',w:36,d:54,f:(w,d)=>`<rect x="${w/2-12}" y="-3" width="24" height="5" rx="1" fill="url(#ep-chr)" stroke="${T}" stroke-width=".6"/><rect x="${w/2-12}" y="-11" width="24" height="8" fill="none" stroke="#8a97a1" stroke-width=".7" stroke-dasharray="2 1.5"/><g ${O}><path d="${cuv(w,3,d,4)}" fill="url(#ep-cer)" stroke="${T}" stroke-width="1.1"/></g><path d="${cuv(w-10,7,d-5,1)}" transform="translate(5 0)" fill="#f7f9fa" stroke="${T}" stroke-width=".7"/><ellipse cx="${w/2}" cy="${(7+d)/2+2}" rx="${w/2-9}" ry="${(d-7)/2-8}" fill="url(#ep-bol)" stroke="#8a97a1" stroke-width=".6"/><ellipse cx="${w/2}" cy="${(7+d)/2+5}" rx="4.5" ry="5.5" fill="url(#ep-eau)"/><rect x="${w/2-8}" y="4.5" width="16" height="3" rx="1.2" fill="url(#ep-chr)"/>`},
+ bid:{n:'Bidet',w:36,d:56,f:(w,d)=>`<g ${O}><path d="${cuv(w,0,d,2)}" fill="url(#ep-cer)" stroke="${T}" stroke-width="1.1"/></g><ellipse cx="${w/2}" cy="${d/2+5}" rx="${w/2-7}" ry="${d/2-11}" fill="url(#ep-bol)" stroke="#8a97a1" stroke-width=".7"/><circle cx="${w/2}" cy="${d/2+9}" r="2" fill="#fff" stroke="#6b7780" stroke-width=".6"/><circle cx="${w/2}" cy="7" r="3.2" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/><rect x="${w/2-1.3}" y="7" width="2.6" height="8" rx="1.2" fill="url(#ep-chr)" stroke="${T}" stroke-width=".4"/>`},
+ lav:{n:'Lavabo',w:60,d:45,f:(w,d)=>`<g ${O}><path d="M0 0H${w}V${d-10}Q${w} ${d} ${w-10} ${d}H10Q0 ${d} 0 ${d-10}Z" fill="url(#ep-cer)" stroke="${T}" stroke-width="1.1"/></g><ellipse cx="${w/2}" cy="${d/2+5}" rx="${w/2-9}" ry="${d/2-10}" fill="url(#ep-bol)" stroke="#8a97a1" stroke-width=".7"/><circle cx="${w/2}" cy="${d/2+7}" r="2" fill="#fff" stroke="#6b7780" stroke-width=".6"/><circle cx="${w/2}" cy="6" r="3.5" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/><rect x="${w/2-1.4}" y="6" width="2.8" height="10" rx="1.3" fill="url(#ep-chr)" stroke="${T}" stroke-width=".4"/><rect x="${w/2-1.5}" y="1" width="3" height="6" rx="1" fill="url(#ep-chr)" stroke="${T}" stroke-width=".4" transform="rotate(-40 ${w/2} 6)"/>`},
+ mv1:{n:'Meuble vasque simple',w:80,d:48,f:(w,d)=>mv(w,d,[w/2])},
+ mv2:{n:'Meuble vasque double',w:140,d:48,f:(w,d)=>mv(w,d,[w/4,w*3/4])},
+ bai:{n:'Baignoire',w:170,d:75,f:(w,d)=>`<g ${O}><rect x="0" y="0" width="${w}" height="${d}" rx="6" fill="url(#ep-cer)" stroke="${T}" stroke-width="1.1"/></g><path d="M18 7H${w-30}C${w-6} 7 ${w-6} ${d-7} ${w-30} ${d-7}H18Q8 ${d-7} 8 ${d-17}V17Q8 7 18 7Z" fill="url(#ep-bol)" stroke="#8a97a1" stroke-width=".8"/><circle cx="20" cy="${d/2}" r="2.6" fill="#fff" stroke="#6b7780" stroke-width=".6"/><circle cx="12" cy="5" r="3.2" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/><rect x="10.7" y="5" width="2.6" height="9" rx="1.2" fill="url(#ep-chr)" stroke="${T}" stroke-width=".4"/>`},
+ cab:{n:'Cabine de douche',w:90,d:90,f:(w,d)=>`${rcv(`M0 0H${w}V${d}H0Z`,w/2,d/2)}<rect x="0" y="0" width="${w}" height="4" fill="#eef1f3" stroke="${T}" stroke-width=".7"/><rect x="0" y="0" width="4" height="${d}" fill="#eef1f3" stroke="${T}" stroke-width=".7"/><rect x="${w*0.55}" y="0.5" width="10" height="3" rx="1" fill="url(#ep-chr)" stroke="${T}" stroke-width=".4"/><rect x="${w-3}" y="0" width="3" height="${d}" fill="#cfe6f3" fill-opacity=".85" stroke="#4b88ad" stroke-width=".8"/><rect x="0" y="${d-3}" width="${w*0.6}" height="3" fill="#cfe6f3" fill-opacity=".85" stroke="#4b88ad" stroke-width=".8"/><rect x="${w*0.4}" y="${d-6}" width="${w*0.6}" height="3" fill="#cfe6f3" fill-opacity=".85" stroke="#4b88ad" stroke-width=".8"/><path d="M${w*0.62} ${d+5}H${w*0.3}l5 -3m-5 3l5 3" stroke="${T}" stroke-width=".8" fill="none"/>`},
+ dou:{n:'Douche de plain-pied',w:120,d:90,f:(w,d)=>`<rect x="0" y="0" width="${w}" height="${d}" fill="url(#ep-carr)" stroke="${T}" stroke-width="1.1" stroke-dasharray="7 4"/><path d="M0 0L${w/2} ${d/2}M${w} 0L${w/2} ${d/2}M0 ${d}L${w/2} ${d/2}M${w} ${d}L${w/2} ${d/2}" stroke="#7aa6c2" stroke-width=".7"/><g ${O}><rect x="${w/2-6}" y="${d/2-6}" width="12" height="12" rx="1" fill="url(#ep-chr)" stroke="${T}" stroke-width=".6"/></g><path d="M${w/2-4} ${d/2-3}h8M${w/2-4} ${d/2}h8M${w/2-4} ${d/2+3}h8" stroke="#55606a" stroke-width=".8"/><circle cx="${w-12}" cy="4" r="3" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/>`},
+ rec:{n:'Receveur rectangle',w:120,d:80,f:(w,d)=>rcv(`M0 0H${w}V${d-4}Q${w} ${d} ${w-4} ${d}H4Q0 ${d} 0 ${d-4}Z`,w/2,d/2)},
+ recc:{n:'Receveur carré',w:90,d:90,f:(w,d)=>rcv(`M0 0H${w}V${d-4}Q${w} ${d} ${w-4} ${d}H4Q0 ${d} 0 ${d-4}Z`,w/2,d/2)},
+ recq:{n:'Receveur quart de rond',w:90,d:90,t:'0,90 × 0,90 m, à poser dans un angle',f:(w,d)=>{const r=Math.min(w,d)*.6;return rcv(`M0 0H${w}V${d-r}A${r} ${r} 0 0 1 ${w-r} ${d}H0Z`,w*.38,d*.38)}},
+ pf:{n:'Paroi de douche fixe',w:90,d:6,nomur:1,t:'longueur 0,90 m',f:(w)=>`<rect x="-2" y="-1" width="4" height="6" rx="1" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/>${verre(2,w)}`},
+ pv:{n:'Paroi fixe + volet battant',w:90,d:40,nomur:1,vh:40,t:'longueur 0,90 m (volet 0,35 m)',f:(w)=>{const v=Math.min(35,w*.45),x=w-v;return `<rect x="-2" y="-1" width="4" height="6" rx="1" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/>${verre(2,x)}<path d="M${x} ${v+2}A${v} ${v} 0 0 0 ${w} 2" fill="none" stroke="${T}" stroke-width=".8" stroke-dasharray="4 3"/><g ${O}><rect x="${x-1}" y="2" width="2.5" height="${v}" fill="#cfe6f3" fill-opacity=".85" stroke="#4b88ad" stroke-width=".8"/></g><circle cx="${x}" cy="2" r="2.2" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/>`}},
+ sie:{n:'Siège de douche rabattable',w:45,d:45,f:(w,d)=>`<rect x="2" y="0" width="${w-4}" height="5" rx="1" fill="url(#ep-chr)" stroke="${T}" stroke-width=".6"/><g ${O}><rect x="0" y="5" width="${w}" height="${d-5}" rx="5" fill="#f4f6f7" stroke="${T}" stroke-width="1.1"/></g>${Array.from({length:Math.max(1,Math.floor((w-8)/6))},(_,i)=>`<rect x="${5+i*6}" y="9" width="3.2" height="${d-14}" rx="1.5" fill="#dfe5e9"/>`).join('')}`},
+ bar:{n:'Barre d’appui',w:60,d:10,f:(w,d)=>`<g ${O}><rect x="4" y="3.5" width="${w-8}" height="4" rx="2" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/><circle cx="4" cy="5.5" r="4" fill="url(#ep-chr)" stroke="${T}" stroke-width=".7"/><circle cx="${w-4}" cy="5.5" r="4" fill="url(#ep-chr)" stroke="${T}" stroke-width=".7"/></g>`},
+ bco:{n:'Barre d’appui coudée',w:60,d:30,t:'0,60 m',f:(w,d)=>S.bar.f(w,10)+badge(w,'M2 10H9L14 2')},
+ bt:{n:'Barre d’appui en T',w:60,d:30,t:'0,60 m',f:(w,d)=>S.bar.f(w,10)+badge(w,'M2 2H14M8 2V12')},
+ ss:{n:'Sèche-serviettes',w:50,d:12,f:(w,d)=>`<rect x="5" y="0" width="3" height="4" fill="#9aa5ad"/><rect x="${w-8}" y="0" width="3" height="4" fill="#9aa5ad"/><g ${O}><rect x="0" y="4" width="${w}" height="${d-4}" rx="2" fill="#f7f8f9" stroke="${T}" stroke-width="1"/></g>${Array.from({length:Math.max(1,Math.floor((w-10)/4))},(_,i)=>`<path d="M${7+i*4} 6V${d-2}" stroke="#aeb8bf" stroke-width="1.6" stroke-linecap="round"/>`).join('')}<circle cx="4.5" cy="${(d+4)/2}" r="3" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/><circle cx="${w-4.5}" cy="${(d+4)/2}" r="3" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/>`},
+ pb:{n:'Porte battante',w:80,d:80,mur:1,vh:80,t:'passage 0,80 m',f:(w)=>`${ouv(w)}<path d="M4 ${w}A${w-4} ${w-4} 0 0 0 ${w} 0" fill="none" stroke="${T}" stroke-width=".9" stroke-dasharray="4 3"/><g ${O}><rect x="0" y="0" width="4" height="${w-2}" fill="url(#ep-bois)" stroke="${T}" stroke-width=".9"/></g><circle cx="2" cy="${w*0.82}" r="1.6" fill="url(#ep-chr)" stroke="${T}" stroke-width=".4"/>`},
+ pc:{n:'Porte coulissante',w:80,d:14,mur:1,top:34,ex:56,vh:14,t:'passage 0,80 m',f:(w)=>`${ouv(w)}<path d="M-5 -23H${w*1.7}" stroke="${T}" stroke-width="1.2"/><g ${O}><rect x="-5" y="-20.5" width="${w+10}" height="5" fill="url(#ep-bois)" stroke="${T}" stroke-width=".9"/></g><path d="M${w*0.4} -30H${w*1.1}l-6 -4m6 4l-6 4" stroke="${T}" fill="none"/>`},
+ f1:{n:'Fenêtre 1 vantail',w:60,d:60,mur:1,vh:60,t:'largeur 0,60 m',f:(w)=>`${ouv(w)}<path d="M0 -9H${w}M0 -3H${w}" stroke="#5d9cc2" stroke-width="1"/><path d="M3 ${w-3}A${w-3} ${w-3} 0 0 0 ${w} 0" fill="none" stroke="${T}" stroke-width=".8" stroke-dasharray="4 3"/><g ${O}><rect x="0" y="0" width="3" height="${w-3}" fill="#fff" stroke="${T}" stroke-width=".9"/></g><path d="M1.5 3V${w-6}" stroke="#5d9cc2" stroke-width=".8"/>`},
+ f2:{n:'Fenêtre 2 vantaux',w:120,d:60,mur:1,vh:60,t:'largeur 1,20 m',f:(w)=>{const h=w/2;return `${ouv(w)}<path d="M0 -9H${w}M0 -3H${w}" stroke="#5d9cc2" stroke-width="1"/><path d="M${h} -12V0" stroke="${T}" stroke-width=".8"/><path d="M3 ${h-3}A${h-3} ${h-3} 0 0 0 ${h} 0M${w-3} ${h-3}A${h-3} ${h-3} 0 0 1 ${h} 0" fill="none" stroke="${T}" stroke-width=".8" stroke-dasharray="4 3"/><g ${O}><rect x="0" y="0" width="3" height="${h-3}" fill="#fff" stroke="${T}" stroke-width=".9"/><rect x="${w-3}" y="0" width="3" height="${h-3}" fill="#fff" stroke="${T}" stroke-width=".9"/></g><path d="M1.5 3V${h-6}M${w-1.5} 3V${h-6}" stroke="#5d9cc2" stroke-width=".8"/>`}},
+ esc:{n:'Escalier',w:300,d:90,f:(w,d)=>`<g ${O}><rect x="0" y="0" width="${w}" height="${d}" fill="url(#ep-bois)" stroke="${T}" stroke-width="1.2"/></g>${Array.from({length:Math.floor(w/25)-1},(_,i)=>`<path d="M${25*(i+1)} 0V${d}" stroke="#7a5a2e" stroke-width="1.1"/><path d="M${25*(i+1)+1.5} 0V${d}" stroke="#f3e2c4" stroke-width=".8"/>`).join('')}<rect x="0" y="${d-6}" width="${w}" height="4" rx="2" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/><path d="M15 ${d/2}H${w-20}l-10 -7m10 7l-10 7" stroke="${T}" stroke-width="1.5" fill="none"/><text x="18" y="${d/2-6}" font-size="13" fill="${T}">monte</text>`},
+ ram:{n:'Rampe d’accès',w:300,d:100,f:(w,d)=>`<g ${O}><rect x="0" y="0" width="${w}" height="${d}" fill="url(#ep-tole)" stroke="${T}" stroke-width="1.2"/></g><rect x="0" y="2" width="${w}" height="4" rx="2" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/><rect x="0" y="${d-6}" width="${w}" height="4" rx="2" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/><path d="M20 ${d/2}H${w-20}l-10 -7m10 7l-10 7" stroke="${T}" stroke-width="1.6" fill="none"/><rect x="20" y="${d/2-22}" width="112" height="16" rx="3" fill="#fff" opacity=".85"/><text x="24" y="${d/2-10}" font-size="13" fill="${T}">pente : à valider</text>`},
+ gir:{n:'Cercle de giration',w:150,d:150,t:'Ø 1,50 m',f:(w)=>`<circle cx="${w/2}" cy="${w/2}" r="${w/2}" fill="${VERT}" fill-opacity=".08" stroke="${VERT}" stroke-width="1.5" stroke-dasharray="7 4"/><path d="M${w/2-6} ${w/2}h12M${w/2} ${w/2-6}v12" stroke="${VERT}"/>`}
+};
+const cm=v=>(v/100).toFixed(2).replace('.',',');
+const pose=(k,x,y,r=0,w,d)=>{const s=S[k];return `<g transform="translate(${x} ${y}) rotate(${r})">${s.f(w||s.w,d||s.d)}</g>`};
+// Cotes modifiables par symbole (par défaut largeur et profondeur)
+const DIMS={bar:[['w','Longueur']],bco:[['w','Longueur']],bt:[['w','Longueur']],pf:[['w','Longueur']],pv:[['w','Longueur']],ss:[['w','Largeur']],gir:[['w','Diamètre']]};
+return {S,pose,DIMS,DEFS,cm,T,VERT,O}})();
+
+/* --- Données d'une zone : z.plan = {f:'rect'|'L', L, l (cm), a, b (retrait du L, cm), av:{ouv, el} (avant), ap:{ouv, el}|null (après)}.
+   Le contour est commun à l'avant et à l'après. ouv = porte ou fenêtre sur le mur m (de pts[m] à pts[m+1]) :
+   {k, m, p (cm depuis le début du mur), w, gd (gonds ou coulisse de l'autre côté), ext (ouvre vers l'extérieur)}.
+   el = élément posé : {k, x, y (coin, cm), r (0, 90, 180, 270), w, d}. Zone sans plan : pas de clé plan. --- */
+const EP_OUV=['pb','pc','f1','f2'];
+const EP_FAM=[['Sanitaires',['wc','wcs','bid','lav','mv1','mv2','bai']],['Douche',['dou','rec','recc','recq','cab','pf','pv','sie']],
+  ['Aides',['bar','bco','bt','ss']],['Portes et fenêtres',EP_OUV],['Circulation',['esc','ram','gir']]];
+const epSnap=v=>Math.round(v/5)*5; // calage à 5 cm, comme l'outil plan de l'audit
+// Contour intérieur, dans le sens des aiguilles d'une montre à l'écran : l'intérieur est à droite de chaque mur.
+const epPts=P=>P.f==='L'?[[0,0],[P.L,0],[P.L,P.l-P.b],[P.L-P.a,P.l-P.b],[P.L-P.a,P.l],[0,P.l]]:[[0,0],[P.L,0],[P.L,P.l],[0,P.l]];
+function epMur(pts,m){const a=pts[m],b=pts[(m+1)%pts.length],len=Math.hypot(b[0]-a[0],b[1]-a[1]);return {a,len,ux:(b[0]-a[0])/len,uy:(b[1]-a[1])/len}}
+// Centre d'un élément : la rotation se fait autour de son coin (x, y).
+function epCentre(o){const a=(o.r||0)*Math.PI/180,cx=o.w/2,cy=(o.k==='gir'?o.w:EPL.S[o.k].vh||o.d)/2;return [o.x+cx*Math.cos(a)-cy*Math.sin(a),o.y+cx*Math.sin(a)+cy*Math.cos(a)]}
+const epNum=V=>V.el.filter(o=>o.k!=='gir'); // éléments numérotés (légende), dans l'ordre de pose
+const epNeuf=()=>({f:'rect',L:250,l:200,a:100,b:80,av:{ouv:[],el:[]},ap:null});
+// Après un changement de forme ou de cote : ouvertures des murs disparus retirées, les autres ramenées dans leur mur.
+function epFixOuv(P){const pts=epPts(P);for(const V of [P.av,P.ap].filter(Boolean))V.ouv=V.ouv.filter(o=>o.m<pts.length).map(o=>{const M=epMur(pts,o.m);o.w=Math.min(o.w,M.len);o.p=Math.max(0,Math.min(o.p,M.len-o.w));return o})}
+// Changement de forme : chaque ouverture garde son mur réel (bas et gauche du rectangle = murs 4 et 5 du L) ; celles du décrochement du L sont retirées.
+function epForme(P,f){if(P.f===f)return;const map=f==='L'?{0:[0,0],1:[1,0],2:[4,-P.a],3:[5,0]}:{0:[0,0],1:[1,0],4:[2,P.a],5:[3,0]};
+  for(const V of [P.av,P.ap].filter(Boolean))V.ouv=V.ouv.filter(o=>map[o.m]).map(o=>({...o,m:map[o.m][0],p:o.p+map[o.m][1]}));P.f=f;epFixOuv(P)}
+// Pose au point p : une ouverture va sur le mur le plus proche, un élément est centré sur p.
+function epPoser(P,V,k,p){const s=EPL.S[k];
+  if(EP_OUV.includes(k)){const pts=epPts(P);let b=null;
+    pts.forEach((_,m)=>{const M=epMur(pts,m),t=Math.max(0,Math.min(M.len,(p[0]-M.a[0])*M.ux+(p[1]-M.a[1])*M.uy)),d=Math.hypot(M.a[0]+M.ux*t-p[0],M.a[1]+M.uy*t-p[1]);if(!b||d<b.d)b={m,t,d,len:M.len}});
+    const w=Math.min(s.w,b.len);V.ouv.push({k,m:b.m,p:Math.max(0,Math.min(b.len-w,epSnap(b.t-w/2))),w,gd:false,ext:false});return {t:'o',i:V.ouv.length-1}}
+  const w=s.w,d=k==='gir'?s.w:s.d;V.el.push({k,x:epSnap(p[0]-w/2),y:epSnap(p[1]-(k==='gir'?w:s.vh||d)/2),r:0,w,d});return {t:'e',i:V.el.length-1}}
+// Quart de tour autour du centre.
+function epTourne(o){const c=epCentre(o);o.r=((o.r||0)+90)%360;const n=epCentre(o);o.x+=c[0]-n[0];o.y+=c[1]-n[1]}
+
+/* --- Dessin : murs à l'extérieur du contour, ouvertures, éléments, cotes, numéros et légende. Renvoie [viewBox, contenu]. --- */
+function epSvg(P,V,sel){const {S,T,VERT,cm}=EPL,pts=epPts(P),W=P.L,H=P.l,ep=12;
+  // Même cadre pour l'avant et l'après (même échelle dans le PDF) : place de la plus longue légende et des portes ouvrant vers l'extérieur.
+  const vues=[P.av,P.ap].filter(Boolean),nmax=Math.max(...vues.map(x=>epNum(x).length)),ext=Math.max(0,...vues.flatMap(x=>x.ouv.filter(o=>o.ext).map(o=>o.w)));
+  const lab=epNum(V),cols=W>=300?2:1,half=Math.ceil(nmax/cols),ml=70+ext,mt=60+ext,VW=W+2*ml,VH=H+mt+70+ext+(nmax?half*22+10:0);
+  const poly=pts.map(p=>p.join(',')).join(' '),g=V.el.find(o=>o.k==='gir'),txt=(x,y,t,a='middle',s=13,c=T)=>`<text x="${x}" y="${y}" text-anchor="${a}" font-size="${s}" fill="${c}">${t}</text>`;
+  const cH=(x0,x1,y,t)=>`<path d="M${x0} ${y}H${x1}M${x0} ${y-5}v10M${x1} ${y-5}v10" stroke="${T}" stroke-width=".8"/>`+txt((x0+x1)/2,y-5,t);
+  const cV=(y0,y1,x,t)=>`<path d="M${x} ${y0}V${y1}M${x-5} ${y0}h10M${x-5} ${y1}h10" stroke="${T}" stroke-width=".8"/><g transform="rotate(-90 ${x-6} ${(y0+y1)/2})">${txt(x-6,(y0+y1)/2,t)}</g>`;
+  const el=V.el.map((o,i)=>[o,i]).sort(([a],[b])=>(b.k==='gir')-(a.k==='gir')).map(([o,i])=>{const s=S[o.k],h=o.k==='gir'?o.w:s.vh||o.d;
+    return `<g data-e="${i}" class="epe${sel?.t==='e'&&sel.i===i?' sel':''}" transform="translate(${o.x} ${o.y}) rotate(${o.r||0})"><rect width="${o.w}" height="${Math.max(h,24)}" fill="#fff" fill-opacity="0"/>${s.f(o.w,o.d)}</g>`}).join('');
+  const ouv=V.ouv.map((o,i)=>{const M=epMur(pts,o.m),x=M.a[0]+M.ux*o.p,y=M.a[1]+M.uy*o.p,t=(o.gd?`translate(${o.w} 0) scale(-1 1) `:'')+(o.ext?'translate(0 -12) scale(1 -1)':'');
+    const dp=o.ext&&o.k==='pb'?o.w+18:34,pas=['pb','pc'].includes(o.k)?'<g pointer-events="none">'+txt(M.a[0]+M.ux*(o.p+o.w/2)+M.uy*dp,M.a[1]+M.uy*(o.p+o.w/2)-M.ux*dp+4,'passage '+cm(o.w),'middle',12)+'</g>':'';
+    return `<g data-o="${i}" class="epo${sel?.t==='o'&&sel.i===i?' sel':''}" transform="translate(${x} ${y}) rotate(${Math.atan2(M.uy,M.ux)*180/Math.PI})"><rect x="0" y="-16" width="${o.w}" height="28" fill="#fff" fill-opacity="0"/><g transform="${t}">${S[o.k].f(o.w,S[o.k].d)}</g></g>${pas}`}).join('');
+  const num=lab.map((o,j)=>{const [x,y]=epCentre(o);return `<circle cx="${x}" cy="${y}" r="9" fill="#1b6d96" stroke="#fff" stroke-width="1.5"/>`+txt(x,y+4,j+1,'middle',11,'#fff')}).join('')
+    +lab.map((o,j)=>{const x=-ml+16+(j<half?0:VW/2),y=H+66+ext+(j%half)*22;return `<circle cx="${x}" cy="${y-4}" r="8" fill="#1b6d96"/>`+txt(x,y,j+1,'middle',10,'#fff')+txt(x+13,y,S[o.k].n,'start',13)}).join('');
+  const cotes=cH(0,W,-30,cm(W)+' m')+cV(0,H,-30,cm(H)+' m')+(P.f==='L'?cH(0,W-P.a,H+30,cm(W-P.a)+' m')+cV(0,H-P.b,W+30,cm(H-P.b)+' m'):'');
+  return [`${-ml} ${-mt} ${VW} ${VH}`,`<defs>${EPL.DEFS}<mask id="epm"><rect x="${-ml}" y="${-mt}" width="${VW}" height="${VH}" fill="#fff"/><polygon points="${poly}" fill="#000"/></mask></defs>
+   <rect x="${-ml}" y="${-mt}" width="${VW}" height="${VH}" fill="#fff"/><polygon points="${poly}" fill="#fbfbf8"/>${el}
+   ${g?`<g pointer-events="none">${txt(epCentre(g)[0],epCentre(g)[1]+20,'Ø '+cm(g.w),'middle',11,VERT)}</g>`:''}
+   <polygon points="${poly}" fill="none" stroke="${T}" stroke-width="${2*ep}" stroke-linejoin="miter" mask="url(#epm)"/>${ouv}<g pointer-events="none">${cotes}${num}</g>`]}
+// Vignette d'un symbole pour la palette.
+function epIcone(k){const s=EPL.S[k],o=EP_OUV.includes(k),top=s.top||(o?14:4),w=s.w+12+(s.ex||0),h=(k==='gir'?s.w:s.vh||s.d)+top+6;
+  return `<svg viewBox="-6 ${-top} ${w} ${h}" aria-hidden="true">${o?`<path d="M-6 -6H${s.w+6+(s.ex||0)}" stroke="${EPL.T}" stroke-width="12"/>`:''}${EPL.pose(k,0,0)}</svg>`}
+
+/* --- Rapport PDF : plan imprimé si l'avant ou l'après contient au moins un élément ou une ouverture. --- */
+const epAImprimer=P=>!!P&&[P.av,P.ap].some(V=>V&&(V.el.length||V.ouv.length));
+// SVG autonome (sans sélection) : une image SVG n'a pas accès aux polices de l'application, d'où Helvetica / Arial comme le PDF.
+function epSvgDoc(P,V,px){const [vb,inner]=epSvg(P,V,null),[,,W,H]=vb.split(' ').map(Number);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" width="${Math.round(W*px)}" height="${Math.round(H*px)}" font-family="Helvetica, Arial, sans-serif">${inner}</svg>`}
+// JPEG sur fond blanc, 1 600 px au plus, pour jsPDF (même forme que ergoPdfImg).
+async function epImg(P,V,cap){const [,,W,H]=epSvg(P,V,null)[0].split(' ').map(Number),px=Math.min(4,1600/Math.max(W,H));
+  const im=await loadImg('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(epSvgDoc(P,V,px))),c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;
+  const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0);return {src:c.toDataURL('image/jpeg',.85),w:c.width,h:c.height,cap}}
+
+/* --- Écran « Plan de la pièce » (view 'eplan') --- */
+let epVue='av',epTool=null,epSel=null,epDrag=null;
+const epResume=z=>{const P=z.plan;if(!P)return 'Plan avant / après travaux, à l’échelle, avec les équipements numérotés.';
+  const n=V=>`${V.el.length} élément${V.el.length>1?'s':''}, ${V.ouv.length} porte${V.ouv.length>1?'s':''} ou fenêtre${V.ouv.length>1?'s':''}`;
+  return `${P.f==='L'?'Pièce en L':'Pièce'} ${EPL.cm(P.L)} × ${EPL.cm(P.l)} m · Avant : ${n(P.av)} · Après : ${P.ap?n(P.ap):'à créer'}`};
+function ergoViewPlan(app,bar,bi){if(view!=='eplan')return false;const z=ergoZcur();if(!z){view='ezones';return ergoViewZ(app,bar,bi)}
+  $('.wrap').classList.add('epw');
+  const P=z.plan||(z.plan=epNeuf()),V=P[epVue],{S,cm}=EPL,num=n=>`<input type="number" inputmode="numeric" step="5" ${n}>`;
+  const tabs=`<div class="row" role="group" aria-label="Vue du plan">${[['av','Avant (existant)'],['ap','Après (aménagement proposé)']].map(([k,t])=>`<button data-act="er-plv" data-v="${k}" aria-pressed="${epVue===k}">${t}</button>`).join('')}</div>`;
+  bi.innerHTML=`<button class="btn-primary" data-act="er-zret">Terminé</button>`;
+  if(!V){app.innerHTML=`${topbar('Plan de la pièce',ergoZTitre(z),'er-zret')}${tabs}<p class="muted">L’après se crée en copiant l’existant, puis se modifie : on retire, on ajoute, on déplace.</p>
+    <div class="row"><button class="btn-primary" data-act="er-plap">Créer l’après à partir de l’existant</button></div>`;return true}
+  const o=epSel&&(epSel.t==='e'?V.el[epSel.i]:V.ouv[epSel.i]);if(!o)epSel=null;
+  const vide=!P.av.el.length&&!P.av.ouv.length;
+  const piece=`<details class="grp"${vide?' open':''}><summary><b>Pièce</b> : ${P.f==='L'?'en L':'rectangle'} ${cm(P.L)} × ${cm(P.l)} m</summary>
+    <p class="muted">Cotes intérieures, communes à l’avant et à l’après.</p>
+    <div class="chips" role="radiogroup" aria-label="Forme de la pièce">${[['rect','Rectangle'],['L','En L']].map(([k,t])=>`<label class="chip"><input type="radio" name="epf" data-pf="f" value="${k}" ${P.f===k?'checked':''}>${t}</label>`).join('')}</div>
+    <div class="form">${zFld('Longueur (cm)',num(`data-pf="L" value="${P.L}" min="50"`),'')}${zFld('Largeur (cm)',num(`data-pf="l" value="${P.l}" min="50"`),'')}
+    ${P.f==='L'?zFld('Retrait en longueur (cm)',num(`data-pf="a" value="${P.a}" min="20"`),'')+zFld('Retrait en largeur (cm)',num(`data-pf="b" value="${P.b}" min="20"`),''):''}</div></details>`;
+  let carte='';
+  if(o&&epSel.t==='e'){const n=epNum(V).indexOf(o);
+    carte=`<div class="grp"><b>${n>=0?n+1+'. ':''}${S[o.k].n}</b><div class="form">${(EPL.DIMS[o.k]||[['w','Largeur'],['d','Profondeur']]).map(([k,l])=>zFld(l+' (cm)',num(`data-pd="${k}" value="${Math.round(o[k])}" min="5"`),'')).join('')}</div>
+      <div class="row"><button data-act="er-plrot">↻ ¼ de tour</button><button class="btn-danger" data-act="er-pldel">Retirer</button></div><p class="muted">Glissez l’élément au doigt pour le déplacer.</p></div>`}
+  if(o&&epSel.t==='o'){const M=epMur(epPts(P),o.m);
+    carte=`<div class="grp"><b>${S[o.k].n}</b><div class="form">${zFld('Largeur (cm)',num(`data-pd="w" value="${o.w}" min="40"`),'')}${zFld('Distance depuis l’angle (cm)',num(`data-pd="p" value="${Math.round(o.p)}" min="0"`),'',`<div class="hint">Mur de ${Math.round(M.len)} cm.</div>`)}</div>
+      <div class="chips">${o.k!=='f2'?`<label class="chip"><input type="checkbox" data-pk="gd" ${o.gd?'checked':''}>${o.k==='pc'?'Coulisse de l’autre côté':'Gonds de l’autre côté'}</label>`:''}${['pb','pc'].includes(o.k)?`<label class="chip"><input type="checkbox" data-pk="ext" ${o.ext?'checked':''}>${o.k==='pc'?'Panneau côté extérieur':'Ouvre vers l’extérieur'}</label>`:''}</div>
+      <div class="row"><button class="btn-danger" data-act="er-pldel">Retirer</button></div><p class="muted">Glissez l’ouverture au doigt le long de son mur.</p></div>`}
+  const pal=EP_FAM.map(([t,ks])=>`<h3>${t}</h3><div class="eppal">${ks.map(k=>`<button data-act="er-plt" data-k="${k}" aria-pressed="${epTool===k}">${epIcone(k)}<span>${S[k].n}</span></button>`).join('')}</div>`).join('');
+  const [vb,inner]=epSvg(P,V,epSel);
+  app.innerHTML=`${topbar('Plan de la pièce',ergoZTitre(z),'er-zret')}${tabs}
+   ${epVue==='ap'?`<div class="row"><button class="btn-danger" data-act="er-plapre">Recopier l’existant (efface l’après)</button></div>`:''}
+   <div class="eplay"><div>${epTool?`<div class="banner"><span class="grow">Touchez le plan pour poser : <b>${S[epTool].n}</b>${EP_OUV.includes(epTool)?' (sur le mur le plus proche)':''}.</span><button data-act="er-plt" data-k="${epTool}">Annuler</button></div>`:''}
+    <svg class="epsvg" viewBox="${vb}" role="img" aria-label="Plan de la pièce, vue ${epVue==='av'?'avant travaux':'après travaux'}">${inner}</svg></div>
+    <div>${carte}${piece}${pal}</div></div>`;
+  epBrancher(app.querySelector('.epsvg'),P,V);return true}
+// Toucher : pose (outil choisi), sélection, ou glissement au-delà de 12 px au doigt (4 px à la souris).
+function epBrancher(sv,P,V){
+  const pt=e=>{const q=new DOMPoint(e.clientX,e.clientY).matrixTransform(sv.getScreenCTM().inverse());return [q.x,q.y]};
+  const draw=()=>{sv.innerHTML=epSvg(P,V,epSel)[1]};
+  sv.addEventListener('pointerdown',e=>{const p=pt(e);
+    if(epTool){epSel=epPoser(P,V,epTool,p);epTool=null;save();return keep()}
+    const t=e.target.closest('[data-e],[data-o]');if(!t){if(epSel){epSel=null;keep()}return}
+    epSel=t.dataset.e!=null?{t:'e',i:+t.dataset.e}:{t:'o',i:+t.dataset.o};const o=epSel.t==='e'?V.el[epSel.i]:V.ouv[epSel.i];
+    epDrag={x:e.clientX,y:e.clientY,p0:p,o0:{...o},seuil:e.pointerType==='mouse'?4:12,bouge:false};
+    try{sv.setPointerCapture(e.pointerId)}catch(x){}e.preventDefault();draw()});
+  sv.addEventListener('pointermove',e=>{if(!epDrag)return;if(!epDrag.bouge&&Math.hypot(e.clientX-epDrag.x,e.clientY-epDrag.y)<epDrag.seuil)return;
+    epDrag.bouge=true;const p=pt(e),dx=p[0]-epDrag.p0[0],dy=p[1]-epDrag.p0[1];
+    if(epSel.t==='e'){const o=V.el[epSel.i];o.x=epSnap(epDrag.o0.x+dx);o.y=epSnap(epDrag.o0.y+dy)}
+    else{const o=V.ouv[epSel.i],M=epMur(epPts(P),o.m);o.p=Math.max(0,Math.min(M.len-o.w,epSnap(epDrag.o0.p+dx*M.ux+dy*M.uy)))}
+    draw()});
+  const fin=()=>{if(!epDrag)return;const b=epDrag.bouge;epDrag=null;if(b)save();keep()};
+  sv.addEventListener('pointerup',fin);sv.addEventListener('pointercancel',fin)}
+// Saisie (événement change) : forme et cotes de la pièce, cotes de l'élément choisi, cases d'une ouverture.
+function ergoPlanChg(el){if(view!=='eplan')return false;const P=ergoZcur()?.plan;if(!P)return false;const V=P[epVue],non=t=>{toast(t);keep();return true};
+  if(el.dataset.pf){const k=el.dataset.pf;
+    if(k==='f')epForme(P,el.value);
+    else{const v=Math.round(+el.value),[a,b]={L:[50,2000],l:[50,2000],a:[20,P.L-20],b:[20,P.l-20]}[k];if(!(v>=a&&v<=b))return non(`Valeur refusée : entre ${a} et ${b} cm`);P[k]=v}
+    P.a=Math.min(P.a,P.L-20);P.b=Math.min(P.b,P.l-20);epFixOuv(P);save();keep();return true}
+  const o=epSel&&V&&(epSel.t==='e'?V.el[epSel.i]:V.ouv[epSel.i]);if(!o)return false;
+  if(el.dataset.pd){const k=el.dataset.pd,v=Math.round(+el.value);
+    if(epSel.t==='o'){const M=epMur(epPts(P),o.m);
+      if(k==='w'){if(!(v>=40&&v<=M.len))return non(`Largeur refusée : entre 40 et ${Math.floor(M.len)} cm`);o.w=v;o.p=Math.min(o.p,M.len-v)}
+      else{if(!(v>=0&&v<=M.len-o.w))return non(`Distance refusée : entre 0 et ${Math.floor(M.len-o.w)} cm`);o.p=v}}
+    else{if(!(v>=5&&v<=1000))return non('Valeur refusée : entre 5 et 1 000 cm');const c=epCentre(o);o[k]=v;
+      if(o.k==='gir'){o.d=v;const n=epCentre(o);o.x+=c[0]-n[0];o.y+=c[1]-n[1]}} // le cercle garde son centre
+    save();keep();return true}
+  if(el.dataset.pk&&epSel.t==='o'){o[el.dataset.pk]=el.checked;save();keep();return true}
+  return false}
+async function ergoPlanAct(a,b){const z=ergoZcur();
+  if(a==='er-plan'){view='eplan';epVue='av';epTool=null;epSel=null;return go()}
+  const P=z?.plan;if(!P)return;const V=P[epVue];
+  if(a==='er-plv'){epVue=b.dataset.v;epTool=null;epSel=null;return keep()}
+  if(a==='er-plap'){P.ap=structuredClone(P.av);save();return keep()}
+  if(a==='er-plapre'){if(!armed(b,'Confirmer : l’après est effacé'))return;P.ap=structuredClone(P.av);epSel=null;save();return keep()}
+  if(a==='er-plt'){epTool=epTool===b.dataset.k?null:b.dataset.k;epSel=null;return keep()}
+  if(!epSel||!V)return;
+  if(a==='er-plrot'&&epSel.t==='e'){epTourne(V.el[epSel.i]);save();return keep()}
+  if(a==='er-pldel'){(epSel.t==='e'?V.el:V.ouv).splice(epSel.i,1);epSel=null;save();return keep()}}
+
+queueMicrotask(()=>{
+console.assert(JSON.stringify(epPts({f:'rect',L:250,l:200}))==='[[0,0],[250,0],[250,200],[0,200]]'
+  &&JSON.stringify(epPts({f:'L',L:320,l:260,a:120,b:100}))==='[[0,0],[320,0],[320,160],[200,160],[200,260],[0,260]]','ASSERT FAIL epPts');
+console.assert((([x,y])=>Math.abs(x-22.5)<1e-6&&Math.abs(y-140)<1e-6)(epCentre({k:'lav',x:0,y:170,r:270,w:60,d:45}))&&epCentre({k:'gir',x:50,y:40,w:150,d:150}).join()==='125,115','ASSERT FAIL epCentre');
+console.assert(epSnap(12)===10&&epSnap(13)===15&&epSnap(-3)===-5,'ASSERT FAIL epSnap');
+{const o={k:'wc',x:0,y:0,r:0,w:38,d:68},c=epCentre(o);epTourne(o);const n=epCentre(o);console.assert(o.r===90&&Math.abs(n[0]-c[0])<1e-9&&Math.abs(n[1]-c[1])<1e-9,'ASSERT FAIL epTourne garde le centre')}
+// Une porte posée près d'un angle reste dans son mur ; une fenêtre va sur le mur le plus proche.
+{const P={...epNeuf(),L:250,l:200},s=epPoser(P,P.av,'pb',[240,-5]),o=P.av.ouv[s.i];console.assert(o.m===0&&o.p===170&&o.w===80,'ASSERT FAIL epPoser porte dans son mur');
+ epPoser(P,P.av,'f1',[-4,100]);console.assert(P.av.ouv[1].m===3,'ASSERT FAIL epPoser mur le plus proche');
+ // Passage du L au rectangle : l'ouverture d'un mur disparu est retirée, les autres restent dans leur mur.
+ const Q={...epNeuf(),f:'L',L:320,l:260,a:120,b:100};Q.av.ouv=[{k:'pb',m:5,p:10,w:80},{k:'f1',m:0,p:300,w:60}];Q.f='rect';Q.L=200;epFixOuv(Q);
+ console.assert(Q.av.ouv.length===1&&Q.av.ouv[0].m===0&&Q.av.ouv[0].p===140,'ASSERT FAIL epFixOuv')}
+{const R={...epNeuf(),L:250,l:200,a:100,b:80};R.av.ouv=[{k:'pb',m:2,p:150,w:80},{k:'f1',m:3,p:50,w:60}];epForme(R,'L');
+ console.assert(R.av.ouv.map(o=>o.m+':'+o.p).join()==='4:50,5:50','ASSERT FAIL epForme rectangle vers L');
+ R.av.ouv.push({k:'pb',m:3,p:10,w:60});epForme(R,'rect');console.assert(R.av.ouv.map(o=>o.m+':'+o.p).join()==='2:150,3:50','ASSERT FAIL epForme L vers rectangle')}
+{const P=epNeuf();console.assert(!epAImprimer(P)&&!epAImprimer(undefined),'ASSERT FAIL epAImprimer plan vide');P.av.el.push({k:'wc',x:0,y:0,r:0,w:38,d:68});
+ const s=epSvgDoc(P,P.av,2);console.assert(epAImprimer(P)&&s.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')&&!s.includes(' sel"')&&s.includes('id="ep-cer"'),'ASSERT FAIL epSvgDoc autonome')}
+{const P=epNeuf();P.av.el.push({k:'wc',x:0,y:0,r:0,w:38,d:68});P.ap=structuredClone(P.av);P.ap.el.push({k:'lav',x:100,y:0,r:0,w:60,d:45},{k:'bar',x:0,y:0,r:0,w:60,d:10});P.ap.ouv.push({k:'pb',m:2,p:0,w:80,ext:true});
+ console.assert(epSvg(P,P.av,null)[0]===epSvg(P,P.ap,null)[0],'ASSERT FAIL epSvg même cadre avant / après')}
+console.assert(epNum({el:[{k:'gir'},{k:'wc'},{k:'lav'}]}).map(o=>o.k).join()==='wc,lav','ASSERT FAIL epNum sans le cercle');
+});
 
 /* ========== Visite de fin de travaux (v.type='fin', n° FIN-…) ==========
    v.f : pNom, adresse, cp, ville (repris du dossier d'origine), srcId, srcNum, srcKind, dateVis, presents, entreprises, concl, obs.
@@ -4146,7 +4395,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.15-1820';
+const APP_VER='2026.11.17-1156';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -4531,7 +4780,7 @@ function tdbHtml(enc){const t=today(),now=new Date(),mois=t.slice(0,7);
     ${reprendre}</div>`:`<p class="muted tdb-vide">Aucune visite programmée. La date de visite se saisit dans chaque dossier.</p>${reprendre}`}
    <section class="tdb-new"><h2 class="tdb-h">Nouvelle visite</h2><div class="tdb-types">${TDB_TYPES.map(tdbNew).join('')}</div></section>`}
 function render(){
-  const app=$('#app'),bar=$('#bar'),bi=$('#barin');bar.hidden=true;$('.wrap').classList.remove('plein','tdbw','pcw');
+  const app=$('#app'),bar=$('#bar'),bi=$('#barin');bar.hidden=true;$('.wrap').classList.remove('plein','tdbw','pcw','epw');
   if(verrou)return verrouView(app);
   if(view==='purge'){const L=purgeL();
     app.innerHTML=`${topbar('Dossiers à purger',`Terminés depuis plus de ${purgeMois()} mois et sauvegardés`,'list')}
@@ -5083,7 +5332,7 @@ console.assert(JSON.stringify(annPt({x:100,y:50,w:800,h:600},.5,40,20))==='[180,
 // Dossier : v.loc = {proprio, bien, logements, aidesProjet, obs, compDuree}, même structure que le simulateur d'origine.
 const locLg=i=>({nom:'Logement '+i,surface:'',annexes:'',thematique:'TD',loc:2,iml:false,travaux:'',montant:'',ttc:'',loyerLibre:'',vacant:false,gain35:false,passoire:false,rdc:false,montantRdc:'',aidesManu:[],mprMontant:'',mprGain:2});
 const locVide=()=>({proprio:{nom:'',prenoms:'',email:'',tel:'',adresse:'',cp:'',ville:'',soliact:'',statut:'NP',sci:'',mprOn:false,rfr:'',foyer:'',mprCat:''},
- bien:{adresse:'',cp:'',insee:'',communeTxt:'',description:'',ravalement:false,ori:false,pacteSol:true,force:'AUTO',tva:'10',moe:false,moeTaux:'',photo:''},
+ bien:{adresse:'',cp:'',insee:'',communeTxt:'',description:'',ravalement:false,ori:false,pacteSol:true,force:'AUTO',tva:'10',moe:false,moeTaux:'',moeMontant:'',moeTTC:'',photo:''},
  logements:[locLg(1)],aidesProjet:[],obs:'',variante:'',compDuree:9});
 // N° d'une variante : celui du dossier d'origine suivi de la première lettre libre (B, C…). Le compteur du profil n'avance pas.
 const locVarNum=(num,nums)=>{const base=String(num||'').replace(/-[A-Z]$/,'');if(!base)return '';let c=66;while(c<90&&nums.includes(base+'-'+String.fromCharCode(c)))c++;return base+'-'+String.fromCharCode(c)};
@@ -5223,7 +5472,8 @@ function locView(app,bar,bi){
       ${locDispBox(R)}
       ${lsel('bien.tva','Taux de TVA des travaux',[['5.5','5,5 %'],['10','10 %'],['20','20 %']])}
       <div class="field"><span>Maîtrise d’œuvre</span><div class="chips">${lchk('bien.moe','Projet avec maîtrise d’œuvre')}</div></div>
-      ${b.moe?lin('bien.moeTaux','Taux de maîtrise d’œuvre (% du montant HT des travaux)',{full:1,im:'decimal',ph:'Ex. 10',hint:'<div class="hint">Honoraires ajoutés au coût du projet. Aide Anah : montant retenu HT × taux de maîtrise d’œuvre × taux Anah.</div>'}):''}
+      ${b.moe?lin('bien.moeMontant','Honoraires de maîtrise d’œuvre HT, si connus (tout le projet)',{im:'decimal',ph:'Ex. 32 400'})+lin('bien.moeTTC','Honoraires TTC',{im:'decimal',ph:'Vide : TVA du projet'})
+        +lin('bien.moeTaux','Taux de maîtrise d’œuvre, sans montant connu (% du montant HT des travaux)',{full:1,im:'decimal',ph:'Ex. 10',hint:'<div class="hint">Le montant HT, s’il est saisi, remplace le taux : taux réel = honoraires HT ÷ travaux HT de tous les logements, honoraires répartis au prorata des travaux. Aide Anah : taux × travaux limités au plafond (surface utile sans limite de 80 m²) × taux Anah.</div>'}):''}
       ${lta('bien.description','Description du projet')}
       <div class="field full"><span>Photo du bien (document)</span><div class="row" style="align-items:center">
        ${b.photo?`<img class="lphoto" src="${esc(b.photo)}" alt="Photo du bien">`:'<span class="muted">Sans photo, une illustration par défaut figure dans le document.</span>'}
@@ -6354,7 +6604,7 @@ async function locPdf(v,envoi){
         font(7.5,'normal',l.ecret?ORA:MUT);S.forEach((t,k)=>doc.text(t,ML+46,y+1.5+L.length*LH(9)+LH(7.5)*(k+.75)));font(9,'normal',c);doc.text(E(l.m),ML+CW-1.5,y+1.5+LH(9)*.75,{align:'right'});y+=h;hr(y)}
       trow(`Total des aides${r.plafondAtteint?' (maximum, plafond de travaux atteint)':''} · ${Math.round(r.taux*100)} % du montant HT`,'',locEur(r.total),{b:1,fill:[242,242,242]});
       trow('Reste à charge HT',`Sur ${locEur(r.coutHT)} HT : travaux ${locEur(r.montantRef)}${r.plafondAtteint?' (plafond subventionnable, faute de devis)':''}${r.hon?` + maîtrise d’œuvre ${locEur(r.hon)}`:''}`,locEur(r.reste),{b:1,fill:[242,242,242]});
-      trow('Reste à charge réel (TTC)',`Sur ${locEur(r.ttcEff)} TTC ${r.ttcCalc?`(TVA ${tvaTxt})`:r.hon?'(devis TTC + maîtrise d’œuvre TTC)':'(devis TTC)'}`,locEur(r.resteTTC),{b:1,fill:SKYT,c:ACC})}
+      trow('Reste à charge réel (TTC)',`Sur ${locEur(r.ttcEff)} TTC ${r.ttcCalc?`(TVA ${tvaTxt}${r.hon&&R.opts.moeTTC?', maîtrise d’œuvre TTC selon devis':''})`:r.hon?'(devis TTC + maîtrise d’œuvre TTC)':'(devis TTC)'}`,locEur(r.resteTTC),{b:1,fill:SKYT,c:ACC})}
     if(!has&&(r.montant!=null||r.ttc!=null))para(`Reste à charge : ${r.ttc!=null?locEur(r.ttc)+' TTC':locEur(r.montant)+' HT'} (aucune subvention).`,{sz:8.5,c:ORA});
     r.notes.forEach(n=>para(n,{sz:8.5,c:ORA}));
     // Loyer plafond et réduction d'impôt, sur deux colonnes.
@@ -6406,7 +6656,7 @@ async function locPdf(v,envoi){
      font(8.5,'normal',INK);L.forEach((t,k)=>doc.text(t,ML+1.5,y+1.2+LH(8.5)*(k+.75)));vals.forEach((x,k)=>{font(8.5,used.has(k+1)?'bold':'normal',INK);doc.text(E(x),ML+c0+(k+1)*cw-1.5,y+1.2+LH(8.5)*.75,{align:'right'})});y+=h;hr(y)}
    y+=1.5;para(`Revenu fiscal de référence annuel du ménage locataire. Pour information ; ${used.size>1?'les niveaux retenus pour votre projet sont mis':'le niveau retenu pour votre projet est mis'} en évidence.`,{sz:7.5,c:MUT})}
   /* --- mentions et bandeau de l'agence --- */
-  {const leg=`Simulation indicative établie le ${dateTxt} à partir des barèmes de l’Anah et du dispositif local en vigueur${LOC_ENGINE.mentionPdf(ctx,R.opts,R.fiches)}. Elle ne vaut pas engagement : les montants définitifs dépendent de l’instruction du dossier, de l’éligibilité des travaux, des crédits disponibles et des règles de cumul des aides publiques. Les aides aux travaux sont calculées sur la surface utile (surface habitable + 50 % des surfaces annexes dans la limite de 8 m²), plafonnée à 80 m² par logement ; le total des subventions est limité à 80 % du montant HT des travaux, l’aide de l’Anah étant écrêtée en cas de dépassement. Sans devis, le montant HT retenu est le plafond de travaux subventionnables ; le montant TTC est calculé avec une TVA de ${tvaTxt} lorsqu’aucun devis TTC n’est saisi.${R.honTotal?` Les honoraires de maîtrise d’œuvre (${(Math.round(R.opts.moe*1000)/10).toLocaleString('fr-FR')} % du montant HT des travaux) sont inclus dans le coût du projet.`:''} Loyer plafond : barème 2026 de la commune × coefficient de structure (0,7 + 19 / surface utile, arrondi à 2 décimales et limité à 1,2), loyer au m² arrondi à 2 décimales puis multiplié par la surface utile ; le barème est révisé chaque année et celui retenu est celui de l’année de signature du bail. La réduction d’impôt est calculée sur le loyer plafond annuel ; elle entre dans le plafonnement global des avantages fiscaux.`;
+  {const leg=`Simulation indicative établie le ${dateTxt} à partir des barèmes de l’Anah et du dispositif local en vigueur${LOC_ENGINE.mentionPdf(ctx,R.opts,R.fiches)}. Elle ne vaut pas engagement : les montants définitifs dépendent de l’instruction du dossier, de l’éligibilité des travaux, des crédits disponibles et des règles de cumul des aides publiques. Les aides aux travaux sont calculées sur la surface utile (surface habitable + 50 % des surfaces annexes dans la limite de 8 m²), plafonnée à 80 m² par logement ; le total des subventions est limité à 80 % du montant HT des travaux, l’aide de l’Anah étant écrêtée en cas de dépassement. Sans devis, le montant HT retenu est le plafond de travaux subventionnables ; le montant TTC est calculé avec une TVA de ${tvaTxt} lorsqu’aucun devis TTC n’est saisi.${R.honTotal?` Les honoraires de maîtrise d’œuvre (${(Math.round(R.opts.moe*1000)/10).toLocaleString('fr-FR')} % du montant HT des travaux${R.opts.moeHT?`, soit ${locEur(R.opts.moeHT)} HT${R.opts.moeTTC?` et ${locEur(R.opts.moeTTC)} TTC`:''} pour le projet`:''}) sont inclus dans le coût du projet ; l’aide de l’Anah à la maîtrise d’œuvre se calcule sur le plafond de travaux sans la limite de 80 m².`:''} Loyer plafond : barème 2026 de la commune × coefficient de structure (0,7 + 19 / surface utile, arrondi à 2 décimales et limité à 1,2), loyer au m² arrondi à 2 décimales puis multiplié par la surface utile ; le barème est révisé chaque année et celui retenu est celui de l’année de signature du bail. La réduction d’impôt est calculée sur le loyer plafond annuel ; elle entre dans le plafonnement global des avantages fiscaux.`;
    const L=lines(leg,CW,7);need(L.length*LH(7)+30);y+=5;hr(y);y+=2;font(7,'normal',MUT);L.forEach(l=>{doc.text(l,ML,y+LH(7)*.75);y+=LH(7)});y+=4;
    doc.setFillColor(...ACC);doc.rect(ML,y,CW,15,'F');font(9,'bold',WHITE);doc.text('SOLIHA CHARENTE-MARITIME DEUX-SÈVRES',ML+6,y+6.5);font(8,'normal',[214,232,242]);doc.text("Solidaires pour l'habitat",ML+6,y+11);
    font(8,'bold',WHITE);doc.text('Agence de Niort · 6 route de La Rochelle, 79000 Bessines',ML+CW-6,y+6.5,{align:'right'});font(8,'normal',[214,232,242]);doc.text('05 35 00 16 02 · contact.deux-sevres@soliha.fr',ML+CW-6,y+11,{align:'right'})}
