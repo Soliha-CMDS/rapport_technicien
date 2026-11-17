@@ -66,6 +66,9 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.warn{background:var(--warn-bg);color:var(--warn)}.pill.danger{background:var(--danger-bg);color:var(--danger)}.pill.info{background:var(--chip);color:var(--accent)}
 .pills{display:flex;flex-wrap:wrap;gap:4px}
 .tile .ref{justify-self:start} /* n° du formulaire sous les étiquettes (trop long pour une étiquette) */
+/* Tuiles de la préparation au dépôt : plus larges, les intitulés longs (« complémentaires », « intermédiation ») et « Générée le … » débordaient à 150 px. */
+.tiles.dep{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}.tiles.dep .lbl{overflow-wrap:break-word;hyphens:auto}
+@media (max-width:480px){.tiles.dep{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* Écran Plan (audit) : pleine largeur, le plan occupe la hauteur sous la barre de titre. */
 .wrap.plein{max-width:none;padding-bottom:0}.wrap.plein .top{margin-bottom:0}
 .planfr{display:block;width:100%;height:calc(100dvh - 70px - env(safe-area-inset-top,0px));border:0}
@@ -703,12 +706,11 @@ const LOC_ENGINE = (() => {
     if (lg.vacant && !sansVacance) add("Anah", "Prime de sortie de vacance", "Logement vacant depuis plus de 2 ans", P.vacance);
     if (lg.vacant && sansVacance) out.notes.push(`Pas de prime de sortie de vacance de l'Anah ${aCommune(ctx.commune)}.`);
     if (lg.iml) add("Anah", "Prime d'intermédiation locative (IML)", S < P.imlSeuil ? `${eur(P.iml)} + ${eur(P.imlPetit)} (logement < 40 m²)` : "Forfait par logement", P.iml + (S < P.imlSeuil ? P.imlPetit : 0));
-    // Aide à la maîtrise d'œuvre (méthode OPAL, instructeur, 17/11/2026) : taux de maîtrise d'œuvre × montant retenu HT limité au plafond × taux Anah ;
-    // ce plafond se calcule sur la surface utile sans la limite de 80 m² (décision de l'utilisateur, 17/11/2026).
+    // Aide à la maîtrise d'œuvre (méthode OPAL, instructeur, 17/11/2026) : taux de maîtrise d'œuvre × montant retenu HT limité au plafond × taux Anah.
+    // Plafond de travaux subventionnables, surface utile limitée à 80 m² comme pour l'aide aux travaux (vérification de l'utilisateur, 17/11/2026).
     if (opts.moe) {
-      const plafMoe = th.pm2 * SU, assMoe = Math.min(montantRef, plafMoe);
       const tx = opts.moeHT ? `${pct(opts.moe)} (${eur(opts.moeHT)} ÷ ${eur(opts.moeTravaux)} de travaux)` : pct(opts.moe);
-      add("Anah", "Maîtrise d'œuvre", `${tx} × ${eur(assMoe)}${SU > A.surfMax && montantRef > plafMoe ? " (plafond : " + eur(th.pm2) + "/m² × " + fmtN(SU) + " m², sans limite de surface)" : ""} × ${pct(th.taux)}`, assMoe * opts.moe * th.taux);
+      add("Anah", "Maîtrise d'œuvre", `${tx} × ${eur(assAnah)} × ${pct(th.taux)}`, assAnah * opts.moe * th.taux);
     }
     if (lg.gain35) add("Anah", "Prime Habiter Mieux", lg.passoire ? `Gain énergétique ≥ 35 % + sortie de passoire thermique (${eur(P.passoire)})` : "Gain énergétique ≥ 35 % après travaux", P.hm + (lg.passoire ? P.passoire : 0));
 
@@ -893,13 +895,13 @@ const cases=[
  console.assert(ag('Moncoutant-sur-Sèvre','TD').join()==='28000,8000,12000',"Agglo2B : Moncoutant en très dégradé",ag('Moncoutant-sur-Sèvre','TD'));
  console.assert(ag('Cerizay','SEC').join()==='21000,6000,6000',"Agglo2B : commune à 10 %",ag('Cerizay','SEC'));
  console.assert(ag('Boismé','ENE').join()==='15000,6000',"Agglo2B : commune sans abondement",ag('Boismé','ENE'));
- // Maîtrise d'œuvre au montant connu (exemple fictif) : taux réel 32 400 ÷ 400 000 = 8,1 % ; plafond de la maîtrise d'œuvre sur 210,3 m² sans limite de 80 m²
- // (1 000 × 210,3 = 210 300), aide = 8,1 % × 210 300 × 35 % = 5 962 ; l'aide aux travaux reste limitée à 80 m² ; TTC des honoraires repris tel que saisi.
+ // Maîtrise d'œuvre au montant connu (exemple fictif) : taux réel 32 400 ÷ 400 000 = 8,1 % ; plafond limité à 80 m² comme l'aide aux travaux
+ // (1 000 × 80 = 80 000), aide = 8,1 % × 80 000 × 35 % = 2 268 ; TTC des honoraires repris tel que saisi.
  {const R=LOC_ENGINE.calcDossier(LOC_DATA,dos({force:'NONE',moe:true,moeTaux:'10',moeMontant:'32400',moeTTC:'38880',tva:'20'},[lg({surface:'210.3',montant:'400000'})]),x=>x),r=R.lgs[0],m=r.lignes.find(l=>l.lib==="Maîtrise d'œuvre");
-  console.assert(R.opts.moe===0.081&&m&&m.m===5962&&r.lignes[0].m===28000&&r.hon===32400&&r.coutHT===432400&&r.ttcEff===480000+38880,"Loc'Avantages : maîtrise d'œuvre au montant connu",r);
-  // Sans montant : le taux saisi, et la même limite de surface levée (8 % × min(400 000, 210 300) × 35 % = 5 888)
+  console.assert(R.opts.moe===0.081&&m&&m.m===2268&&r.lignes[0].m===28000&&r.hon===32400&&r.coutHT===432400&&r.ttcEff===480000+38880,"Loc'Avantages : maîtrise d'œuvre au montant connu",r);
+  // Sans montant : le taux saisi, même plafond de 80 m² (8 % × 80 000 × 35 % = 2 240)
   const s=LOC_ENGINE.calcDossier(LOC_DATA,dos({force:'NONE',moe:true,moeTaux:'8',tva:'20'},[lg({surface:'210.3',montant:'400000'})]),x=>x).lgs[0];
-  console.assert(s.lignes.find(l=>l.lib==="Maîtrise d'œuvre").m===5888&&s.hon===32000&&s.ttcEff===480000+38400,"Loc'Avantages : maîtrise d'œuvre au taux saisi",s)}
+  console.assert(s.lignes.find(l=>l.lib==="Maîtrise d'œuvre").m===2240&&s.hon===32000&&s.ttcEff===480000+38400,"Loc'Avantages : maîtrise d'œuvre au taux saisi",s)}
  // Prime de vacance communale du Pacte Mellois : en plus des 5 000 € de la CC, seulement pour un logement vacant.
  const pv=(insee,vacant)=>LOC_ENGINE.calcDossier(LOC_DATA,dos({insee},[lg({surface:'50',montant:'30000',vacant})]),x=>x).lgs[0].lignes.filter(l=>/vacance/.test(l.lib)).map(l=>l.fin+':'+l.m).filter(x=>!x.startsWith('Anah'));
  console.assert(pv('79150',true).join()==="CC Mellois en Poitou:5000,Commune de Limalonges:5000"&&pv('79251',true).join()==="CC Mellois en Poitou:5000,Commune de Marcillé:2000"&&pv('79150',false).length===0&&pv('79136',true).join()==="CC Mellois en Poitou:5000","ASSERT FAIL prime commune Mellois",pv('79150',true));
@@ -4717,7 +4719,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.17-1520';
+const APP_VER='2026.11.17-1534';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -5783,7 +5785,7 @@ function locView(app,bar,bi){
     const etat={conv:st(cv.err.length,D.depot.convLe),plan:st(CONV.locPlan(D,R).err.length,D.depot.planLe),cee:st(CONV.locCee(D).err.length,D.depot.ceeLe),iml:st(CONV.locIml(D).err.length,D.depot.imlLe)};
     app.innerHTML=`${topbar(who(cur),kind(cur),'list')}${locSeg(true)}
      <p class="muted">Les documents du dépôt sont remplis avec les données de l’étude de financement.</p>
-     <div class="tiles">${locDocsDepot(D).map(x=>{const st=[...(etat[x.k]||[['À venir','']]),...(x.nb?[[x.nb+' logement'+(x.nb>1?'s':'')+' en IML','info']]:[])],c=`<img class="ic" src="${ICD[x.k]}" alt=""><span class="num">${esc(x.n)}</span><span class="lbl">${esc(x.t)}</span>${pills(st)}<span class="ref">${esc(x.cerfa)}</span>`;
+     <div class="tiles dep">${locDocsDepot(D).map(x=>{const st=[...(etat[x.k]||[['À venir','']]),...(x.nb?[[x.nb+' logement'+(x.nb>1?'s':'')+' en IML','info']]:[])],c=`<img class="ic" src="${ICD[x.k]}" alt=""><span class="num">${esc(x.n)}</span><span class="lbl">${esc(x.t)}</span>${pills(st)}<span class="ref">${esc(x.cerfa)}</span>`;
        return etat[x.k]?`<button class="tile" data-act="go" data-v="l${x.k}">${c}</button>`:`<div class="tile" aria-disabled="true">${c}</div>`}).join('')}</div>`;
     locBar(bi,R,'');return true}
   if(view==='lconv'){const o=CONV.locConvention(D,R),sci=o.type==='soc',dep=D.depot;
@@ -5871,7 +5873,7 @@ function locView(app,bar,bi){
       ${lsel('bien.tva','Taux de TVA des travaux',[['5.5','5,5 %'],['10','10 %'],['20','20 %']])}
       <div class="field"><span>Maîtrise d’œuvre</span><div class="chips">${lchk('bien.moe','Projet avec maîtrise d’œuvre')}</div></div>
       ${b.moe?lin('bien.moeMontant','Honoraires de maîtrise d’œuvre HT, si connus (tout le projet)',{im:'decimal',ph:'Ex. 32 400'})+lin('bien.moeTTC','Honoraires TTC',{im:'decimal',ph:'Vide : TVA du projet'})
-        +lin('bien.moeTaux','Taux de maîtrise d’œuvre, sans montant connu (% du montant HT des travaux)',{full:1,im:'decimal',ph:'Ex. 10',hint:'<div class="hint">Le montant HT, s’il est saisi, remplace le taux : taux réel = honoraires HT ÷ travaux HT de tous les logements, honoraires répartis au prorata des travaux. Aide Anah : taux × travaux limités au plafond (surface utile sans limite de 80 m²) × taux Anah.</div>'}):''}
+        +lin('bien.moeTaux','Taux de maîtrise d’œuvre, sans montant connu (% du montant HT des travaux)',{full:1,im:'decimal',ph:'Ex. 10',hint:'<div class="hint">Le montant HT, s’il est saisi, remplace le taux : taux réel = honoraires HT ÷ travaux HT de tous les logements, honoraires répartis au prorata des travaux. Aide Anah : taux × travaux limités au plafond subventionnable (surface utile limitée à 80 m²) × taux Anah.</div>'}):''}
       ${lta('bien.description','Description du projet')}
       <div class="field full"><span>Photo du bien (document)</span><div class="row" style="align-items:center">
        ${b.photo?`<img class="lphoto" src="${esc(b.photo)}" alt="Photo du bien">`:'<span class="muted">Sans photo, une illustration par défaut figure dans le document.</span>'}
@@ -7072,7 +7074,7 @@ async function locPdf(v,envoi){
      font(8.5,'normal',INK);L.forEach((t,k)=>doc.text(t,ML+1.5,y+1.2+LH(8.5)*(k+.75)));vals.forEach((x,k)=>{font(8.5,used.has(k+1)?'bold':'normal',INK);doc.text(E(x),ML+c0+(k+1)*cw-1.5,y+1.2+LH(8.5)*.75,{align:'right'})});y+=h;hr(y)}
    y+=1.5;para(`Revenu fiscal de référence annuel du ménage locataire. Pour information ; ${used.size>1?'les niveaux retenus pour votre projet sont mis':'le niveau retenu pour votre projet est mis'} en évidence.`,{sz:7.5,c:MUT})}
   /* --- mentions et bandeau de l'agence --- */
-  {const leg=`Simulation indicative établie le ${dateTxt} à partir des barèmes de l’Anah et du dispositif local en vigueur${LOC_ENGINE.mentionPdf(ctx,R.opts,R.fiches)}. Elle ne vaut pas engagement : les montants définitifs dépendent de l’instruction du dossier, de l’éligibilité des travaux, des crédits disponibles et des règles de cumul des aides publiques. Les aides aux travaux sont calculées sur la surface utile (surface habitable + 50 % des surfaces annexes dans la limite de 8 m²), plafonnée à 80 m² par logement ; le total des subventions est limité à 80 % du montant HT des travaux, l’aide de l’Anah étant écrêtée en cas de dépassement. Sans devis, le montant HT retenu est le plafond de travaux subventionnables ; le montant TTC est calculé avec une TVA de ${tvaTxt} lorsqu’aucun devis TTC n’est saisi.${R.honTotal?` Les honoraires de maîtrise d’œuvre (${(Math.round(R.opts.moe*1000)/10).toLocaleString('fr-FR')} % du montant HT des travaux${R.opts.moeHT?`, soit ${locEur(R.opts.moeHT)} HT${R.opts.moeTTC?` et ${locEur(R.opts.moeTTC)} TTC`:''} pour le projet`:''}) sont inclus dans le coût du projet ; l’aide de l’Anah à la maîtrise d’œuvre se calcule sur le plafond de travaux sans la limite de 80 m².`:''} Loyer plafond : barème 2026 de la commune × coefficient de structure (0,7 + 19 / surface utile, arrondi à 2 décimales et limité à 1,2), loyer au m² arrondi à 2 décimales puis multiplié par la surface utile ; le barème est révisé chaque année et celui retenu est celui de l’année de signature du bail. La réduction d’impôt est calculée sur le loyer plafond annuel ; elle entre dans le plafonnement global des avantages fiscaux.`;
+  {const leg=`Simulation indicative établie le ${dateTxt} à partir des barèmes de l’Anah et du dispositif local en vigueur${LOC_ENGINE.mentionPdf(ctx,R.opts,R.fiches)}. Elle ne vaut pas engagement : les montants définitifs dépendent de l’instruction du dossier, de l’éligibilité des travaux, des crédits disponibles et des règles de cumul des aides publiques. Les aides aux travaux sont calculées sur la surface utile (surface habitable + 50 % des surfaces annexes dans la limite de 8 m²), plafonnée à 80 m² par logement ; le total des subventions est limité à 80 % du montant HT des travaux, l’aide de l’Anah étant écrêtée en cas de dépassement. Sans devis, le montant HT retenu est le plafond de travaux subventionnables ; le montant TTC est calculé avec une TVA de ${tvaTxt} lorsqu’aucun devis TTC n’est saisi.${R.honTotal?` Les honoraires de maîtrise d’œuvre (${(Math.round(R.opts.moe*1000)/10).toLocaleString('fr-FR')} % du montant HT des travaux${R.opts.moeHT?`, soit ${locEur(R.opts.moeHT)} HT${R.opts.moeTTC?` et ${locEur(R.opts.moeTTC)} TTC`:''} pour le projet`:''}) sont inclus dans le coût du projet ; l’aide de l’Anah à la maîtrise d’œuvre se calcule sur le même plafond de travaux que l’aide aux travaux.`:''} Loyer plafond : barème 2026 de la commune × coefficient de structure (0,7 + 19 / surface utile, arrondi à 2 décimales et limité à 1,2), loyer au m² arrondi à 2 décimales puis multiplié par la surface utile ; le barème est révisé chaque année et celui retenu est celui de l’année de signature du bail. La réduction d’impôt est calculée sur le loyer plafond annuel ; elle entre dans le plafonnement global des avantages fiscaux.`;
    const L=lines(leg,CW,7);need(L.length*LH(7)+30);y+=5;hr(y);y+=2;font(7,'normal',MUT);L.forEach(l=>{doc.text(l,ML,y+LH(7)*.75);y+=LH(7)});y+=4;
    doc.setFillColor(...ACC);doc.rect(ML,y,CW,15,'F');font(9,'bold',WHITE);doc.text('SOLIHA CHARENTE-MARITIME DEUX-SÈVRES',ML+6,y+6.5);font(8,'normal',[214,232,242]);doc.text("Solidaires pour l'habitat",ML+6,y+11);
    font(8,'bold',WHITE);doc.text('Agence de Niort · 6 route de La Rochelle, 79000 Bessines',ML+CW-6,y+6.5,{align:'right'});font(8,'normal',[214,232,242]);doc.text('05 35 00 16 02 · contact.deux-sevres@soliha.fr',ML+CW-6,y+11,{align:'right'})}
