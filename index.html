@@ -65,6 +65,7 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .pill{display:inline-block;font-size:.78rem;font-weight:700;border-radius:999px;padding:2px 9px;background:var(--chip);color:var(--muted);justify-self:start}
 .pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.warn{background:var(--warn-bg);color:var(--warn)}.pill.danger{background:var(--danger-bg);color:var(--danger)}.pill.info{background:var(--chip);color:var(--accent)}
 .pills{display:flex;flex-wrap:wrap;gap:4px}
+.tile .ref{justify-self:start} /* n° du formulaire sous les étiquettes (trop long pour une étiquette) */
 /* Écran Plan (audit) : pleine largeur, le plan occupe la hauteur sous la barre de titre. */
 .wrap.plein{max-width:none;padding-bottom:0}.wrap.plein .top{margin-bottom:0}
 .planfr{display:block;width:100%;height:calc(100dvh - 70px - env(safe-area-inset-top,0px));border:0}
@@ -1404,6 +1405,16 @@ function locConvention(d, R) {
   });
   return o;
 }
+// Données que seule l'étude fournit : sans elles, la convention n'est pas prête (bug du 17/11/2026 : un dossier vide s'affichait « Prête »).
+function manquesEtude(o) {
+  const m = [];
+  if (!(o.type === 'soc' ? o.s_raison : o.b_nom)) m.push(o.type === 'soc' ? 'Nom de la SCI à saisir dans l’étude (propriétaire).' : 'Nom du bailleur à saisir dans l’étude (propriétaire).');
+  if (!o.l_voie || !o.l_commune) m.push('Adresse et commune du logement à saisir dans l’étude (le bien).');
+  o.lg.forEach((l, i) => { if (!(num(l.shab) > 0)) m.push(`Logement ${i + 1} : surface habitable à saisir dans l’étude.`) });
+  return m;
+}
+console.assert(manquesEtude(locConvention({ proprio: {}, bien: {}, logements: [{ nom: 'Logement 1', surface: '' }] }, null)).length === 3
+  && !manquesEtude(locConvention({ proprio: { nom: 'A' }, bien: { adresse: '1 rue B', communeTxt: 'Niort' }, logements: [{ surface: '50' }] }, null)).length, 'ASSERT FAIL manquesEtude : dossier vide non prêt');
 console.assert((() => {
   const R = { lgs: [{ loyer: { niveaux: [{ m2: 9 }, { m2: 8.12, mensuel: 598.44 }, { m2: 6 }] } }, { loyer: { niveaux: [{ m2: 9 }, { m2: 8 }, { m2: 6.3, mensuel: 252 }] } }] };
   const o = locConvention({ proprio: { statut: 'SCI_IR', nom: 'ESSAI', prenoms: 'Camille', sci: 'SCI Fictive', adresse: '3 rue A', cp: '79000', ville: 'Niort' },
@@ -1568,7 +1579,7 @@ async function construireIml(o, PDFLib, b64) {
   E.fin(); return doc.save({ objectsPerTick: Infinity });
 }
 
-  return { NIVEAUX, MAX_PAR_NIVEAU, num, fr, surfaces, plafondMensuel, verifier, construirePdf, locConvention, PLAN_LIGNES, locPlan, construirePlan, locCee, locIml, construireCee, construireIml };
+  return { NIVEAUX, MAX_PAR_NIVEAU, num, fr, surfaces, plafondMensuel, verifier, construirePdf, locConvention, manquesEtude, PLAN_LIGNES, locPlan, construirePlan, locCee, locIml, construireCee, construireIml };
 })();
 
 // Communes par code postal (79 et 17), générée par build.py depuis codes_postaux_79_17.json : ne pas modifier à la main.
@@ -4706,7 +4717,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.17-1457';
+const APP_VER='2026.11.17-1520';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -5724,13 +5735,16 @@ function locLive(){const R=locR();
   // Encadré du dispositif (rue, numéro) : réaffiché sauf pendant la saisie d'un de ses champs.
   const d=$('#ldisp');if(d&&!d.contains(document.activeElement))d.outerHTML=locDispBox(R)}
 // Convention Anah : contrôles de l'outil d'origine (CONV.verifier) sur les données lues dans le dossier.
-const locConvEtat=R=>{const o=CONV.locConvention(cur.loc,R),{err,avert}=CONV.verifier(o);o.lg.forEach((l,i)=>{if(!l.lmax)avert.push(`Logement ${i+1} : loyer maximal au m² non calculé (commune hors barème), case laissée vide.`)});return {o,err:[...new Set(err)],avert}};
+const locConvEtat=R=>{const o=CONV.locConvention(cur.loc,R),{err,avert}=CONV.verifier(o);err.unshift(...CONV.manquesEtude(o));o.lg.forEach((l,i)=>{if(!l.lmax&&CONV.num(l.shab)>0&&o.l_commune)avert.push(`Logement ${i+1} : loyer maximal au m² non calculé (commune hors barème), case laissée vide.`)});return {o,err:[...new Set(err)],avert}};
 const locConvMsg=R=>{const {err,avert}=locConvEtat(R);return err.map(t=>`<div class="banner danger" role="alert">${esc(t)}</div>`).join('')+avert.map(t=>`<div class="banner">Attention : ${esc(t)}</div>`).join('')};
 // Plan de financement : totaux du cerfa et contrôles, mis à jour pendant la saisie.
 const locPlanResume=R=>{const o=CONV.locPlan(cur.loc,R),L=Object.fromEntries(CONV.PLAN_LIGNES),r=(l,x,b)=>`<tr><td>${b?'<b>':''}${esc(l)}${b?'</b>':''}</td><td style="text-align:right">${b?'<b>':''}${locEur(x)}${b?'</b>':''}</td></tr>`;
   return `<h3>Plan obtenu</h3><div class="ertab"><table><tbody>${r('Travaux',o.travaux)}${o.amoHT?r('Assistance à maîtrise d’ouvrage',o.amoHT):''}${o.moe?r('Honoraires de maîtrise d’œuvre',o.moe):''}${r('Total des dépenses HT',o.totalHT,1)}${r('Total des dépenses TTC',o.totalTTC,1)}
    ${o.pret?r('Prêt bancaire',o.pret):''}${o.apport?r('Apport de fonds personnels',o.apport):''}${Object.entries(o.lignes).filter(([,m])=>m>0).map(([k,m])=>r(L[k],m)).join('')}${r('Total des aides publiques',o.aidesPub,1)}${r('Total des ressources',o.totalRes,1)}</tbody></table></div>`
    +o.err.map(t=>`<div class="banner danger" role="alert">${esc(t)}</div>`).join('')+o.avert.map(t=>`<div class="banner">Attention : ${esc(t)}</div>`).join('')};
+// Actions qui ouvrent simplement une vue (flèche retour). Bug du 17/11/2026 : la flèche des documents du dépôt (vers ldepot) ne faisait rien.
+const ACT_VUE=['dash','ldepot'],LOC_RETOUR_DOC='ldepot';
+console.assert(ACT_VUE.includes(LOC_RETOUR_DOC),'ASSERT FAIL retour des documents du dépôt sans action');
 // Bibliothèque pdf-lib et modèle du cerfa : fichiers à part (1,4 Mo), chargés seulement pour produire un document du dépôt.
 const locJs={};const chargerJs=src=>locJs[src]||=new Promise((ok,ko)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=()=>{delete locJs[src];s.remove();ko(new Error('fichier '+src+' introuvable : ouvrez l’application une fois avec internet'))};document.head.append(s)});
 const locBar=(bi,R,btn)=>{bi.innerHTML=`<div class="locsum"><span>Aides estimées</span><b id="ltot">${locEur(R.total)}</b></div><div class="locsum"><span>Reste à charge</span><b id="lrac">${locRac(R)}</b></div>${btn}`};
@@ -5769,12 +5783,12 @@ function locView(app,bar,bi){
     const etat={conv:st(cv.err.length,D.depot.convLe),plan:st(CONV.locPlan(D,R).err.length,D.depot.planLe),cee:st(CONV.locCee(D).err.length,D.depot.ceeLe),iml:st(CONV.locIml(D).err.length,D.depot.imlLe)};
     app.innerHTML=`${topbar(who(cur),kind(cur),'list')}${locSeg(true)}
      <p class="muted">Les documents du dépôt sont remplis avec les données de l’étude de financement.</p>
-     <div class="tiles">${locDocsDepot(D).map(x=>{const st=[...(etat[x.k]||[['À venir','']]),...(x.nb?[[x.nb+' logement'+(x.nb>1?'s':'')+' en IML','info']]:[]),[x.cerfa,'']],c=`<img class="ic" src="${ICD[x.k]}" alt=""><span class="num">${esc(x.n)}</span><span class="lbl">${esc(x.t)}</span>${pills(st)}`;
+     <div class="tiles">${locDocsDepot(D).map(x=>{const st=[...(etat[x.k]||[['À venir','']]),...(x.nb?[[x.nb+' logement'+(x.nb>1?'s':'')+' en IML','info']]:[])],c=`<img class="ic" src="${ICD[x.k]}" alt=""><span class="num">${esc(x.n)}</span><span class="lbl">${esc(x.t)}</span>${pills(st)}<span class="ref">${esc(x.cerfa)}</span>`;
        return etat[x.k]?`<button class="tile" data-act="go" data-v="l${x.k}">${c}</button>`:`<div class="tile" aria-disabled="true">${c}</div>`}).join('')}</div>`;
     locBar(bi,R,'');return true}
   if(view==='lconv'){const o=CONV.locConvention(D,R),sci=o.type==='soc',dep=D.depot;
     const ro=(l,x)=>`<div><span class="muted">${esc(l)}</span><br><b>${esc(x||'—')}</b></div>`;
-    app.innerHTML=`${topbar('Convention Anah',who(cur),'ldepot')}
+    app.innerHTML=`${topbar('Convention Anah',who(cur),LOC_RETOUR_DOC)}
      <p class="muted">Cerfa n° 14039*06, convention avec travaux. Le PDF reste modifiable ; les cases réservées à l’Anah restent vides.</p>
      <h3>Repris de l’étude</h3>
      <div class="form">${ro(sci?'Société (siège)':'Bailleur',sci?[o.s_raison,o.s_adresse,o.s_cp,o.s_commune].filter(Boolean).join(', '):[o.b_nom,o.b_adresse,o.b_cp,o.b_commune].filter(Boolean).join(', '))}
@@ -5792,7 +5806,7 @@ function locView(app,bar,bi){
      <div id="lconvmsg">${locConvMsg(R)}</div>`;
     locBar(bi,R,`<button class="btn-primary" data-act="lconvpdf">${svg('pdf')}Générer la convention (PDF)</button>`);return true}
   if(view==='lplan'){const o=CONV.locPlan(D,R),ro=(l,x)=>`<div><span class="muted">${esc(l)}</span><br><b>${esc(x)}</b></div>`,ops=CONV.PLAN_LIGNES;
-    app.innerHTML=`${topbar('Plan de financement',who(cur),'ldepot')}
+    app.innerHTML=`${topbar('Plan de financement',who(cur),LOC_RETOUR_DOC)}
      <p class="muted">Cerfa n° 13461*03, propriétaire bailleur, plan prévisionnel. Montants repris de l’étude, en euros entiers ; l’encadré réservé à l’Anah reste vide.</p>
      <h3>Dépenses</h3>
      <div class="form">${ro('Coût des travaux (étude)',locEur(o.travaux)+' HT')}${ro('Honoraires de maîtrise d’œuvre (étude)',o.moe?locEur(o.moe)+' HT':'Aucun')}
@@ -5807,7 +5821,7 @@ function locView(app,bar,bi){
   // Engagements CEE et IML : formulaires sans cases, texte écrit sur le modèle (PDF non modifiable : corriger la saisie puis régénérer).
   if(view==='lcee'||view==='liml'){const cee=view==='lcee',o=cee?CONV.locCee(D):CONV.locIml(D),sci=D.proprio.statut!=='NP',ro=(l,x)=>`<div><span class="muted">${esc(l)}</span><br><b>${esc(x||'—')}</b></div>`;
     const msg=o.err.map(t=>`<div class="banner danger" role="alert">${esc(t)}</div>`).join('');
-    app.innerHTML=`${topbar(cee?'Engagements complémentaires (CEE)':'Engagement IML',who(cur),'ldepot')}
+    app.innerHTML=`${topbar(cee?'Engagements complémentaires (CEE)':'Engagement IML',who(cur),LOC_RETOUR_DOC)}
      <p class="muted">${cee?'Cerfa n° 14566*04, case « propriétaire bailleur » cochée.'+(sci?' Le n° SIREN de la SCI reste à écrire à la main.':''):'Prime d’intermédiation locative, engagement spécifique du bailleur : un engagement par logement en IML.'} Le texte est écrit sur le formulaire : pour corriger, modifiez la saisie et régénérez.</p>
      <h3>Repris de l’étude</h3>
      <div class="form">${cee?ro('Signataire',o.nom)+(o.morale?ro('Bailleur personne morale',o.morale):'')+ro('Adresse',o.adresse)+ro('Adresse du logement',o.logement||'Identique à l’adresse du demandeur')
@@ -6099,7 +6113,7 @@ document.addEventListener('click',async e=>{
     Object.assign(cur,{id:newVisit().id,created:Date.now(),done:{},sig:''});delete cur.savedAt;delete cur.pdfAt;delete cur.loc.regles;delete cur.num;if(n)cur.num=n;if(cur.loc.depot)Object.assign(cur.loc.depot,{convLe:0,planLe:0,ceeLe:0,imlLe:0});
     cur.loc.variante=n?'Variante '+n.slice(-1):'Variante';cur.f.dateVis=today();visits.push(cur);await save(true);view='dash';toast('Variante créée : modifiez ses logements, puis son nom dans « Comparaison »');return go()}
   if(a==='reopen'){const v=visits.find(x=>x.id===b.dataset.id);delete v.pdfAt;await store.put(v);toast('Dossier remis en cours');return render()}
-  if(a==='dash'){view='dash';return go()}
+  if(ACT_VUE.includes(a)){view=a;return go()}
   if(a==='lfx'){lf='';return keep()}
   if(a==='tabhraz'){if(!armed(b,'Confirmer'))return;tabHOte(P,b.dataset.c);saveP();toast('Ordre des colonnes par défaut rétabli pour '+b.dataset.c);return keep()}
   // Mise à jour : le service worker relit les fichiers sur internet, puis la page se recharge.
