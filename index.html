@@ -1629,6 +1629,8 @@ const ADMIN=[
  ['mrAdr','Adresse','t'],['mrCp','Code postal','t'],['mrMail','E-mail','email']
 ];
 const SUM={bati:'Le bâti',habit:"L'habitabilité, le confort, l'entretien",equip:'Les équipements électriques et de chauffage',sanit:'Les sanitaires',hum:"L'humidité et l'aération"};
+// Décence : ligne « Absence de DPE » déduite de la présence du DPE (ligne Diagnostics réglementaires), Non = coche verte.
+const SUM_DEC={...SUM,dpe:"L'absence de diagnostic de performance énergétique (DPE)"};
 const CONCL=[
  ['cNd','Non-décence – Infraction RSD','r',YN],
  ['cInsal',"Présomption d'habitat indigne : insalubrité",'r',YN],
@@ -1748,7 +1750,7 @@ const R=[
    o:["Logement d'avant 1949 + peintures dégradées","Constat de risque d'exposition au plomb (4) positif avec présence d'enfants mineurs ou femme enceinte",'Moisissures, champignons, traces d’humidité','Absence de diagnostics','Autre'],
    ow:['Suppression de l’accessibilité des peintures dégradées pouvant contenir du plomb, en l’absence d’enfants, suivie d’un nettoyage minutieux','Suppression de l’accessibilité des peintures contenant du plomb, en l’absence d’enfants, suivie d’un nettoyage minutieux',['hum','Décontamination fongique des supports colonisés par des moisissures'],'DIAG',null],
    tl:MEL,ty:['Certificat médical','Problèmes de santé exprimés par les occupants'],hint:"CREP obligatoire pour tout logement d'avant 1949 mis en location après le 12 août 2008."},
-  {id:'diagmaj',t:'Diagnostics non à jour après travaux',ref:'Décence-2',th:'regl',dm:1,
+  {id:'diagmaj',t:'Diagnostics réglementaires',ref:'Décence-2',th:'regl',dm:1,pres:1,
    hint:'Diagnostics encore valides, mais antérieurs à des travaux qui ont modifié le logement : ils ne décrivent plus son état actuel.'},
   {id:'prec',t:'Risques liés à un éventuel problème de précarité énergétique',ref:'Décence-2.2, 2.6, 3.1, 3 bis',p:1,s:'equip',th:'chauf',
    o:["Bouches d'aération obstruées et/ou mauvaise aération du logement","Solutions de chauffage inadaptées (poêle à pétrole, chauffage d'appoint…) voire privation de chauffage","Isolation thermique insuffisante (simple vitrage, passage d'air, absence d'isolation, murs peu épais) au regard du moyen de chauffage",'La famille a déjà bénéficié du Fonds Solidarité Énergie (FSE)','Autre'],
@@ -2171,7 +2173,7 @@ const R_PDL=[
   {...ITEMS.plomb,tl:undefined,ty:undefined,df:ITEMS.plomb.df.filter(x=>!x.only),
    o:["Logement d'avant 1949 + peintures dégradées","Constat de risque d'exposition au plomb (CREP) positif",'Moisissures, champignons, traces d’humidité','Autre'],
    ow:[ITEMS.plomb.ow[0],ITEMS.plomb.ow[1],ITEMS.plomb.ow[2],null]},
-  ITEMS.diagmaj,
+  {...ITEMS.diagmaj,t:'Diagnostics non à jour après travaux',pres:0},  // décence seulement : nom « Diagnostics réglementaires » et section de présence
   {...ITEMS.prec,
    o:ITEMS.prec.o.filter((_,i)=>i!==3),ow:ITEMS.prec.ow.filter((_,i)=>i!==3),
    ty:["Présence d'humidité par condensation"]},
@@ -2228,8 +2230,8 @@ const toutRas=v=>RR(v).flatMap(r=>r.items||[]).every(d=>v.it[d.id]?.ras&&!v.it[d
 (()=>{const ids=R.flatMap(r=>r.items||[]).map(d=>d.id),v={f:{},it:Object.fromEntries(ids.map(i=>[i,{ras:true}]))};
   console.assert(toutRas(v)&&!toutRas({f:{},it:{...v.it,[ids[0]]:{on:true}}})&&!toutRas({f:{},it:{...v.it,[ids[1]]:{}}}),'ASSERT FAIL toutRas')})();
 
-// Correctifs avec leurs règles techniques, utilisés pour le permis de louer (clé = correctif court de la fiche décence).
-const TECH={
+// Anciennes versions techniques (jusqu'au 20/11/2026) : ne servent plus qu'à reprendre les dossiers enregistrés (TECH_ANC).
+const TECH_V1={
  'Installation d’une main courante dans l’escalier':'Installer une main courante continue, solidement fixée et résistante, à une hauteur de 90 à 95 cm, avec un diamètre minimal de 40 mm. Elle devra se prolonger de 30 cm au-delà des premières et dernières marches, lorsque la configuration le permet, et résister à une charge statique d’au moins 100 kg, conformément aux exigences techniques applicables',
  'Mise en sécurité de l’escalier / du palier : pose ou fixation du garde-corps et de la main courante':'Mettre en sécurité l’escalier et le palier : garde-corps solidement fixé d’une hauteur minimale de 1 m, sans élément facilitant l’escalade et avec des vides inférieurs à 11 cm (norme NF P01-012) ; main courante continue à une hauteur de 90 à 95 cm, d’un diamètre minimal de 40 mm, prolongée de 30 cm au-delà des premières et dernières marches lorsque la configuration le permet',
  'Mise en place de garde-corps réglementaires aux fenêtres des étages':'Mettre en place aux fenêtres des étages un garde-corps ou une barre d’appui solidement fixé, assurant une hauteur de protection minimale de 1 m depuis le sol (allège comprise), sans élément facilitant l’escalade et avec des vides inférieurs à 11 cm (norme NF P01-012)',
@@ -2283,20 +2285,228 @@ const TECH={
  'Remplacement des grilles non adaptées':'Remplacer les grilles non adaptées par des grilles de section et de type adaptés au système de ventilation (arrêté du 24 mars 1982 modifié)',
  'Reprise de l’escalier pour assurer une hauteur d’échappée de 1,90 m':'Reprendre la trémie ou l’escalier pour obtenir une hauteur d’échappée d’au moins 1,90 m au droit des marches, ou à défaut protéger l’obstacle et le signaler'
 };
-// Versions techniques des nouveaux correctifs ; les textes déjà présents ci-dessus sont conservés.
-for(const [k,t] of Object.entries(PRE_TECH))if(!TECH[k])TECH[k]=t;
+for(const [k,t] of Object.entries(PRE_TECH))if(!TECH_V1[k])TECH_V1[k]=t;
+// Préconisations de travaux, décence et permis de louer (clé = correctif court de la fiche décence).
+// Formation décence du 19/11/2026 : obligation de résultat, pas de moyens. Ni norme, ni DTU, ni arrêté, ni cote ; seuils du décret gardés ;
+// « par un professionnel qualifié » et attestations gardés ; pas de « faire + verbe ». Textes validés par l'utilisateur le 20/11/2026.
+const TECH={
+ "Installation d’une main courante dans l’escalier":"Installer dans l’escalier une main courante solidement fixée afin de prévenir les chutes",
+ "Mise en sécurité de l’escalier / du palier : pose ou fixation du garde-corps et de la main courante":"Mettre en sécurité l’escalier et le palier par un garde-corps et une main courante solidement fixés afin de prévenir les chutes",
+ "Mise en place de garde-corps réglementaires aux fenêtres des étages":"Installer aux fenêtres des étages un dispositif de retenue adapté et solidement fixé afin de prévenir les chutes",
+ "Mise en conformité du garde-corps (espacements réglementaires)":"Mettre en conformité le garde-corps afin qu’il ne puisse être ni traversé ni escaladé",
+ "Mise en sécurité de l’installation électrique par un professionnel qualifié (attestation de l’électricien en cas de mise en sécurité globale de l’installation)":"Mettre en sécurité l’installation électrique par un professionnel qualifié et obtenir une attestation d’intervention ou de conformité des travaux réalisés",
+ "Création de prises de courant en nombre suffisant et suppression des surcharges":"Installer un nombre de prises de courant adapté au fonctionnement normal des appareils ménagers indispensables à la vie quotidienne, afin de supprimer les multiprises et rallonges",
+ "Remplacement du matériel électrique vétuste ou inadapté":"Remplacer le matériel électrique vétuste ou inadapté par un professionnel qualifié afin de supprimer tout risque électrique",
+ "Mise en sécurité de l’installation de gaz par un professionnel qualifié, avec fourniture d’une attestation":"Contrôler et mettre en sécurité l’installation de gaz par un professionnel qualifié, puis fournir une attestation de l’intervention",
+ "Mise à disposition d’un moyen de chauffage suffisant, sécurisé et adapté aux caractéristiques du logement":"Installer un équipement de chauffage fixe et sécurisé, adapté aux caractéristiques du logement, permettant un chauffage normal de l’ensemble du logement",
+ "Installation d’un équipement de chauffage fixe dans chacune des pièces de vie, permettant un chauffage normal":"Installer un équipement de chauffage fixe dans chacune des pièces de vie, permettant un chauffage normal",
+ "Remise en état de fonctionnement de l’installation de chauffage":"Remettre en état de fonctionnement l’installation de chauffage par un professionnel qualifié et fournir l’attestation d’entretien de l’appareil le cas échéant",
+ "Mise à disposition d’un moyen de production d’eau chaude sanitaire suffisant et sécurisé":"Installer un moyen de production d’eau chaude sanitaire sécurisé et suffisant pour les besoins des occupants",
+ "Alimentation en eau chaude de la cuisine et de la salle de bains":"Alimenter en eau chaude et en eau froide l’évier de la cuisine, le lavabo et la douche ou la baignoire",
+ "Remise en état des appareils et des conduits":"Remettre en état les appareils à combustion et leurs conduits de fumée par un professionnel qualifié afin de supprimer tout risque d’intoxication au monoxyde de carbone",
+ "Création de ventilations basses":"Assurer une amenée d’air permanente dans les pièces équipées d’un appareil à combustion",
+ "Réalisation de l’entretien annuel des appareils et du ramonage des conduits":"Réaliser l’entretien annuel des appareils et le ramonage des conduits par un professionnel qualifié, avec remise des attestations",
+ "Mise en place d’une ventilation permanente du logement":"Mettre en place une ventilation permanente et efficace de l’ensemble du logement, assurant le renouvellement de l’air et l’évacuation de l’humidité",
+ "Extraction d’air dans la cuisine":"Assurer une extraction d’air efficace dans la cuisine",
+ "Extraction d’air dans la salle d’eau":"Assurer une extraction d’air efficace dans la salle d’eau",
+ "Extraction d’air dans les WC":"Assurer une extraction d’air efficace dans les WC",
+ "Détalonnage des portes intérieures pour permettre le passage de l’air":"Permettre le passage de l’air sous les portes intérieures",
+ "Installation d’au moins un détecteur autonome avertisseur de fumée (DAAF) conforme à la norme NF EN 14604":"Installer au moins un détecteur autonome avertisseur de fumée (DAAF) conforme à la norme NF EN 14604",
+ "Suppression des fuites et des causes d’infiltration":"Rechercher et supprimer les fuites et les causes d’infiltration, puis remettre en état les supports dégradés",
+ "Traitement des remontées d’humidité en pied de murs":"Rechercher l’origine des remontées d’humidité en pied de murs et la supprimer, puis remettre en état les supports dégradés",
+ "Décontamination fongique des supports colonisés par des moisissures":"Rechercher et supprimer la cause d’humidité, assécher les supports, réaliser un traitement antifongique adapté et remettre en état les surfaces contaminées",
+ "Remise en état de la toiture pour en assurer l’étanchéité":"Remettre en état la toiture afin d’assurer le clos et le couvert et d’éviter toute infiltration d’eau",
+ "Remise en état des chéneaux, gouttières et descentes d’eaux pluviales":"Remettre en état, réaligner ou remplacer les chéneaux, gouttières et descentes afin d’assurer une évacuation efficace des eaux de pluie",
+ "Remise en état des murs extérieurs (rejointoiement, traitement des fissures)":"Remettre en état les murs extérieurs et réparer les fissures afin d’éviter toute infiltration d’eau",
+ "Remise en état ou remplacement des menuiseries pour en assurer l’étanchéité, le fonctionnement normal et la stabilité":"Remettre en état ou remplacer les menuiseries extérieures afin d’assurer leur étanchéité à l’eau et à l’air, leur bon fonctionnement et leur stabilité",
+ "Réalisation d’une isolation thermique adaptée à la nature du bâtiment et à ses caractéristiques":"Réaliser une isolation thermique adaptée à la nature et aux caractéristiques du bâtiment",
+ "Amélioration de l’éclairement naturel de la ou des pièces principales":"Réaliser les aménagements nécessaires pour obtenir un éclairement naturel suffisant dans la ou les pièces principales",
+ "Création d’ouvrants donnant sur l’extérieur dans les pièces principales":"Créer dans chaque pièce principale un ouvrant donnant sur l’extérieur et permettant un éclairement naturel suffisant",
+ "Lutte efficace contre les nuisibles (dératisation, désinsectisation, désinfection) par une entreprise spécialisée":"Réaliser la lutte contre les nuisibles (dératisation, désinsectisation, désinfection) par une entreprise spécialisée et fournir l’attestation d’intervention",
+ "Suppression de l’accessibilité des peintures dégradées pouvant contenir du plomb, en l’absence d’enfants, suivie d’un nettoyage minutieux":"Supprimer l’accessibilité des peintures dégradées pouvant contenir du plomb, en l’absence d’enfants, puis réaliser un nettoyage minutieux",
+ "Suppression de l’accessibilité des peintures contenant du plomb, en l’absence d’enfants, suivie d’un nettoyage minutieux":"Supprimer l’accessibilité des peintures contenant du plomb identifiées par le CREP, en l’absence d’enfants, puis réaliser un nettoyage minutieux et un contrôle après travaux",
+ "Création d’un cabinet d’aisances intérieur":"Aménager un cabinet d’aisances intérieur avec effet d’eau, séparé de la cuisine et de la pièce où sont pris les repas",
+ "Création d’un cabinet d’aisances intérieur avec effet d’eau":"Aménager un cabinet d’aisances intérieur avec effet d’eau, séparé de la cuisine et de la pièce où sont pris les repas",
+ "Rétablissement d’un débit et d’une pression suffisants":"Rechercher la cause du défaut et rétablir une pression et un débit suffisants pour une utilisation normale de l’eau courante",
+ "Contrôle de la potabilité de l’eau (analyse)":"Analyser la potabilité de l’eau par un laboratoire agréé et fournir les résultats",
+ "Reprise de l’étanchéité à l’air des menuiseries":"Rétablir l’étanchéité à l’air des menuiseries en conservant les entrées d’air nécessaires à la ventilation",
+ "Remplacement de la porte d’entrée du logement par une porte sécurisée":"Remplacer la porte d’entrée du logement par une porte étanche et sécurisée",
+ "Prise de toutes dispositions pour éviter la chute de tuiles et d’éléments de toiture":"Prendre sans délai toutes dispositions pour supprimer le risque de chute de tuiles et d’éléments de toiture, puis remettre en état la couverture",
+ "Vérification et remise en état de la charpente par un professionnel qualifié":"Vérifier la charpente par un professionnel qualifié et réaliser les réparations nécessaires pour en assurer la solidité ; fournir les justificatifs des travaux",
+ "Remise en état de l’escalier pour en assurer la stabilité":"Vérifier l’escalier par un professionnel qualifié et réaliser les réparations nécessaires pour en assurer la stabilité",
+ "Obturation des conduits de cheminée non utilisés (pose d’une trappe)":"Fermer les conduits de cheminée non utilisés afin de supprimer les entrées d’air froid",
+ "Recherche et suppression des causes d’échauffement":"Rechercher et supprimer l’origine des échauffements de l’installation électrique par un professionnel qualifié",
+ "Réparation des fuites sur les équipements sanitaires":"Réparer les fuites sur les équipements sanitaires et rétablir leur étanchéité",
+ "Pose d’un abattant avec couvercle":"Poser un abattant avec couvercle sur la cuvette du WC",
+ "Traitement des champignons et remplacement des éléments atteints":"Traiter les champignons par une entreprise spécialisée, supprimer la source d’humidité et remplacer les éléments atteints",
+ "Pose des grilles de ventilation manquantes":"Poser les grilles de ventilation manquantes afin d’assurer le renouvellement de l’air",
+ "Remplacement des grilles non adaptées":"Remplacer les grilles non adaptées par des grilles adaptées au système de ventilation",
+ "Reprise de l’escalier pour assurer une hauteur d’échappée de 1,90 m":"Reprendre l’escalier afin d’assurer une hauteur de passage suffisante au-dessus des marches",
+ "Diagnostic de la structure par un professionnel qualifié et réalisation des travaux de confortement nécessaires":"Vérifier la stabilité et la solidité de la structure par un professionnel qualifié et réaliser les travaux nécessaires pour supprimer tout risque ; fournir le rapport de diagnostic et les justificatifs des travaux",
+ "Mise en sécurité immédiate et remise en état des éléments menaçant de tomber":"Mettre en sécurité sans délai les éléments menaçant de tomber, puis les remettre en état durablement",
+ "Vérification et renforcement du plancher":"Vérifier le plancher par un professionnel qualifié et le renforcer si nécessaire afin d’en assurer la solidité",
+ "Diagnostic et réparation du balcon ou de la loggia":"Diagnostiquer le balcon ou la loggia par un professionnel qualifié et réaliser les réparations nécessaires ; en interdire l’accès jusqu’aux travaux",
+ "Révision de la couverture et remplacement des éléments défectueux":"Réviser la couverture et remplacer les éléments défectueux afin d’assurer le clos et le couvert",
+ "Remise en état de l’étanchéité de la couverture":"Rechercher l’origine des infiltrations en couverture et rétablir son étanchéité, puis remettre en état les supports intérieurs dégradés",
+ "Remise en état ou remplacement des gouttières et descentes d’eaux pluviales":"Remettre en état ou remplacer les gouttières et descentes afin d’assurer une évacuation efficace des eaux de pluie, loin du pied des murs",
+ "Reprise des joints et de l’enduit de façade":"Reprendre les joints et l’enduit de façade afin d’assurer l’étanchéité des murs extérieurs",
+ "Traitement des fissures de façade":"Réparer les fissures afin d’éviter toute infiltration d’eau",
+ "Remise en état ou remplacement des menuiseries extérieures défectueuses":"Remettre en état ou remplacer les menuiseries extérieures défectueuses afin d’assurer leur bon fonctionnement et leur étanchéité à l’eau et à l’air",
+ "Remplacement des menuiseries extérieures vétustes":"Remplacer les menuiseries extérieures vétustes par des menuiseries étanches à l’eau et à l’air",
+ "Remplacement du vitrage endommagé":"Remplacer le vitrage endommagé",
+ "Recherche et suppression des causes d’infiltration d’eau depuis l’extérieur":"Rechercher l’origine des infiltrations et la supprimer, puis remettre en état les supports dégradés",
+ "Réorganisation des pièces pour disposer d’au moins une pièce principale conforme à l’article 4 du décret décence":"Réorganiser le logement afin de disposer d’au moins une pièce principale de 9 m² minimum avec une hauteur sous plafond de 2,20 m minimum, ou d’un volume habitable de 20 m³ minimum",
+ "Changement d’usage de la pièce ou agrandissement":"Agrandir la pièce, ou ne plus la présenter ni l’utiliser comme pièce principale",
+ "Création d’un ouvrant donnant à l’air libre, ou changement d’usage de la pièce":"Créer un ouvrant donnant à l’air libre ; à défaut, ne plus présenter la pièce comme pièce principale et revoir sa désignation dans le bail",
+ "Agrandissement de la surface vitrée":"Agrandir la surface vitrée afin d’obtenir un éclairement naturel suffisant",
+ "Remise en état de l’ouvrant pour permettre son ouverture":"Remettre en état l’ouvrant afin de permettre son ouverture et l’aération de la pièce",
+ "Remise en état de l’escalier des parties communes":"Remettre en état l’escalier des parties communes afin de prévenir les chutes",
+ "Remise en état ou remplacement des garde-corps et rampes des parties communes":"Remettre en état ou remplacer les garde-corps et rampes des parties communes afin de prévenir les chutes",
+ "Remise en état de l’éclairage des parties communes":"Rétablir un éclairage suffisant des circulations et escaliers des parties communes",
+ "Mise en sécurité de l’installation électrique des parties communes":"Mettre en sécurité l’installation électrique des parties communes par un professionnel qualifié",
+ "Nettoyage et remise en état des parties communes":"Nettoyer, désencombrer et remettre en état les parties communes et le local poubelles, et en assurer l’entretien régulier",
+ "Remise en état des revêtements des parties communes":"Remettre en état les revêtements des murs, sols et plafonds des parties communes",
+ "Mise en place ou déplacement du dispositif de coupure générale dans un emplacement accessible depuis le logement":"Rendre le dispositif de coupure générale facilement accessible depuis le logement",
+ "Installation d’une protection différentielle 30 mA sur l’ensemble des circuits":"Installer une protection différentielle 30 mA sur l’ensemble des circuits par un professionnel qualifié",
+ "Mise à la terre de l’installation électrique":"Réaliser ou vérifier la mise à la terre de l’installation électrique par un professionnel qualifié et fournir l’attestation de l’électricien",
+ "Suppression des risques de contact direct (protection des conducteurs, fermeture des boîtiers, remplacement des appareillages cassés)":"Supprimer tout risque de contact direct avec des éléments sous tension par un professionnel qualifié (conducteurs protégés, boîtiers fermés, appareillages cassés remplacés)",
+ "Mise en sécurité ou remplacement du tableau électrique par un professionnel qualifié":"Mettre en sécurité ou remplacer le tableau électrique par un professionnel qualifié et fournir une attestation des travaux réalisés",
+ "Mise en conformité de l’installation électrique de la salle d’eau":"Mettre en sécurité l’installation électrique de la salle d’eau par un professionnel qualifié",
+ "Création de prises de courant supplémentaires":"Créer des prises de courant supplémentaires en nombre adapté à l’usage de chaque pièce, afin de supprimer les multiprises",
+ "Mise à niveau de l’installation électrique pour permettre le fonctionnement des appareils ménagers courants":"Adapter l’installation électrique pour permettre le fonctionnement des appareils ménagers courants",
+ "Installation d’un éclairage électrique dans chaque pièce et dans les accès":"Installer un éclairage électrique fixe dans chaque pièce et dans les accès",
+ "Remplacement du tuyau de raccordement gaz":"Remplacer le tuyau de raccordement gaz par un professionnel qualifié",
+ "Remise en état des canalisations de gaz par un professionnel qualifié (justificatif : certificat de conformité de l’installateur)":"Remettre en état les canalisations de gaz par un professionnel qualifié et fournir le certificat de conformité de l’installateur",
+ "Mise en place de robinets de coupure accessibles":"Installer des robinets de coupure du gaz accessibles",
+ "Recherche de fuite et mise en sécurité immédiate de l’installation gaz (justificatif : bon d’intervention attestant le contrôle d’étanchéité)":"Couper le gaz et rechercher et réparer la fuite sans délai par un professionnel qualifié ; fournir le bon d’intervention attestant le contrôle d’étanchéité",
+ "Déplacement de la bouteille de propane à l’extérieur":"Placer la bouteille de propane à l’extérieur du logement",
+ "Raccordement du logement à une alimentation en eau potable":"Raccorder le logement à une alimentation permanente en eau potable desservant chaque point d’eau",
+ "Amélioration de la pression et du débit d’eau":"Rechercher la cause du défaut et rétablir une pression et un débit suffisants pour une utilisation normale de l’eau courante",
+ "Remplacement des canalisations d’eau défectueuses":"Remplacer les canalisations d’eau défectueuses",
+ "Remplacement des canalisations d’eau en plomb":"Remplacer les canalisations d’eau en plomb",
+ "Installation d’une production d’eau chaude desservant l’évier et l’équipement de toilette":"Installer une production d’eau chaude desservant l’évier et l’équipement de toilette",
+ "Distribution de l’eau chaude à l’évier et à l’équipement de toilette":"Distribuer l’eau chaude à l’évier et à l’équipement de toilette",
+ "Réparation ou remplacement de l’appareil de production d’eau chaude":"Réparer ou remplacer l’appareil de production d’eau chaude par un professionnel qualifié, afin de couvrir les besoins des occupants",
+ "Remplacement du chauffe-eau ou du groupe de sécurité":"Remplacer le chauffe-eau ou le groupe de sécurité afin de rétablir une production d’eau chaude sécurisée",
+ "Installation d’un équipement de chauffage fixe permettant un chauffage normal de l’ensemble du logement":"Installer un équipement de chauffage fixe, adapté au logement, permettant un chauffage normal de l’ensemble du logement",
+ "Remplacement des émetteurs de chauffage défectueux ou sous-dimensionnés":"Remplacer les émetteurs de chauffage défectueux ou sous-dimensionnés afin d’assurer un chauffage normal de chaque pièce",
+ "Remise en état de fonctionnement ou remplacement de la chaudière":"Remettre en état ou remplacer la chaudière par un professionnel qualifié et fournir l’attestation d’entretien annuel",
+ "Installation d’un chauffage fixe et suppression du recours aux chauffages d’appoint":"Installer un chauffage fixe adapté au logement, afin de ne plus recourir aux chauffages d’appoint",
+ "Pose d’une trappe sur la cheminée":"Poser une trappe sur la cheminée afin de supprimer les entrées d’air froid",
+ "Mise en place d’une amenée d’air et d’une sortie d’air conformes dans le local de l’appareil":"Assurer une amenée et une sortie d’air permanentes dans le local de l’appareil à combustion",
+ "Raccordement de l’appareil à un conduit d’évacuation des produits de combustion conforme":"Raccorder l’appareil à un conduit d’évacuation des produits de combustion conforme par un professionnel qualifié",
+ "Ramonage et vérification du conduit de fumée":"Ramoner et vérifier le conduit de fumée par un professionnel et fournir le certificat de ramonage",
+ "Entretien annuel de la chaudière par un professionnel qualifié":"Réaliser l’entretien annuel de la chaudière par un professionnel qualifié et fournir l’attestation correspondante",
+ "Contrôle immédiat de l’appareil à combustion et de son évacuation":"Mettre l’appareil à combustion hors service jusqu’à son contrôle par un professionnel qualifié",
+ "Dégagement et remise en état des bouches d’aération":"Dégager et remettre en état les bouches d’aération du local",
+ "Installation d’un évier alimenté en eau chaude et froide et raccordé à l’évacuation des eaux usées":"Installer un évier alimenté en eau chaude et froide et raccordé à l’évacuation des eaux usées",
+ "Aménagement d’un emplacement pour appareil de cuisson avec alimentation adaptée":"Aménager un emplacement pour un appareil de cuisson, avec une alimentation adaptée",
+ "Installation d’un équipement pour la toilette corporelle (douche ou baignoire)":"Installer une douche ou une baignoire alimentée en eau chaude et froide et raccordée à l’évacuation des eaux usées",
+ "Aménagement d’une salle d’eau fermée garantissant l’intimité":"Aménager l’équipement de toilette dans une salle d’eau fermée garantissant l’intimité",
+ "Création d’un WC à l’intérieur du logement":"Créer un WC à l’intérieur du logement, séparé de la cuisine et de la pièce où sont pris les repas",
+ "Remise en état ou remplacement des équipements sanitaires défectueux":"Remettre en état ou remplacer les équipements sanitaires défectueux",
+ "Séparation du WC de la cuisine et de la pièce où sont pris les repas":"Séparer le WC de la cuisine et de la pièce où sont pris les repas",
+ "Remise en état ou installation d’une chasse d’eau":"Remettre en état ou installer une chasse d’eau assurant un effet d’eau à chaque utilisation",
+ "Remise en état du broyeur ou raccordement direct du WC au réseau d’évacuation":"Remettre en état le broyeur ou raccorder directement le WC au réseau d’évacuation",
+ "Remplacement de la cuvette ou du réservoir et suppression de la fuite":"Remplacer la cuvette ou le réservoir défectueux et supprimer la fuite",
+ "Installation de siphons sur les appareils sanitaires":"Installer un siphon sur chaque appareil sanitaire afin d’empêcher le retour des odeurs",
+ "Curage et remise en état des canalisations d’évacuation":"Curer et remettre en état les canalisations d’évacuation afin d’assurer un écoulement normal des eaux usées",
+ "Remplacement des canalisations d’évacuation défectueuses":"Remplacer les canalisations d’évacuation défectueuses",
+ "Raccordement de l’appareil à l’évacuation des eaux usées":"Raccorder l’appareil à l’évacuation des eaux usées",
+ "Mise en conformité de l’assainissement":"Mettre en conformité l’assainissement du logement",
+ "Recherche et traitement des remontées d’humidité en pied de mur":"Rechercher l’origine des remontées d’humidité en pied de mur et la supprimer, puis remettre en état les revêtements",
+ "Suppression de l’origine des infiltrations et remise en état des plafonds":"Rechercher l’origine des infiltrations et la supprimer, puis remettre en état les plafonds",
+ "Réparation de la fuite et remise en état des supports":"Réparer la fuite et remettre en état les supports dégradés",
+ "Amélioration de la ventilation et de l’isolation des parois froides":"Améliorer la ventilation du logement et l’isolation des parois froides afin de supprimer la condensation",
+ "Recherche et suppression des causes d’humidité et remise en état des revêtements":"Rechercher et supprimer les causes d’humidité, puis remettre en état les revêtements",
+ "Création d’une extraction d’air dans la salle d’eau":"Créer une extraction d’air dans la salle d’eau",
+ "Création d’une extraction d’air dans la cuisine":"Créer une extraction d’air dans la cuisine",
+ "Création d’une extraction d’air dans le WC":"Créer une extraction d’air dans le WC",
+ "Création d’entrées d’air dans les pièces principales":"Créer des entrées d’air dans les pièces principales afin d’assurer le renouvellement de l’air",
+ "Remise en fonctionnement de la VMC":"Remettre en fonctionnement la VMC et en assurer l’entretien régulier",
+ "Dégagement et remise en état des bouches et grilles de ventilation":"Dégager et remettre en état les bouches et grilles de ventilation",
+ "Pose d’un garde-corps conforme devant la fenêtre":"Installer un garde-corps adapté devant la fenêtre afin de prévenir les chutes",
+ "Remise en état ou remplacement du garde-corps":"Remettre en état ou remplacer le garde-corps afin de prévenir les chutes",
+ "Remise en état ou remplacement de la main courante de l’escalier":"Remettre en état ou remplacer la main courante de l’escalier afin qu’elle soit continue et solidement fixée",
+ "Remise en état de l’escalier : marches régulières et non glissantes":"Remettre en état l’escalier afin d’obtenir des marches régulières et non glissantes",
+ "Pose d’un garde-corps en bordure de la trémie ou du palier":"Installer un garde-corps en bordure de la trémie ou du palier afin de prévenir les chutes",
+ "Reprise du plafond":"Reprendre le plafond afin de supprimer tout risque de chute de matériaux",
+ "Remise en état des sols":"Remettre en état les sols afin d’obtenir une surface plane, stable et non glissante",
+ "Remise en état des murs intérieurs et de leurs revêtements":"Remettre en état les murs intérieurs et leurs revêtements",
+ "Remise en état des menuiseries intérieures":"Remettre en état les menuiseries intérieures afin de permettre leur fonctionnement normal",
+ "Reprise des peintures et revêtements muraux":"Reprendre les peintures et revêtements muraux ; dans un logement construit avant 1949, consulter le CREP avant travaux",
+ "Suppression de l’accessibilité au plomb des peintures dégradées":"Supprimer l’accessibilité au plomb des peintures dégradées identifiées par le CREP, puis réaliser un contrôle après travaux",
+ "Travaux de suppression du risque d’exposition au plomb":"Réaliser les travaux de suppression du risque d’exposition au plomb, puis contrôler l’absence de risque après travaux",
+ "Évaluation et traitement des matériaux contenant de l’amiante":"Évaluer et traiter par une entreprise certifiée les matériaux dégradés contenant de l’amiante",
+ "Traitement du champignon lignivore par une entreprise spécialisée":"Traiter le champignon lignivore par une entreprise spécialisée, supprimer la source d’humidité et remplacer les bois atteints",
+ "Remplacement des menuiseries par des menuiseries isolantes et étanches à l’air":"Remplacer les menuiseries par des menuiseries isolantes et étanches à l’air",
+ "Rebouchage des défauts et rétablissement de l’étanchéité à l’air des parois":"Reboucher les défauts afin de rétablir l’étanchéité à l’air des parois",
+ "Pose d’une porte ou d’une fenêtre sur l’ouverture donnant sur le local non chauffé":"Fermer l’ouverture donnant sur le local non chauffé par une porte ou une fenêtre",
+ "Isolation des combles ou de la toiture":"Isoler les combles ou la toiture",
+ "Travaux d’amélioration énergétique permettant d’atteindre le niveau de performance minimal exigé pour la location":"Réaliser les travaux d’amélioration énergétique permettant d’atteindre au minimum la classe F du DPE, exigée pour la location depuis le 1er janvier 2025 ; fournir un nouveau DPE après travaux",
+ "Dératisation par une entreprise spécialisée et obturation des points d’accès":"Réaliser une dératisation par une entreprise spécialisée et obturer les points d’accès",
+ "Désinsectisation par une entreprise spécialisée":"Réaliser une désinsectisation par une entreprise spécialisée",
+ "Nettoyage, désinfection et obturation des accès des oiseaux":"Nettoyer et désinfecter les lieux et obturer les accès des oiseaux",
+ "Traitement des bois et vérification de la structure":"Traiter les bois par une entreprise spécialisée et vérifier la structure",
+ "Rétablissement du débit d’extraction à la bouche de VMC":"Rechercher et supprimer la cause de l’absence de débit à la bouche de VMC"
+};
+console.assert(Object.keys(TECH).length===Object.keys(TECH_V1).length&&Object.keys(TECH_V1).every(k=>TECH[k]),'TECH : même liste de correctifs que TECH_V1');
+// Lot 2 (validé le 20/11/2026) : correctifs courts qui n'avaient pas de version technique.
+Object.assign(TECH,{
+ "Prise de toutes dispositions pour rendre habitable(s) la ou les pièce(s) principale(s) concernée(s) ; à défaut, elle(s) ne pourra(ont) pas être considérée(s) comme pièce(s) principale(s)":"Rendre habitable(s) la ou les pièce(s) principale(s) concernée(s) ; à défaut, elle(s) ne pourra(ont) pas être considérée(s) comme pièce(s) principale(s)",
+ "Nettoyage et entretien régulier des parties communes":"Nettoyer les parties communes et en assurer l’entretien régulier",
+ "Remise en état d’usage et de fonctionnement de l’installation":"Remettre l’installation en état d’usage et de fonctionnement",
+ "Remise en état de fonctionnement de la production d’eau chaude sanitaire":"Remettre en état de fonctionnement la production d’eau chaude sanitaire",
+ "Mise en sécurité des installations de production d’eau chaude et de chauffage vis-à-vis du risque d’intoxication au monoxyde de carbone":"Mettre en sécurité les installations de production d’eau chaude et de chauffage afin de supprimer tout risque d’intoxication au monoxyde de carbone",
+ "Reprise des défauts d’installation par un professionnel qualifié":"Reprendre les défauts d’installation par un professionnel qualifié",
+ "Création d’une cuisine ou d’un coin cuisine et/ou d’une salle de bains":"Créer une cuisine ou un coin cuisine et/ou une salle de bains",
+ "Remise en état ou complément des équipements de cuisine et sanitaires":"Remettre en état ou compléter les équipements de cuisine et sanitaires",
+ "Isolement des WC de la cuisine ou mise en place d’une ventilation efficace":"Isoler les WC de la cuisine ou mettre en place une ventilation efficace",
+ "Raccordement du WC à une alimentation en eau (effet d’eau)":"Raccorder le WC à une alimentation en eau (effet d’eau)",
+ "Remplacement du sanibroyeur par un WC raccordé aux eaux usées, ou avis de l’autorité sanitaire":"Remplacer le sanibroyeur par un WC raccordé aux eaux usées, ou obtenir l’avis de l’autorité sanitaire",
+ "Vidange, nettoyage, désinfection et comblement de l’ancienne fosse, raccordement au réseau de collecte":"Mettre hors service l’ancienne fosse (vidange, nettoyage, désinfection et comblement) et raccorder le logement au réseau de collecte",
+ "Raccordement complet au réseau public de collecte des eaux usées":"Raccorder entièrement le logement au réseau public de collecte des eaux usées",
+ "Rétablissement du bon écoulement des évacuations et installation de siphons":"Rétablir le bon écoulement des évacuations et installer des siphons",
+ "Recherche et suppression des causes d’humidité":"Rechercher et supprimer les causes d’humidité",
+ "Remise en état des revêtements de murs, sols et plafonds détériorés par l’humidité, après assèchement des supports":"Remettre en état les revêtements de murs, sols et plafonds détériorés par l’humidité, après assèchement des supports",
+ "Remise en état des plafonds":"Remettre en état les plafonds",
+ "Réfection des peintures dégradées":"Refaire les peintures dégradées",
+ "Fourniture des diagnostics techniques obligatoires":"Fournir les diagnostics techniques obligatoires",
+ "Réalisation et transmission au locataire du dossier de diagnostic technique":"Réaliser le dossier de diagnostic technique et le transmettre au locataire",
+ "Mise à disposition d’un moyen de chauffage adapté aux caractéristiques du logement":"Mettre à disposition un moyen de chauffage adapté aux caractéristiques du logement",
+ "Dégagement des bouches d’aération et rétablissement d’une aération efficace":"Dégager les bouches d’aération et rétablir une aération efficace",
+// Lot 3 (validé le 20/11/2026) : correctifs de sous-constat restés en forme nominale.
+ "Vérification et remise en état du bâti pour en assurer la stabilité et la sécurité, avec attestation d’un professionnel qualifié":"Vérifier et remettre en état le bâti pour en assurer la stabilité et la sécurité, avec attestation d’un professionnel qualifié",
+ "Suppression des causes d’infiltration d’eau depuis l’extérieur":"Supprimer les causes d’infiltration d’eau depuis l’extérieur",
+ "Remise en état des parties communes (escalier, électricité, éclairage, local poubelles)":"Remettre en état les parties communes (escalier, électricité, éclairage, local poubelles)",
+ "Mise à disposition d’une alimentation intérieure en eau potable":"Mettre à disposition une alimentation intérieure en eau potable",
+ "Dégagement des bouches d’aération":"Dégager les bouches d’aération",
+ "Aménagement assurant l’intimité de la salle d’eau et des WC":"Aménager la salle d’eau et les WC pour en assurer l’intimité",
+ "Remise en état des revêtements des murs intérieurs":"Remettre en état les revêtements des murs intérieurs"
+});
+console.assert(Object.entries(TECH).every(([k,t])=>k.includes('(DAAF)')||!/\bNF |DTU|arrêté|\bart\.|article|RSD|\bcm\b|\b[Ff]aire [a-zéè]/.test(t)),'TECH : préconisation de résultat (ni norme, ni cote, ni « faire + verbe »)');
 // Anciennes versions techniques des textes électricité (avant le 11/11/2026), remplacées dans les listes de travaux par migrate().
 const TECH_ANC={"Faire mettre en sécurité l’installation électrique par un professionnel qualifié, en traitant a minima les six points de sécurité : appareil général de commande et de protection accessible, protection différentielle 30 mA adaptée à la prise de terre, protection de chaque circuit contre les surintensités adaptée à la section des conducteurs, liaison équipotentielle et respect des volumes dans les pièces d’eau, absence de matériel vétuste ou inadapté, absence de conducteur nu accessible (référence : norme NF C 15-100). Fournir une attestation de l’électricien en cas de mise en sécurité globale de l’installation":"Mise en sécurité de l’installation électrique par un professionnel qualifié (attestation de l’électricien en cas de mise en sécurité globale de l’installation)",
  "Installer ou déplacer l’appareil général de commande et de protection (dispositif de coupure générale) dans le logement ou dans un local accessible directement depuis celui-ci : organe de manœuvre situé entre 0,50 m et 1,80 m du sol, hors placard ou coffret fermé à clé ou avec un outil, hors emplacement accessible par une trappe, ni au-dessus d’un appareil de cuisson ni sous un point d’eau (constat selon la norme NF C 16-600, fiche B.1 ; travaux selon la norme NF C 15-100)":"Mise en place ou déplacement du dispositif de coupure générale dans un emplacement accessible depuis le logement",
  "Installer des interrupteurs ou disjoncteurs différentiels 30 mA (haute sensibilité) protégeant l’ensemble des circuits du logement, dont un de type A pour les circuits des plaques de cuisson et du lave-linge, adaptés à la résistance de la prise de terre (constat selon la norme NF C 16-600, fiches B.2 et B.11 ; travaux selon la norme NF C 15-100)":"Installation d’une protection différentielle 30 mA sur l’ensemble des circuits",
  "Supprimer tout risque de contact direct : connexions placées dans des boîtes de dérivation fermées, conducteurs protégés sur toute leur longueur par des conduits, goulottes ou plinthes, capots et couvercles des tableaux et boîtiers remis en place, conducteurs à l’isolant abîmé et appareillages cassés remplacés (constat selon la norme NF C 16-600, fiches B.7 et B.8 ; travaux selon la norme NF C 15-100)":"Suppression des risques de contact direct (protection des conducteurs, fermeture des boîtiers, remplacement des appareillages cassés)",
  "Remplacer le tableau par un tableau de répartition équipé de disjoncteurs divisionnaires adaptés à la section des conducteurs (en remplacement des fusibles à tabatière, à broches rechargeables ou de type industriel) et d’une protection différentielle 30 mA, avec capot fermé empêchant tout contact direct ; fournir une attestation de l’électricien décrivant les travaux de mise en sécurité réalisés (constat selon la norme NF C 16-600, fiches B.4 et B.8 ; travaux selon la norme NF C 15-100)":"Mise en sécurité ou remplacement du tableau électrique par un professionnel qualifié"};
+// Textes techniques d'avant le 20/11/2026 : retrouvent leur correctif, donc la préconisation de résultat.
+for(const [k,t] of Object.entries(TECH_V1))if(t!==TECH[k]&&!TECH_ANC[t])TECH_ANC[t]=k;
+console.assert(Object.entries(TECH_V1).every(([k,t])=>t===TECH[k]||TECH[TECH_ANC[t]]===TECH[k]),'TECH_ANC : un ancien texte mène à une seule préconisation');
 console.assert(R_PDL.every(r=>(r.items||[]).every(d=>(d.df||[]).every(x=>!x.only&&(!x[1]||TECH[Array.isArray(x[1])?x[1][1]:x[1]])))),'R_PDL : commentaire réservé au décence ou correctif sans version technique');
 (()=>{const all=new Set();for(const r of [...R,...R_PDL])for(const d of r.items||[]){if(d.w)all.add(d.w);(d.ow||[]).forEach(x=>x&&all.add(Array.isArray(x)?x[1]:x));(d.df||[]).forEach(x=>x[1]&&all.add(Array.isArray(x[1])?x[1][1]:x[1]));(d.wx||[]).forEach(x=>all.add(x))}
-  all.add('Installation d’au moins un détecteur autonome avertisseur de fumée (DAAF) conforme à la norme NF EN 14604');
+  all.add('Installation d’au moins un détecteur autonome avertisseur de fumée (DAAF) conforme à la norme NF EN 14604');all.add('Réalisation et transmission au locataire du dossier de diagnostic technique');
   for(const k of Object.keys(TECH))console.assert(all.has(k),'TECH sans correctif : '+k);
   console.assert(R_PDL.length===8&&!R_PDL[5].items[0].o.some(x=>/diagnostic/i.test(x))&&!R_PDL[5].items.some(d=>d.id==='surocc'),'R_PDL');})();
 
+/* ---------- diagnostics réglementaires : présence de chaque diagnostic (décence, s.pr_<clé>) ---------- */
+const DM_PRES=[['dpe','DPE'],['elec','Électricité'],['gaz','Gaz'],['crep','CREP'],['erp','ERP'],['amiante','Amiante']],PRES_CH=['Fourni','Non fourni','Sans objet'];
+// CREP proposé seulement pour un logement d'avant 1949.
+const presListe=v=>DM_PRES.filter(([k])=>k!=='crep'||av49(v));
+const presNom=l=>/^[A-Z]+$/.test(l)?l:l.toLowerCase();
+function presTexte(v,s){const L=c=>presListe(v).filter(([k])=>s['pr_'+k]===c).map(([,l])=>presNom(l)).join(', '),f=L('Fourni'),n=L('Non fourni');
+  return [f&&'Diagnostics fournis : '+f+'.',n&&'Non fournis : '+n+'.'].filter(Boolean).join(' ')}
 /* ---------- diagnostics non à jour après travaux (ligne diagmaj) ---------- */
 // s.dA / s.tA : années des diagnostics et des travaux ; s.tw : indices de DM_TW ; s.twA : texte « Autre » ; s.crep : Oui / Non / Inconnu.
 const DM_TW=['Remplacement du système de chauffage','Réfection totale de l’installation électrique','Réfection partielle de l’installation électrique',
@@ -2307,13 +2517,13 @@ const DM_INTRO='Fournir un dossier de diagnostic technique mis à jour après tr
 // [décence, permis de louer (version technique)]
 const DM_COR={
  elec:['Fournir un nouvel état de l’installation intérieure d’électricité établi après travaux, ou une attestation de conformité visée par le Consuel de moins de 6 ans',
-  'Faire établir par un diagnostiqueur certifié un nouvel état de l’installation intérieure d’électricité après travaux (norme NF C 16-600), ou fournir une attestation de conformité visée par le Consuel de moins de 6 ans'],
+  'Fournir un nouvel état de l’installation intérieure d’électricité établi par un diagnostiqueur certifié après travaux, ou une attestation de conformité visée par le Consuel de moins de 6 ans'],
  dpe:['Fournir un nouveau DPE intégrant les travaux réalisés',
-  'Faire établir par un diagnostiqueur certifié un nouveau DPE intégrant les travaux réalisés (isolation, menuiseries, système de chauffage)'],
+  'Fournir un nouveau DPE établi par un diagnostiqueur certifié, intégrant les travaux réalisés'],
  gaz:['Fournir l’état de l’installation intérieure de gaz, ou le certificat de conformité de la nouvelle installation',
-  'Faire établir un état de l’installation intérieure de gaz après travaux (norme NF P 45-500), ou fournir le certificat de conformité de la nouvelle installation'],
+  'Fournir un état de l’installation intérieure de gaz établi après travaux, ou le certificat de conformité de la nouvelle installation'],
  crep:['Fournir un nouveau CREP établi après travaux',
-  'Faire établir par un diagnostiqueur certifié un nouveau CREP après travaux (article L. 1334-5 du code de la santé publique)']};
+  'Fournir un nouveau CREP établi par un diagnostiqueur certifié après travaux']};
 const av49=v=>v.f.lAv49==='Avant 1949';
 function dmTexte(v,s){
   const tw=s.tw||[],L=tw.filter(i=>i<6&&!(i===2&&tw.includes(1))).map(i=>DM_TWL[i]);
@@ -2360,7 +2570,7 @@ function travaux(v){
   // S : désordre d'origine de chaque ligne (affiché dans la liste à cocher des correctifs).
   const S={};let src='';
   const push=(th,line)=>{if(!L[th].some(l=>bare(l)===bare(line)))L[th].push(line);S[line.trim()]??=src};
-  const diag=()=>{push('regl','• Réalisation et transmission au locataire du dossier de diagnostic technique :');
+  const diag=()=>{push('regl','• '+tk('Réalisation et transmission au locataire du dossier de diagnostic technique')+' :');
     ['Diagnostic de performance énergétique (DPE)','État de l’installation intérieure d’électricité',
      ...(v.f.lAv49==='Avant 1949'?['Constat de risque d’exposition au plomb (CREP), le logement ayant été construit avant 1949']:[]),
      'État des risques et pollutions (ERP)','État de l’installation intérieure de gaz, le cas échéant','Diagnostic amiante, le cas échéant (permis de construire antérieur au 1er juillet 1997)'].forEach(x=>push('regl','   ◦ '+x))};
@@ -2388,11 +2598,11 @@ function travaux(v){
     for(const x of all.filter(x=>x.id===k&&x!==d)){const j=(x.df||[]).findIndex(y=>y[0].startsWith(a));if(j>=0)console.assert(dfO(x,j)>=0,'lien PDL',k,a)}}
   const V=ITEMS.vent,ix=a=>V.df.findIndex(x=>x[0].startsWith(a)),tv=(o,df)=>travaux({f:{},it:{vent:{on:true,o,t:[],df,ph:[],note:'x'}}}).flatMap(b=>b.lines);
   const q=tv([0,1,2],[ix('Aucune bouche d’extraction dans la salle'),ix('Aucune bouche d’extraction dans la cuisine'),ix('Aucune ventilation dans le WC')]);
-  console.assert(q.filter(l=>/une bouche d’extraction/.test(l)).length===3&&!q.some(l=>/◦ (Salle d’eau|Cuisine|WC) :/.test(l)),'VMC sans doublon',q);
+  console.assert(q.filter(l=>/Créer une extraction d’air/.test(l)).length===3&&!q.some(l=>/◦ (Salle d’eau|Cuisine|WC) :/.test(l)),'VMC sans doublon',q);
   // Bouche de VMC sans débit : ajoutée en dernier (rangs des anciens commentaires inchangés), texte technique repris, même en permis de louer.
-  const bd=ix('Aucun débit d’extraction constaté');console.assert(bd===V.df.length-1&&V.df[bd-3][0]==='Grilles absentes'&&tv([],[bd]).some(l=>l.includes('Faire rechercher et supprimer la cause de l’absence de débit'))&&R_PDL.some(r=>(r.items||[]).some(d=>d.id==='vent'&&d.df[bd]===V.df[bd])),'bouche de VMC sans débit');
+  const bd=ix('Aucun débit d’extraction constaté');console.assert(bd===V.df.length-1&&V.df[bd-3][0]==='Grilles absentes'&&tv([],[bd]).some(l=>l.includes('Rechercher et supprimer la cause de l’absence de débit'))&&R_PDL.some(r=>(r.items||[]).some(d=>d.id==='vent'&&d.df[bd]===V.df[bd])),'bouche de VMC sans débit');
   const q2=tv([0,1],[ix('Aucune bouche d’extraction dans la cuisine')]);
-  console.assert(q2.some(l=>l.includes('Créer dans la cuisine une bouche'))&&q2.some(l=>l.includes('◦ '+TECH['Extraction d’air dans la salle d’eau']))&&!q2.some(l=>l.includes('◦ '+TECH['Extraction d’air dans la cuisine'])),'secours du sous-constat',q2);
+  console.assert(q2.some(l=>l.includes('Créer une extraction d’air dans la cuisine'))&&q2.some(l=>l.includes('◦ '+TECH['Extraction d’air dans la salle d’eau']))&&!q2.some(l=>l.includes('◦ '+TECH['Extraction d’air dans la cuisine'])),'secours du sous-constat',q2);
   console.assert(comManq(V,{on:true,o:[0],note:'',ph:[{com:' '}]})&&!comManq(V,{on:true,o:[0],note:'',ph:[{com:'ok'}]})&&!comManq(V,{on:true,o:[],note:''}),'commentaire manquant');})();
 function justifTexte(v){
   const pr='des documents probants : factures détaillées des entreprises (nature des travaux, matériel posé, localisation), attestations ou diagnostics lorsqu’ils sont requis, et photographies';
@@ -2440,7 +2650,10 @@ function travCalc(v){const f=v.f,blocks=travaux(v),txt=f.trav||'',vide=!txt.trim
 // Textes techniques dans tous les rapports (11/11/2026) : dans une liste de travaux déjà rédigée, chaque ligne générée
 // avec un correctif court (ou une ancienne version technique) prend le texte technique actuel ; les lignes rédigées à la main ne bougent pas.
 const DAAF_HC=' (obligation du CCH, hors critères de décence)';
-function techLigne(l){const m=/^(\s*[•◦]\s*)(.*?)( :)?$/.exec(l);if(!m)return l;const hc=m[2].endsWith(DAAF_HC)?DAAF_HC:'',c=hc?m[2].slice(0,-hc.length):m[2],k=TECH[c]?c:TECH_ANC[c];return k&&TECH[k]?m[1]+TECH[k]+hc+(m[3]||''):l}
+// Anciennes versions permis de louer des diagnostics à refaire (avant le 20/11/2026) -> nouvelle version.
+const DM_ANC={"Faire établir par un diagnostiqueur certifié un nouvel état de l’installation intérieure d’électricité après travaux (norme NF C 16-600), ou fournir une attestation de conformité visée par le Consuel de moins de 6 ans":"Fournir un nouvel état de l’installation intérieure d’électricité établi par un diagnostiqueur certifié après travaux, ou une attestation de conformité visée par le Consuel de moins de 6 ans","Faire établir par un diagnostiqueur certifié un nouveau DPE intégrant les travaux réalisés (isolation, menuiseries, système de chauffage)":"Fournir un nouveau DPE établi par un diagnostiqueur certifié, intégrant les travaux réalisés","Faire établir un état de l’installation intérieure de gaz après travaux (norme NF P 45-500), ou fournir le certificat de conformité de la nouvelle installation":"Fournir un état de l’installation intérieure de gaz établi après travaux, ou le certificat de conformité de la nouvelle installation","Faire établir par un diagnostiqueur certifié un nouveau CREP après travaux (article L. 1334-5 du code de la santé publique)":"Fournir un nouveau CREP établi par un diagnostiqueur certifié après travaux"};
+console.assert(Object.values(DM_COR).every(x=>!/^Faire |\bNF |article/.test(x[1]))&&Object.values(DM_ANC).every(t=>Object.values(DM_COR).some(x=>x[1]===t)),'DM_COR : préconisations de résultat');
+function techLigne(l){const m=/^(\s*[•◦]\s*)(.*?)( :)?$/.exec(l);if(!m)return l;const hc=m[2].endsWith(DAAF_HC)?DAAF_HC:'',c=hc?m[2].slice(0,-hc.length):m[2],k=TECH[c]?c:TECH_ANC[c];if(DM_ANC[c])return m[1]+DM_ANC[c]+(m[3]||'');return k&&TECH[k]?m[1]+TECH[k]+hc+(m[3]||''):l}
 function techMaj(f){if(f.trav)f.trav=f.trav.split('\n').map(techLigne).join('\n');for(const k of ['travNon','travGen'])if(Array.isArray(f[k]))f[k]=f[k].map(x=>techLigne(x).trim())}
 function travMaj(v){const c=travCalc(v);if(!c)return null;v.f.trav=c.txt;v.f.travNon=c.non;v.f.travGen=c.F.flatMap(b=>b.lines.map(l=>l.trim()));return c}
 (()=>{const t=(f,s,type)=>{const v={type,f,it:{diagmaj:{on:true,o:[],t:[],df:[],note:'',ph:[],...s}}};return{v,txt:dmTexte(v,v.it.diagmaj),cor:dmCorr(v,v.it.diagmaj),trav:travaux(v)}};
@@ -2456,7 +2669,7 @@ function travMaj(v){const c=travCalc(v);if(!c)return null;v.f.trav=c.txt;v.f.tra
   // 3. gaz seul ; électricité totale + partielle → une seule ligne ; version permis de louer
   const c=t({},{dA:2022,tA:2024,tw:[3]}),d=t({lAv49:'Avant 1949'},{tw:[1,2,6],twA:'Création d’une salle d’eau',crep:'Non'},'pdl');
   console.assert(c.cor.length===1&&/gaz/.test(c.cor[0])&&c.txt.includes(': installation ou modification de l’installation de gaz.'),'dm 3');
-  console.assert(d.cor.length===1&&d.cor[0].includes('NF C 16-600')&&d.txt.includes('réfection totale de l’installation électrique et Création d’une salle d’eau.')&&d.txt.includes('en …')&&d.txt.endsWith('; CCH, art. L. 635-4).'),'dm pdl');
+  console.assert(d.cor.length===1&&d.cor[0].startsWith('Fournir un nouvel état de l’installation intérieure d’électricité établi par un diagnostiqueur')&&!d.cor[0].includes('NF C 16-600')&&d.txt.includes('réfection totale de l’installation électrique et Création d’une salle d’eau.')&&d.txt.includes('en …')&&d.txt.endsWith('; CCH, art. L. 635-4).'),'dm pdl');
   console.assert(R_PDL[5].items.some(x=>x.id==='diagmaj')&&ITEMS.diagmaj,'dm R_PDL');
 })();
 const dfi=(id,re)=>ITEMS[id].df.findIndex(x=>re.test(x[0]));
@@ -2476,22 +2689,25 @@ const dfi=(id,re)=>ITEMS[id].df.findIndex(x=>re.test(x[0]));
   const E=ITEMS.elec,cd=dfi('elec',/^Aucun dispositif différentiel/),w0=Object.keys(TECH_ANC).find(x=>TECH_ANC[x]===E.w);
   const o={type:'dec',f:{trav:`Intro\n\n1. ${TH.sec}\n• ${E.w} :\n   ◦ ${E.df[cd][1]}\n• Ma ligne perso`,travNon:['◦ '+E.df[cd][1]]},it:{elec:{on:true,o:[],t:[],df:[cd],ph:[]}}};
   techMaj(o.f);console.assert(o.f.trav.includes('• '+TECH[E.w]+' :')&&o.f.trav.includes('   ◦ '+TECH[E.df[cd][1]])&&o.f.trav.includes('• Ma ligne perso')&&o.f.travNon[0]==='◦ '+TECH[E.df[cd][1]]&&techLigne('• '+w0)==='• '+TECH[E.w]&&techLigne('• Installation d’au moins un détecteur autonome avertisseur de fumée (DAAF) conforme à la norme NF EN 14604'+DAAF_HC).startsWith('• Installer au moins un détecteur'),'techMaj ancien dossier',o.f);
+  // Dossier enregistré avec les textes techniques d'avant le 20/11/2026 : la préconisation de résultat remplace la ligne générée.
+  const mc='Installation d’une main courante dans l’escalier',f1={trav:`1. X\n• ${TECH_V1[mc]} :\n• Ma ligne`,travNon:['◦ '+TECH_V1[mc]]};techMaj(f1);
+  console.assert(f1.trav===`1. X\n• ${TECH[mc]} :\n• Ma ligne`&&f1.travNon[0]==='◦ '+TECH[mc],'reprise des textes techniques d’avant le 20/11/2026',f1);
 })();
 (()=>{const t={f:{lAv49:'Avant 1949',detect:'Non',cNd:'Oui'},it:{elec:{on:true,o:[],t:[],df:[dfi('elec',/^Aucun dispositif de coupure/),dfi('elec',/^Aucun dispositif différentiel/)],ph:[]},plomb:{on:true,o:[3],t:[],df:[],ph:[]}}};
   const b=travaux(t),txt=travauxTexte(t,b);
-  console.assert(b[0].title===TH.sec&&b[0].lines[0].startsWith('• Faire mettre en sécurité l’installation électrique')&&b[0].lines[0].includes('six règles')&&b[0].lines.length===4,'travaux sec');
+  console.assert(b[0].title===TH.sec&&b[0].lines[0].startsWith('• Mettre en sécurité l’installation électrique')&&!b[0].lines[0].includes('six règles')&&b[0].lines.length===4,'travaux sec');
   console.assert(txt.includes('CREP')&&txt.includes('DAAF')&&txt.includes('hors critères de décence')&&!travauxTexte({...t,type:'pdl'},travaux({...t,type:'pdl'})).includes('hors critères'),'travaux diag');
   const m=fusionTravaux('Intro\n\n1. Sécurité des occupants\n• Ma ligne perso',b);
   console.assert(m.txt.includes('• Ma ligne perso')&&m.txt.includes('2. Obligations réglementaires')&&fusionTravaux(m.txt,b).added===0,'fusion travaux');
   const p=travaux({type:'pdl',f:{detect:'Non'},it:{chute:{on:true,o:[0],t:[],df:[dfi('chute',/main courante dans/)],ph:[]},plomb:{on:true,o:[0],t:[],df:[],ph:[]}}});
   const pt=p.flatMap(b=>b.lines).join(' ');
   const q=travaux({f:{},it:{chute:{on:true,o:[],t:[],df:[dfi('chute',/main courante dans/)],ph:[]},elec:{on:true,o:[0],t:[],df:[],ph:[]}}}).flatMap(b=>b.lines);
-  console.assert(q.includes('• '+TECH['Installation d’une main courante dans l’escalier'])&&q.some(l=>l.startsWith('• Faire mettre en sécurité'))&&q.includes('   ◦ '+TECH['Création de prises de courant en nombre suffisant et suppression des surcharges']),'travaux (sans localisation)');
-  // Textes techniques dans tous les rapports (11/11/2026) : la décence reprend la même version que le permis de louer.
-  console.assert(!q.includes('• Installation d’une main courante dans l’escalier')&&q.join('').includes('90 à 95 cm'),'décence : textes techniques');
+  console.assert(q.includes('• '+TECH['Installation d’une main courante dans l’escalier'])&&q.some(l=>l.startsWith('• Mettre en sécurité l’installation électrique'))&&q.includes('   ◦ '+TECH['Création de prises de courant en nombre suffisant et suppression des surcharges']),'travaux (sans localisation)');
+  // Préconisations de résultat dans tous les rapports : la décence reprend la même version que le permis de louer.
+  console.assert(!q.includes('• Installation d’une main courante dans l’escalier')&&q.join('').includes('afin de prévenir les chutes')&&!q.join('').includes('90 à 95 cm'),'décence : préconisations de résultat');
   // Commentaire « main courante » relié au sous-constat « Escalier / palier » : seul son correctif est repris ; sans lui, celui du sous-constat (garde-corps).
-  const pg=travaux({type:'pdl',f:{},it:{chute:{on:true,o:[0],t:[],df:[],ph:[]}}}).flatMap(b=>b.lines).join(' ');
-  console.assert(pt.includes('90 à 95 cm')&&!pt.includes('NF P01-012')&&pg.includes('NF P01-012')&&pt.includes('Certibiocide')===false&&!pt.includes('diagnostic technique'),'travaux pdl');})();
+  const GC='Mise en sécurité de l’escalier / du palier : pose ou fixation du garde-corps et de la main courante',pg=travaux({type:'pdl',f:{},it:{chute:{on:true,o:[0],t:[],df:[],ph:[]}}}).flatMap(b=>b.lines).join(' ');
+  console.assert(pt.includes(TECH['Installation d’une main courante dans l’escalier'])&&!pt.includes(TECH[GC])&&pg.includes(TECH[GC])&&pt.includes('Certibiocide')===false&&!pt.includes('diagnostic technique'),'travaux pdl');})();
 
 /* ---------- Rapport de dégradation (grilles Anah) ---------- */
 // Relevé des 3 grilles Excel (sources/ref-degradation). L'Excel prime sur le guide pour les règles de calcul.
@@ -4719,7 +4935,7 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.17-1534';
+const APP_VER='2026.11.20-2243';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -4787,7 +5003,7 @@ function migrate(v){
     if(!v.dfTxt){const add=old.filter(t=>!s.note.includes(t)).map(t=>t+'.');if(add.length)s.note=[...add,s.note].filter(x=>x.trim()).join('\n')}
     s.df=[...new Set(old.map(t=>dfNew(id,t)).filter(i=>i>=0))]}v.dfTxt=1;v.dfV=3}
   // Textes techniques dans tous les rapports (11/11/2026) : correctifs courts remplacés dans la liste de travaux.
-  if(!(v.techV>=1)){techMaj(f);v.techV=1}
+  if(!(v.techV>=2)){techMaj(f);v.techV=2}
   // Liste électricité enrichie (NF C 16-600) : les rangs de la version 2 sont repris par libellé.
   if(v.dfV===2){for(const [id,s] of Object.entries(v.it))if(DF_V2[id])s.df=[...new Set(s.df.map(i=>dfV3(id,i)).filter(i=>i>=0))];v.dfV=3}
   // Localisation supprimée (24/10/2026) : elle passe en tête du commentaire. Les précisions d'un désordre photographié
@@ -4927,7 +5143,9 @@ function rstat(r,v=cur){
 const preManq=(r,v=cur)=>(r.pre||[]).filter(f=>!filled(v.f[f[0]]));
 const aControler=(v=cur)=>RR(v).filter(r=>r.items).map(r=>[r,[...r.items.filter(d=>!v.it[d.id]?.on&&!v.it[d.id]?.ras||comManq(d,v.it[d.id])),...preManq(r,v)]]).filter(x=>x[1].length);
 const sumAuto=(k,v=cur)=>Object.values(ITEMS).some(i=>i.s===k&&v.it[i.id]?.on);
-const sumVal=(k,v=cur)=>v.f['sum_'+k]||(sumAuto(k,v)?'Oui':'Non');
+const sumVal=(k,v=cur)=>v.f['sum_'+k]||(k==='dpe'?{Fourni:'Non','Non fourni':'Oui'}[v.it.diagmaj?.pr_dpe]||'':sumAuto(k,v)?'Oui':'Non');
+console.assert(sumVal('dpe',{f:{},it:{diagmaj:{pr_dpe:'Fourni'}}})==='Non'&&sumVal('dpe',{f:{},it:{diagmaj:{pr_dpe:'Non fourni'}}})==='Oui'&&sumVal('dpe',{f:{},it:{}})===''&&sumVal('dpe',{f:{sum_dpe:'Oui'},it:{diagmaj:{pr_dpe:'Fourni'}}})==='Oui','résumé : absence de DPE');
+console.assert(presTexte({f:{lAv49:'Après 1949'}},{pr_dpe:'Fourni',pr_elec:'Fourni',pr_gaz:'Non fourni',pr_amiante:'Sans objet',pr_crep:'Fourni'})==='Diagnostics fournis : DPE, électricité. Non fournis : gaz.'&&presTexte({f:{}},{})==='','presTexte');
 const pills=p=>`<div class="pills">${p.map(([t,c])=>`<span class="pill ${c}">${esc(t)}</span>`).join('')}</div>`;
 
 /* ---------- rendu ---------- */
@@ -4984,6 +5202,7 @@ function itemHtml(d,nums){
     <div class="t">${esc(d.t)}<div class="meta">${d.ref?`<span class="ref">${esc(d.ref)}</span>`:''}${d.rsd?`<span class="ref">${esc(d.rsd)}</span>`:''}${phReq(d,s)?`<span class="ref">Photo requise</span>`:''}${s.on&&s.ph.length?`<span class="ref">${s.ph.length} photo${s.ph.length>1?'s':''}</span>`:''}</div></div></label>
     <label class="rasl"><input type="checkbox" data-it="${d.id}" data-k="ras" ${s.ras?'checked':''} aria-label="RAS : ${esc(d.t)}">RAS</label></div>
    ${d.norm&&!s.on?`<div class="body">${norm}</div>`:''}
+   ${d.pres?`<div class="body"><p class="muted">Présence des diagnostics (à renseigner même sans défaut) :</p>${presListe(cur).map(([k,l])=>`<div class="grp"><span>${esc(l)}</span><div class="chips">${PRES_CH.map(o=>`<label class="chip"><input type="radio" name="pr_${k}" data-it="${d.id}" data-k="pr_${k}" value="${o}" ${s['pr_'+k]===o?'checked':''}>${o}</label>`).join('')}</div></div>`).join('')}</div>`:''}
    ${s.on?`<div class="body">
     ${d.hint?`<div class="hint">${esc(d.hint)}</div>`:''}${norm}
     ${d.ty&&d.tl!==MEL&&!d.tf?grp('t',d.tl,d.ty):''}
@@ -5315,7 +5534,7 @@ function render(){
     app.innerHTML=`${topbar(pdl?'Résumé et commentaires':'Synthèse et signature',who(cur),'dash',logo)}
      <div class="eyebrow">Résumé des ${pdl?'anomalies':'désordres'} relevé${pdl?'e':''}s</div>
      <p class="muted">Pré-rempli selon les pathologies cochées. Touchez pour corriger.</p>
-     <div class="sumtbl">${Object.entries(SUM).map(([k,l])=>`<div class="sumrow"><span class="lab">${esc(l)}${cur.f['sum_'+k]?'':' <span class="pill">auto</span>'}</span>
+     <div class="sumtbl">${Object.entries(pdl?SUM:SUM_DEC).map(([k,l])=>`<div class="sumrow"><span class="lab">${esc(l)}${cur.f['sum_'+k]?'':' <span class="pill">auto</span>'}</span>
       <div class="chips">${YN.map(o=>`<label class="chip"><input type="radio" name="sum_${k}" data-f="sum_${k}" data-ft="r" value="${o}" ${sumVal(k)===o?'checked':''}>${o}</label>`).join('')}</div></div>`).join('')}</div>
      ${pdl?`<div class="eyebrow">Commentaires</div><div class="form" style="margin-top:8px">${COMM_PDL.map(field).join('')}</div>`
      :`<div class="eyebrow">Caractérisation de la situation et conclusion</div>
@@ -5346,7 +5565,8 @@ function render(){
      <div class="row" style="margin-bottom:10px"><button class="btn-primary" data-act="gentrav" ${manq.length?'disabled':''}>${svg('sync')}${filled(cur.f.trav)?'Mettre à jour depuis les désordres':'Pré-remplir depuis les désordres'}</button></div>
      <p class="muted">La liste est générée par thème à partir des désordres cochés et des défauts types. Modifiez-la librement : la mise à jour ajoute seulement les correctifs manquants, sauf ceux que vous avez décochés ou effacés.</p>
      ${trxHtml(cur)}
-     <div class="hint">Phrase ajoutée automatiquement au rapport, avant la liste : « ${esc(justifTexte(cur))} »</div>
+     <label class="chip"><input type="checkbox" data-f="justifNon" ${cur.f.justifNon?'':'checked'}>Afficher dans le rapport la phrase sur les justificatifs</label>
+     <div class="hint">Phrase placée avant la liste : « ${esc(justifTexte(cur))} »</div>
      <div class="row"><button data-act="ia" ${filled(cur.f.trav)?'':'disabled'}>Relecture IA (Copilot)</button></div>
      <p class="muted">Copie une consigne de relecture, les désordres et la liste de travaux (sans nom ni adresse), puis ouvre Copilot : collez le texte et reprenez ici les corrections retenues.</p>`:''}
    ${isCv(cur)&&r.id==='r8'?`<div class="row"><button data-act="reptrav">Reprendre la liste de travaux de la visite</button></div>`:''}
@@ -5983,6 +6203,7 @@ document.addEventListener('input',e=>{
   if(el.dataset.gn==='pt'||el.dataset.gn==='motif'){const s=degS(el);s[el.dataset.gn]=el.value;save();return}
   if(isErgo(cur)&&ergoInp(el))return;
   if(isFin(cur)&&finInp(el))return;
+  if(el.dataset.f==='justifNon'){cur.f.justifNon=!el.checked;save();return}  // case cochée = phrase affichée (défaut des anciens dossiers)
   if(el.dataset.f&&!el.dataset.ft){cur.f[el.dataset.f]=el.value;save();if(/^mr/.test(el.dataset.f))memoMairie(cur);return}
   if(el.dataset.it&&el.dataset.k==='note'){it(el.dataset.it)[el.dataset.k]=el.value;save();cmMaj(el.dataset.it);if(el.nextElementSibling?.classList.contains('wc'))el.nextElementSibling.textContent=motsTxt(el.value)}
   if(el.dataset.it&&(el.dataset.k==='cap'||el.dataset.k==='com')){it(el.dataset.it).ph[+el.dataset.i][el.dataset.k]=el.value;save();cmMaj(el.dataset.it)}
@@ -6040,6 +6261,7 @@ document.addEventListener('change',async e=>{
     if(el.checked){a=no(el.value)?[]:a.filter(x=>!no(x));a.push(el.value)}cur.f[k]=a;save();return keep()}
   if(el.dataset.it&&el.dataset.k){
     const s=it(el.dataset.it),k=el.dataset.k;
+    if(k.startsWith('pr_')){s[k]=el.value;save();return keep()}
     if(k==='on'||k==='d'||k==='ras'){s[k]=el.checked;if(el.checked&&k!=='d')s[k==='on'?'ras':'on']=false;if(k==='on'&&s.on&&itemOf(el.dataset.it).dm)dmMaj(s);if(!s.on&&cur.cst)cur.cst=cur.cst.filter(c=>c.l!==el.dataset.it);save();return keep()}
     if(['dA','tA','twA','crep','tw'].includes(k)){if(k==='tw'){const i=+el.dataset.i;s.tw=(s.tw||[]).filter(x=>x!==i);if(el.checked)s.tw.push(i);s.tw.sort((a,b)=>a-b)}else s[k]=el.value.trim();
       dmMaj(s);save();return keep()}
@@ -6666,8 +6888,8 @@ async function exportPdf(v,envoi){
   row([LB('Type de visite'),[cb(f.typeVis==='Visite initiale','VISITE INITIALE'),gap(1),cb(f.typeVis==='Visite de contrôle','VISITE DE CONTRÔLE')]],LW);
   y+=4;
   row([HD('RÉSUMÉ DES DÉSORDRES RELEVÉS',{sz:8.5}),
-       [...Object.values(SUM).map(l=>tx(l,{al:'right'}))],
-       [...Object.keys(SUM).map(k=>cbs(ynC(sumVal(k,v))))]],[38,110,38]);
+       [...Object.values(SUM_DEC).map(l=>tx(l,{al:'right'}))],
+       [...Object.keys(SUM_DEC).map(k=>cbs(ynC(sumVal(k,v))))]],[38,110,38]);
   y+=4;
   row([HD('CARACTÉRISATION DE LA SITUATION ET CONCLUSION : Qualification des désordres',{sub:'Plusieurs cases « oui » peuvent être cochées'})],[CW]);
   row([LB('Non décence – Infraction RSD'),[cbs(ynC(f.cNd),{al:'center'})]],[60,126]);
@@ -6717,6 +6939,7 @@ async function exportPdf(v,envoi){
       if(d.ty&&d.tl===MEL){c3.push(gap(1),tx(d.tl+' :',{i:1}));d.ty.forEach((x,i)=>c3.push(cb(s.t.includes(i),x)))}
       if(d.norm&&s.on){const m=normeCAF(f.lNbOcc);if(m)c3.push(tx(`Norme CAF pour ${f.lNbOcc} occupant(s) : ${m} m² minimum. Superficie : ${f.lSurf||'non renseignée'} m².`))}
       if(c3.length)c3.push(gap(1));
+      if(d.pres){const t=presTexte(v,s);if(t)c3.push(tx(t))}
       c3.push(rt([['(3) '],[s.on?s.note:'',1]],{c:RED}));
       if(s.on)s.ph.forEach((p,i)=>{c3.push(gap(1),img(p.src,p.w,p.h,{maxH:62}),rt([[`Photo ${nums[d.id+':'+i]}${p.cap?' : ':''}`],[p.cap,1]],{sz:8,c:MUT}));if(p.com?.trim())c3.push(rt([[p.com.trim(),1]],{c:RED}))});
       row([s.on?{items:c1,fill:ROSE}:c1,[tx(d.ref||'',{sz:7.5,c:MUT}),...(d.rsd?[gap(1),tx(d.rsd,{sz:7.5,c:MUT})]:[])],c3,d.d?{items:[cb(s.on&&s.d,'',{cc:RED})],va:'middle'}:[]],IW,{keep:70});
@@ -6725,7 +6948,7 @@ async function exportPdf(v,envoi){
     notes(r.id==='r3'?[2,3]:r.id==='r6'?(pdl?[3,4,5,6]:[3,4,5,6,7]):[3]);
   }
   // La phrase fixe des justificatifs s'insère avant la première catégorie de travaux (ou après le premier paragraphe).
-  const travLines=t=>{const L=String(t||'').split('\n');if(String(t||'').trim()){let i=L.findIndex(l=>/^\d+\.\s/.test(l));if(i<0)i=L.findIndex(l=>!l.trim());if(i<0)i=L.length;L.splice(i,0,'\u0000'+justifTexte(v),'')}
+  const travLines=t=>{const L=String(t||'').split('\n');if(String(t||'').trim()&&!v.f.justifNon){let i=L.findIndex(l=>/^\d+\.\s/.test(l));if(i<0)i=L.findIndex(l=>!l.trim());if(i<0)i=L.length;L.splice(i,0,'\u0000'+justifTexte(v),'')}
     return L.map(l=>l.startsWith('\u0000')?tx(l.slice(1)):/^\d+\.\s/.test(l)?tx(l,{b:1,sz:9.5,c:ACC}):/^\s*◦/.test(l)?tx('-  '+l.replace(/^\s*◦\s*/,''),{ind:9}):/^\s*•/.test(l)?tx(l.trim(),{ind:3}):l.trim()?tx(l):gap(1.5))};
   if(pdl){
   /* --- permis de louer : travaux, contre-visite, signatures --- */
