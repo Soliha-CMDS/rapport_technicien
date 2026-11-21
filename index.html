@@ -5151,9 +5151,9 @@ const SUI_ET=[[0,'Premier contact avec SOLIHA (téléphone, mail, permanence, en
   [3,'Visite de contrôle de fin de travaux.','SOLIHA'],
   [3,'Envoi des factures et justificatifs de fin de travaux à MaPrimeRénov’.','SOLIHA'],
   [3,'Versement du solde de la subvention.','Anah']].map(([ph,t,q,n,pmo],i)=>({ph,t,q,n:n||String(i<11?i+1:i),pmo:!!pmo}));
-// Lien cliquable sous une étape du PDF : [texte, adresse].
-const SUI_LIEN={'11':['Formulaire de demande d’avance à télécharger : ','https://www.formulaires.service-public.gouv.fr/cerfas/13934'],
-  '11 b':['Formulaire de demande d’acompte à télécharger : ','https://www.anah.gouv.fr/document/cerfa1346702-demande-de-paiement-d-acompte-po']};
+// Lien cliquable sous une étape du PDF : [texte, adresse] ; le mot « formulaire » porte le lien (demande de l'utilisateur, 21/11/2026).
+const SUI_LIEN={'11':['Pour la demande d’avance, téléchargez le ','https://www.formulaires.service-public.gouv.fr/cerfas/13934'],
+  '11 b':['Pour la demande d’acompte, téléchargez le ','https://www.anah.gouv.fr/document/cerfa1346702-demande-de-paiement-d-acompte-po']};
 const SUI_DOCS=[['devis','Devis détaillés des artisans pour le scénario retenu, avec les quantités et prix unitaires, en précisant fourniture et pose.',
     ['N° SIREN de l’entreprise, adresse des travaux, nom et adresse du propriétaire ;','N° d’assurance décennale et nom de la compagnie d’assurance ;','pour les travaux d’économie d’énergie : qualification RGE de l’entreprise pour chaque type de travaux.']],
   ['dp','Déclaration préalable de travaux : vérifiez en mairie si elle est nécessaire. Si oui, envoyez-nous :',
@@ -5179,6 +5179,8 @@ const suiCat=v=>{const s=v.sui;return s.cat!==''&&s.cat!=null?+s.cat:mprCat(pars
 const suiPmo=v=>{const c=suiCat(v);return c==null||c<=1};
 const suiEtapes=v=>SUI_ET.filter(e=>!e.pmo||suiPmo(v));
 // Position de l'étape en cours dans la version ; une étape absente de la version (avance pour un ménage intermédiaire) vaut la suivante.
+// Numéro affiché : celui de la fiche étapes (11 b) en version très modeste / modeste, continu (1 à 16) en version intermédiaire / supérieur.
+const suiLab=(v,e)=>suiPmo(v)?e.n:String(suiEtapes(v).indexOf(e)+1);
 const suiPos=v=>{const E=suiEtapes(v),k=SUI_ET.findIndex(e=>e.n===v.sui.et),i=E.findIndex(e=>SUI_ET.indexOf(e)>=k);return i<0?E.length-1:i};
 const suiPld=v=>v.sui.aides.pld&&suiPmo(v);
 function suiControles(v){const L=[],f=v.f,add=(n,t,vw)=>L.push([n,t,vw]);
@@ -5192,14 +5194,14 @@ function suiControles(v){const L=[],f=v.f,add=(n,t,vw)=>L.push([n,t,vw]);
 
 /* --- écrans --- */
 // Écrans de la tuile « Fiche de suivi » du dossier d'audit ; « Terminé » revient au sommaire de la fiche (suivi).
-const suiTile=v=>`<button class="tile" data-act="go" data-v="suivi"><img class="ic" src="${ICO_DEG.synthese}" alt=""><span class="num">PROPRIÉTAIRE</span><span class="lbl">Fiche de suivi MaPrimeRénov’</span>${pills([[`Étape ${SUI_ET[SUI_ET.indexOf(suiEtapes(v)[suiPos(v)])].n}`,'info']])}</button>`;
+const suiTile=v=>`<button class="tile" data-act="go" data-v="suivi"><img class="ic" src="${ICO_DEG.synthese}" alt=""><span class="num">PROPRIÉTAIRE</span><span class="lbl">Fiche de suivi MaPrimeRénov’</span>${pills([[`Étape ${suiLab(v,suiEtapes(v)[suiPos(v)])}`,'info']])}</button>`;
 function suiView(app,bar,bi){if(!['suivi','setape','sdocs','strav','saides'].includes(view))return false;const v=cur,f=v.f,s=v.sui;bar.hidden=false;const fini=`<button class="btn-primary" data-act="go" data-v="suivi">Terminé</button>`,top=t=>topbar(t,who(v),'suivi');
   if(view==='suivi'){const ko=suiControles(v).filter(c=>c[0]==='ko').length,nt=suiTravTous(v).length,nd=suiDocsTous(v).length;
     const tile=(id,n,t,ic,st)=>`<button class="tile" data-act="go" data-v="${id}"><img class="ic" src="${ic}" alt=""><span class="num">${n}</span><span class="lbl">${esc(t)}</span>${pills(st)}</button>`;
     app.innerHTML=`${topbar('Fiche de suivi MaPrimeRénov’',who(v),'dash')}
      <p class="muted">Fiche recto-verso à remettre au propriétaire. Nom, adresse et date de visite : ceux du dossier d’audit.</p>
      <div class="tiles">
-      ${tile('setape','ÉTAPE','Où en est le dossier',ICO.synth,[[`Étape ${suiEtapes(v)[suiPos(v)].n}`,'info']])}
+      ${tile('setape','ÉTAPE','Où en est le dossier',ICO.synth,[[`Étape ${suiLab(v,suiEtapes(v)[suiPos(v)])}`,'info']])}
       ${tile('sdocs','DOCUMENTS','Documents à transmettre',ICO.admin,[[nd?nd+' document'+(nd>1?'s':''):'Aucun',nd?'info':'']])}
       ${tile('strav','TRAVAUX','Travaux préconisés',ICO.trav,[[nt?nt+' travau'+(nt>1?'x':''):'À faire',nt?'ok':'warn']])}
       ${tile('saides','REVENUS ET AIDES','Niveau de revenus, aides affichées',ICO.synth,[[suiCat(v)==null?'Revenus à saisir':SUI_CAT[suiCat(v)],suiCat(v)==null?'warn':'info'],[[s.aides.pa&&'Parcours accompagné',suiPld(v)&&'Logement Décent'].filter(Boolean).join(' + ')||'Aucune aide',s.aides.pa||suiPld(v)?'info':'warn']])}</div>
@@ -5209,7 +5211,7 @@ function suiView(app,bar,bi){if(!['suivi','setape','sdocs','strav','saides'].inc
      <p class="muted">Touchez l’étape où se trouve le propriétaire : elle sera marquée « Vous êtes ici », les précédentes seront cochées.</p>
      <p class="muted">Version ${suiPmo(v)?'très modeste / modeste : avec avance et acompte':'intermédiaire / supérieur : sans avance ni acompte'} (d’après le niveau de revenus).</p>
      ${SUI_PH.map(([t],p)=>`<h2 class="sec">${esc(t)}</h2><div class="chips" role="radiogroup" aria-label="${esc(t)}" style="flex-direction:column;align-items:stretch">${suiEtapes(v).map((e,i)=>e.ph!==p?'':
-       `<label class="chip" style="min-height:44px"><input type="radio" name="sui_et" data-sk="et" value="${esc(e.n)}" ${i===suiPos(v)?'checked':''}><b>${esc(e.n)}.</b>&nbsp;${esc(e.t)} (${esc(e.q)})</label>`).join('')}</div>`).join('')}`;
+       `<label class="chip" style="min-height:44px"><input type="radio" name="sui_et" data-sk="et" value="${esc(e.n)}" ${i===suiPos(v)?'checked':''}><b>${esc(suiLab(v,e))}.</b>&nbsp;${esc(e.t)} (${esc(e.q)})</label>`).join('')}</div>`).join('')}`;
     bi.innerHTML=fini;return true}
   if(view==='sdocs'){app.innerHTML=`${top('Documents à transmettre')}
      <p class="muted">Seuls les documents cochés figurent sur la fiche. Décochez ceux que le propriétaire vous a déjà remis.</p>
@@ -5272,18 +5274,23 @@ async function suiPdf(v,envoi){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'m
     doc.setFillColor(...ROSE);doc.setDrawColor(...RED);doc.setLineWidth(.6);doc.roundedRect(ML,y,CW,h,2,2,'FD');warn(ML+8,y+h/2);
     let yy=y+3;font(10.5,'bold',INK);L.forEach(l=>{doc.text(l,ML+15,yy+LH(10.5)*.78);yy+=LH(10.5)});font(8.5,'normal',MUT);S.forEach(l=>{doc.text(l,ML+15,yy+LH(8.5)*.78);yy+=LH(8.5)});y+=h+3};
   const qui=(q,x,yy)=>{const [fg,bg]=q==='Vous'?VOUS:AUT;font(7.5,'bold',fg);const w=19;doc.setFillColor(...bg);doc.roundedRect(x,yy-2.4,w,4.8,2.3,2.3,'F');doc.text(T(q),x+w/2,yy+.9,{align:'center'})};
-  const dossier=[suiNom(v)||'Propriétaire non renseigné',[f.adresse,cpv(v)].filter(filled).join(', ')].filter(filled).join(' · ');
 
   /* recto : où en est le dossier */
   await head('Votre dossier MaPrimeRénov’','où en êtes-vous ?','Étude personnalisée · Demande d’aide à l’amélioration de l’habitat');
-  {const rows=[['Bénéficiaire',dossier],['Date de la visite',f.dateVis?frDate(f.dateVis):''],['Votre interlocuteur',[[P.nom,P.qual].filter(Boolean).join(', '),P.tel,P.mail].filter(Boolean).join(' · ')]].filter(([,x])=>filled(x));
-    const R=rows.map(([l,x])=>[l,lines(x,CW-48,9.5)]),h=R.reduce((n,[,L])=>n+L.length*LH(9.5),0)+4+(R.length-1)*1;
-    doc.setFillColor(...TINT);doc.roundedRect(ML,y,CW,h,2,2,'F');let yy=y+2;for(const [l,L] of R){font(9,'normal',MUT);doc.text(T(l+' :'),ML+4,yy+LH(9.5)*.78);font(9.5,'bold',INK);L.forEach(t=>{doc.text(t,ML+44,yy+LH(9.5)*.78);yy+=LH(9.5)});yy+=1}y+=h+4}
-  {const lab=T(`Étape ${EV[pos].n}`);font(11,'bold',ACC);const lw=doc.getTextWidth(lab)+4,bw=CW-lw;
+  // Deux encadrés côte à côte : à gauche le technicien (bleu, bien visible), à droite le propriétaire et la visite.
+  {const G=8,bw=(CW-G)/2,pad=4,tw=bw-2*pad;
+    const tech=[[P.nom||'Technicien non renseigné',12.5,'bold'],[P.qual,9,'normal'],[P.tel&&'Tél. '+P.tel,11,'bold'],[P.mail,9.5,'normal']].filter(([x])=>filled(x)).map(([x,sz,st])=>[lines(x,tw,sz,st),sz,st]);
+    const prop=[[suiNom(v)||'Propriétaire non renseigné',12.5,'bold'],[[f.adresse,cpv(v)].filter(filled).join(', '),9.5,'normal'],[f.dateVis&&'Visite du '+frDate(f.dateVis),9.5,'bold']].filter(([x])=>filled(x)).map(([x,sz,st])=>[lines(x,tw,sz,st),sz,st]);
+    const hOf=B=>B.reduce((n,[L,sz])=>n+L.length*LH(sz),0),h=Math.max(hOf(tech),hOf(prop))+pad*2+5;
+    const boite=(x,titre,B,fond,cT,cTx,cK)=>{doc.setFillColor(...fond);doc.roundedRect(x,y,bw,h,2.5,2.5,'F');font(7.5,'bold',cK);doc.text(T(titre),x+pad,y+pad+2.2);let yy=y+pad+5;
+      B.forEach(([L,sz,st],k)=>{font(sz,st,k?cTx:cT);L.forEach(l=>{doc.text(l,x+pad,yy+LH(sz)*.78);yy+=LH(sz)})})};
+    boite(ML,'VOTRE CONTACT SOLIHA',tech,ACC,WHITE,[226,238,246],[190,218,236]);
+    boite(ML+bw+G,'VOTRE DOSSIER',prop,TINT,INK,INK,MUT);y+=h+4}
+  {const lab=T(`Étape ${suiLab(v,EV[pos])}`);font(11,'bold',ACC);const lw=doc.getTextWidth(lab)+4,bw=CW-lw;
     doc.setFillColor(227,231,234);doc.roundedRect(ML,y,bw,3,1.5,1.5,'F');doc.setFillColor(...ACC);doc.roundedRect(ML,y,Math.max(3,bw*(pos+1)/EV.length),3,1.5,1.5,'F');doc.text(lab,ML+CW,y+3,{align:'right'});y+=6.5}
   const RH=7.2,GAP=1,X=ML+11,RW=CW-11,LW=RW-9.5-23;
   // Lien sous l'étape : texte et adresse sur une ligne, ou l'adresse seule sur la ligne suivante si elle ne tient pas.
-  const lienL=n=>{const l=SUI_LIEN[n];if(!l)return 0;font(7.8,'normal');const wa=doc.getTextWidth(T(l[0]));font(7.8,'bold');return wa+doc.getTextWidth(l[1].replace('https://',''))>LW?2:1};
+  const lienL=n=>{const l=SUI_LIEN[n];if(!l)return 0;font(7.8,'normal');const wa=doc.getTextWidth(T(l[0]));font(7.8,'bold');return wa+doc.getTextWidth('formulaire')>LW?2:1};
   // Texte d'une étape selon son état (en cours : gras) ; jusqu'à 3 lignes, la ligne s'agrandit au-delà de 2.
   const txtOf=(e,i)=>{const ici=i===pos,suite=i===pos+1,lib=suite?'Prochaine étape : '+e.t.charAt(0).toLowerCase()+e.t.slice(1):e.t,st=ici?'bold':'normal',tw=RW-(ici?55:33),sz=lines(lib,tw,ici?9.5:9,st).length>1?7.8:(ici?9.5:9);
     return {lib,st,sz,L:lines(lib,tw,sz,st).slice(0,3)}};
@@ -5295,12 +5302,12 @@ async function suiPdf(v,envoi){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'m
       if(ici){doc.setFillColor(...ROSE);doc.setDrawColor(...RED);doc.setLineWidth(.6)}else if(suite){doc.setFillColor(243,248,251);doc.setDrawColor(...ACC);doc.setLineWidth(.35);doc.setLineDashPattern([1,.8],0)}else{doc.setFillColor(...(fait?[250,251,252]:WHITE));doc.setDrawColor(...LINE);doc.setLineWidth(.3)}
       const rh=rhOf(E.find(x=>x[1]===i)[0],i),ext=extOf(SUI_ET.find(x=>x.n===n),i);doc.roundedRect(X,y,RW,rh,1.4,1.4,'FD');doc.setLineDashPattern([],0);const cy=y+(RH+ext)/2;
       doc.setFillColor(...(ici?RED:fait?OK:suite?ACC:[233,237,240]));doc.circle(X+4.5,cy,2.7,'F');
-      if(fait)tick(X+4.5,cy,WHITE);else{font(n.length>2?6.5:8,'bold',ici||suite?WHITE:MUT);doc.text(T(n),X+4.5,cy+1,{align:'center'})}
+      if(fait)tick(X+4.5,cy,WHITE);else{const nl=suiLab(v,EV[i]);font(nl.length>2?6.5:8,'bold',ici||suite?WHITE:MUT);doc.text(T(nl),X+4.5,cy+1,{align:'center'})}
       const {st,sz,L}=txtOf(SUI_ET.find(x=>x.n===n),i);font(sz,st,fait?MUT:INK);L.forEach((l,k)=>doc.text(l,X+9.5,cy+1-(L.length-1)*LH(sz)/2+k*LH(sz)));
       if(ici){font(7.5,'bold',WHITE);const lw=doc.getTextWidth(T('VOUS ÊTES ICI'))+4;doc.setFillColor(...RED);doc.roundedRect(X+RW-23-lw,cy-2.4,lw,4.8,1,1,'F');doc.text(T('VOUS ÊTES ICI'),X+RW-23-lw/2,cy+.9,{align:'center'})}
       qui(q,X+RW-21,cy);
-      if(SUI_LIEN[n]){const [a,u]=SUI_LIEN[n],ua=u.replace('https://',''),nl=lienL(n);font(7.8,'normal',fait?MUT:INK);const wa=doc.getTextWidth(T(a));let yl=y+RH+ext+2.6;doc.text(T(a),X+9.5,yl);
-        const xu=nl>1?X+9.5:X+9.5+wa;if(nl>1)yl+=4.1;font(7.8,'bold',ACC);const wu=doc.getTextWidth(ua);doc.text(ua,xu,yl);doc.setDrawColor(...ACC);doc.setLineWidth(.2);doc.line(xu,yl+.5,xu+wu,yl+.5);doc.link(xu,yl-2.6,wu,3.4,{url:u})}
+      if(SUI_LIEN[n]){const [a,u]=SUI_LIEN[n],ua='formulaire',nl=lienL(n);font(7.8,'normal',fait?MUT:INK);const wa=doc.getTextWidth(T(a));let yl=y+RH+ext+2.6;doc.text(T(a),X+9.5,yl);
+        const xu=nl>1?X+9.5:X+9.5+wa+1.2;if(nl>1)yl+=4.1;font(7.8,'bold',ACC);const wu=doc.getTextWidth(ua);doc.text(ua,xu,yl);doc.setDrawColor(...ACC);doc.setLineWidth(.2);doc.line(xu,yl+.5,xu+wu,yl+.5);doc.link(xu,yl-2.6,wu,3.4,{url:u})}
       y+=rh+GAP}y+=1.5}
   {font(7.5,'normal',MUT);let x=ML;for(const [c,t] of [[OK,'Étape faite'],[RED,'Aujourd’hui'],[ACC,'Prochaine étape']]){doc.setFillColor(...c);doc.circle(x+1.3,y+1.3,1.3,'F');doc.text(T(t),x+3.5,y+2.2);x+=doc.getTextWidth(T(t))+9}
     doc.text(T('« Vous » : action à votre charge'),x+2,y+2.2);y+=6}
@@ -5348,7 +5355,8 @@ queueMicrotask(()=>{const v={f:{pNom:'',dateVis:''},sui:suiMigre({et:6,docs:{dp:
   // Niveau de revenus : plafonds de Loc'Avantages (1 personne : 17 363 € très modeste), version et position de l'étape.
   const w=c=>({f:{},sui:suiMigre({et:'11',...c})});console.assert(suiCat(w({rfr:'17 363',foyer:'1'}))===0&&suiCat(w({rfr:'17364',foyer:'1'}))===1&&suiCat(w({cat:'3'}))===3&&suiCat(w({}))==null
     &&suiEtapes(w({})).length===18&&suiEtapes(w({cat:'2'})).length===16&&suiEtapes(w({cat:'2'}))[suiPos(w({cat:'2'}))].n==='12'&&suiEtapes(w({cat:'1'}))[suiPos(w({cat:'1'}))].n==='11'
-    &&suiPld(w({cat:'1'}))&&!suiPld(w({cat:'2'})),'ASSERT FAIL suiCat / suiEtapes / suiPos');
+    &&suiPld(w({cat:'1'}))&&!suiPld(w({cat:'2'}))&&suiEtapes(w({cat:'2'})).map(e=>suiLab(w({cat:'2'}),e)).join()==='1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16'
+    &&suiLab(w({cat:'0'}),SUI_ET[11])==='11 b'&&suiLab(w({cat:'0'}),SUI_ET[12])==='12','ASSERT FAIL suiCat / suiEtapes / suiPos');
   v.sui.trav=['VMC double flux'];v.sui.travL=['  ','Reprise de l’enduit'];v.sui.docsL=['Avis d’imposition',''];
   console.assert(suiTravTous(v).join('|')==='VMC double flux|Reprise de l’enduit'&&suiDocsTous(v).map(d=>d[0]||d[1]).join('|')==='devis|Avis d’imposition','ASSERT FAIL suiTravTous/suiDocsTous');
   console.assert(suiNom({f:{pNom:'DURAND',pPrenom:'Paul'}})==='DURAND Paul'&&suiNom({f:{pNom:'DURAND'}})==='DURAND','ASSERT FAIL suiNom');
@@ -5361,7 +5369,7 @@ queueMicrotask(()=>{const v={f:{pNom:'',dateVis:''},sui:suiMigre({et:6,docs:{dp:
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.21-1934';
+const APP_VER='2026.11.21-2035';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
