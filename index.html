@@ -3626,6 +3626,7 @@ function audView(app,bar,bi){
       ${tile('au-col','data-c="constats"','CONSTATS','Désordres et particularités','humidite',cnt('constats'))}
       ${tile('au-col','data-c="contraintes"','CONTRAINTES','Contraintes','depose',cnt('contraintes'))}
       ${tile('au-col','data-c="travaux"','PROPRIÉTAIRE','Travaux déjà réalisés','synthese',[[a.aucunTrav?'Aucun':a.travaux.length?a.travaux.length+' travaux':'À faire',a.aucunTrav||a.travaux.length?'ok':'']])}
+      ${suiTile(cur)}
      </div>`;
     bi.innerHTML=`<button data-act="au-constat">${svg('plus')}Constat</button><button class="btn-primary" data-act="go" data-v="afiche">Fiche de saisie DPEV5</button>`;return true}
   if(view==='adossier'){app.innerHTML=`${topbar('Dossier et propriétaire',who(cur),'dash')}${cbAvert(cur)}<div class="form">${AUD_ADM.map(field).join('')}</div>`;
@@ -4200,7 +4201,8 @@ const ergoZDef=z=>z.k==='libre'?ERGO_ZLIBRE:ERGO_ZONES.find(d=>d.k===z.k);
 const ergoBlocStd=d=>d.bloc.filter(x=>!x[2]?.off).map(x=>x[0]);
 const ergoZNew=(d,t)=>({id:ergoId(),k:d.k,t:t||'',actif:true,obs:'',L:[],...(d.bloc?{b:{on:ergoBlocStd(d),p:{},urg:'',ret:'',hors:false,motif:'',com:''}}:{})});
 const ergoZonesDefaut=()=>ERGO_ZONES.map(d=>ergoZNew(d));
-function ergoMigre(v){if(!Array.isArray(v.z))v.z=ergoZonesDefaut();return v}
+// Plan de pièce d'avant le 21/11/2026 (rectangle ou L tapés) : contour converti en liste d'angles, modifiable mur par mur.
+function ergoMigre(v){if(!Array.isArray(v.z))v.z=ergoZonesDefaut();for(const z of v.z)if(z.plan&&!z.plan.pts)z.plan.pts=epPts(z.plan);return v}
 const ergoZTitre=z=>{const d=ergoZDef(z);return (z.k==='libre'?z.t||'Zone personnalisée':d.t+(d.s?' – '+d.s:''))+(z.n?' ('+z.n+')':'')};
 // Paramètres d'un libellé : [clé, libellé du champ, défaut, obligatoire].
 const ERGO_PRX=/\{(\w+):([^=}]*)=([^}]*)\}/g;
@@ -4298,7 +4300,10 @@ function ergoInp(el){ergoAposEl(el);if(!el.dataset.zk||['checkbox','radio'].incl
     if(l.urg!=='Aucun'){l.urg='Aucun';l.ret='';const r=document.querySelector(`input[name="${el.dataset.zk}.L.${m[1]}.urg"][value="Aucun"]`);if(r)r.checked=true}}
   save();return true}
 function ergoChgZ(el){
-  if(el.dataset.zk){if(['checkbox','radio'].includes(el.type)){zSet(el);save();keep()}return true}
+  if(el.dataset.zk){if(['checkbox','radio'].includes(el.type)){zSet(el);save();keep();return true}
+    if(filled(el.value))el.closest('.field')?.querySelector('.hint.warn')?.remove(); // « À renseigner » retiré sans réafficher l'écran
+    if(/^b\.p\.d2\./.test(el.dataset.zp)){epSyncPreco(cur.z.find(x=>x.id===el.dataset.zk));save()}  // cotes du receveur → plan de l'après
+    return true}
   if(el.dataset.zins){const i=el.value;el.value='';if(i==='')return true;const z=cur.z.find(x=>x.id===el.dataset.zins),ph=ERGO_PH[el.dataset.ph][+i],t=ergoPhr(cur,ph.t),g=/^new:(\w+)$/.exec(el.dataset.zp);let p=el.dataset.zp,d=0;
     // Préconisation type : nouvelle ligne libre de la liste (data-zp = new:<liste>), avec l'urgence par défaut de la phrase.
     if(g){z.L.push({id:ergoId(),g:g[1],lib:t,p:{},urg:ph.u||(ergoAdapte(t)?'Aucun':''),ret:'',hors:false,motif:'',com:''});p=`L.${z.L.length-1}.lib`}
@@ -4622,6 +4627,10 @@ const S={
  bco:{n:'Barre d’appui coudée',w:60,d:30,t:'0,60 m',f:(w,d)=>S.bar.f(w,10)+badge(w,'M2 10H9L14 2')},
  bt:{n:'Barre d’appui en T',w:60,d:30,t:'0,60 m',f:(w,d)=>S.bar.f(w,10)+badge(w,'M2 2H14M8 2V12')},
  ss:{n:'Sèche-serviettes',w:50,d:12,f:(w,d)=>`<rect x="5" y="0" width="3" height="4" fill="#9aa5ad"/><rect x="${w-8}" y="0" width="3" height="4" fill="#9aa5ad"/><g ${O}><rect x="0" y="4" width="${w}" height="${d-4}" rx="2" fill="#f7f8f9" stroke="${T}" stroke-width="1"/></g>${Array.from({length:Math.max(1,Math.floor((w-10)/4))},(_,i)=>`<path d="M${7+i*4} 6V${d-2}" stroke="#aeb8bf" stroke-width="1.6" stroke-linecap="round"/>`).join('')}<circle cx="4.5" cy="${(d+4)/2}" r="3" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/><circle cx="${w-4.5}" cy="${(d+4)/2}" r="3" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/>`},
+ // Mitigeurs vus de dessus : corps chromé contre le mur, point rouge (chaud) à gauche, bleu (froid) à droite.
+ mid:{n:'Mitigeur de douche',w:30,d:10,f:(w,d)=>`<g ${O}><rect x="3" y="1" width="${w-6}" height="6" rx="3" fill="url(#ep-chr)" stroke="${T}" stroke-width=".6"/><circle cx="4" cy="4" r="4" fill="url(#ep-chr)" stroke="${T}" stroke-width=".7"/><circle cx="${w-4}" cy="4" r="4" fill="url(#ep-chr)" stroke="${T}" stroke-width=".7"/></g><circle cx="4" cy="4" r="1.5" fill="#c0392b"/><circle cx="${w-4}" cy="4" r="1.5" fill="#2e6fb0"/><circle cx="${w/2}" cy="${d-2}" r="2" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/>`},
+ mib:{n:'Mitigeur de baignoire',w:30,d:18,f:(w,d)=>`<g ${O}><rect x="${w/2-2.5}" y="5" width="5" height="${d-5}" rx="2.5" fill="url(#ep-chr)" stroke="${T}" stroke-width=".6"/><rect x="3" y="1" width="${w-6}" height="6" rx="3" fill="url(#ep-chr)" stroke="${T}" stroke-width=".6"/><circle cx="4" cy="4" r="4" fill="url(#ep-chr)" stroke="${T}" stroke-width=".7"/><circle cx="${w-4}" cy="4" r="4" fill="url(#ep-chr)" stroke="${T}" stroke-width=".7"/></g><circle cx="4" cy="4" r="1.5" fill="#c0392b"/><circle cx="${w-4}" cy="4" r="1.5" fill="#2e6fb0"/>`},
+ mil:{n:'Mitigeur de lavabo',w:12,d:20,f:(w,d)=>`<g ${O}><rect x="${w/2-1.5}" y="5" width="3" height="${d-6}" rx="1.5" fill="url(#ep-chr)" stroke="${T}" stroke-width=".5"/><circle cx="${w/2}" cy="5" r="4.5" fill="url(#ep-chr)" stroke="${T}" stroke-width=".7"/></g><circle cx="1.5" cy="5" r="1.5" fill="#c0392b"/><circle cx="${w-1.5}" cy="5" r="1.5" fill="#2e6fb0"/>`},
  pb:{n:'Porte battante',w:80,d:80,mur:1,vh:80,t:'passage 0,80 m',f:(w)=>`${ouv(w)}<path d="M4 ${w}A${w-4} ${w-4} 0 0 0 ${w} 0" fill="none" stroke="${T}" stroke-width=".9" stroke-dasharray="4 3"/><g ${O}><rect x="0" y="0" width="4" height="${w-2}" fill="url(#ep-bois)" stroke="${T}" stroke-width=".9"/></g><circle cx="2" cy="${w*0.82}" r="1.6" fill="url(#ep-chr)" stroke="${T}" stroke-width=".4"/>`},
  pc:{n:'Porte coulissante',w:80,d:14,mur:1,top:34,ex:56,vh:14,t:'passage 0,80 m',f:(w)=>`${ouv(w)}<path d="M-5 -23H${w*1.7}" stroke="${T}" stroke-width="1.2"/><g ${O}><rect x="-5" y="-20.5" width="${w+10}" height="5" fill="url(#ep-bois)" stroke="${T}" stroke-width=".9"/></g><path d="M${w*0.4} -30H${w*1.1}l-6 -4m6 4l-6 4" stroke="${T}" fill="none"/>`},
  f1:{n:'Fenêtre 1 vantail',w:60,d:60,mur:1,vh:60,t:'largeur 0,60 m',f:(w)=>`${ouv(w)}<path d="M0 -9H${w}M0 -3H${w}" stroke="#5d9cc2" stroke-width="1"/><path d="M3 ${w-3}A${w-3} ${w-3} 0 0 0 ${w} 0" fill="none" stroke="${T}" stroke-width=".8" stroke-dasharray="4 3"/><g ${O}><rect x="0" y="0" width="3" height="${w-3}" fill="#fff" stroke="${T}" stroke-width=".9"/></g><path d="M1.5 3V${w-6}" stroke="#5d9cc2" stroke-width=".8"/>`},
@@ -4633,58 +4642,145 @@ const S={
 const cm=v=>(v/100).toFixed(2).replace('.',',');
 const pose=(k,x,y,r=0,w,d)=>{const s=S[k];return `<g transform="translate(${x} ${y}) rotate(${r})">${s.f(w||s.w,d||s.d)}</g>`};
 // Cotes modifiables par symbole (par défaut largeur et profondeur)
-const DIMS={bar:[['w','Longueur']],bco:[['w','Longueur']],bt:[['w','Longueur']],pf:[['w','Longueur']],pv:[['w','Longueur']],ss:[['w','Largeur']],gir:[['w','Diamètre']]};
+const DIMS={bar:[['w','Longueur']],bco:[['w','Longueur']],bt:[['w','Longueur']],pf:[['w','Longueur']],pv:[['w','Longueur']],ss:[['w','Largeur']],mid:[['w','Largeur']],mib:[['w','Largeur']],gir:[['w','Diamètre']]};
 return {S,pose,DIMS,DEFS,cm,T,VERT,O}})();
 
-/* --- Données d'une zone : z.plan = {f:'rect'|'L', L, l (cm), a, b (retrait du L, cm), av:{ouv, el} (avant), ap:{ouv, el}|null (après)}.
-   Le contour est commun à l'avant et à l'après. ouv = porte ou fenêtre sur le mur m (de pts[m] à pts[m+1]) :
-   {k, m, p (cm depuis le début du mur), w, gd (gonds ou coulisse de l'autre côté), ext (ouvre vers l'extérieur)}.
+/* --- Données d'une zone : z.plan = {pts:[[x,y],…] (contour intérieur, cm), av:{ouv, el} (avant), ap:{ouv, el}|null (après)}.
+   Le contour est commun à l'avant et à l'après ; mur m = de pts[m] à pts[m+1]. Anciens plans : f ('rect'|'L'), L, l, a, b, convertis par ergoMigre.
+   ouv = porte ou fenêtre sur le mur m : {k, m, p (cm depuis le début du mur), w, gd (gonds ou coulisse de l'autre côté), ext (ouvre vers l'extérieur)}.
    el = élément posé : {k, x, y (coin, cm), r (0, 90, 180, 270), w, d}. Zone sans plan : pas de clé plan. --- */
 const EP_OUV=['pb','pc','f1','f2'];
-const EP_FAM=[['Sanitaires',['wc','wcs','bid','lav','mv1','mv2','bai']],['Douche',['dou','rec','recc','recq','cab','pf','pv','sie']],
+const EP_FAM=[['Sanitaires',['wc','wcs','bid','lav','mil','mv1','mv2','bai','mib']],['Douche',['dou','rec','recc','recq','cab','pf','pv','sie','mid']],
   ['Aides',['bar','bco','bt','ss']],['Portes et fenêtres',EP_OUV],['Circulation',['esc','ram','gir']]];
+// Petits objets fixés au mur : numéro posé devant eux, sinon il cache le symbole (barre coudée).
+const EP_PETIT=['bar','bco','bt','ss','pf','pv','mid','mib','mil'];
+// Receveur ou douche dont les cotes viennent de la préconisation « Dimensions : L × l cm » (d2).
+const EP_REC=['rec','recc','dou'];
+// Couches de dessin, quel que soit l'ordre de pose : cercle de giration, puis sol (douche, receveur, baignoire, escalier, rampe), puis équipements, puis petits objets muraux.
+const epCouche=k=>k==='gir'?0:['dou','rec','recc','recq','cab','bai','esc','ram'].includes(k)?1:EP_PETIT.includes(k)?3:2;
 const epSnap=v=>Math.round(v/5)*5; // calage à 5 cm, comme l'outil plan de l'audit
 // Contour intérieur, dans le sens des aiguilles d'une montre à l'écran : l'intérieur est à droite de chaque mur.
-const epPts=P=>P.f==='L'?[[0,0],[P.L,0],[P.L,P.l-P.b],[P.L-P.a,P.l-P.b],[P.L-P.a,P.l],[0,P.l]]:[[0,0],[P.L,0],[P.L,P.l],[0,P.l]];
+const epForme=(f,L,l)=>f==='L'?[[0,0],[L,0],[L,epSnap(l*.6)],[epSnap(L*.6),epSnap(l*.6)],[epSnap(L*.6),l],[0,l]]:[[0,0],[L,0],[L,l],[0,l]];
+const epPts=P=>P.pts||(P.f==='L'?[[0,0],[P.L,0],[P.L,P.l-P.b],[P.L-P.a,P.l-P.b],[P.L-P.a,P.l],[0,P.l]]:[[0,0],[P.L,0],[P.L,P.l],[0,P.l]]);
+const epBox=pts=>{const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);return [Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)]};
 function epMur(pts,m){const a=pts[m],b=pts[(m+1)%pts.length],len=Math.hypot(b[0]-a[0],b[1]-a[1]);return {a,len,ux:(b[0]-a[0])/len,uy:(b[1]-a[1])/len}}
-// Centre d'un élément : la rotation se fait autour de son coin (x, y).
-function epCentre(o){const a=(o.r||0)*Math.PI/180,cx=o.w/2,cy=(o.k==='gir'?o.w:EPL.S[o.k].vh||o.d)/2;return [o.x+cx*Math.cos(a)-cy*Math.sin(a),o.y+cx*Math.sin(a)+cy*Math.cos(a)]}
+const epH=o=>o.k==='gir'?o.w:EPL.S[o.k].vh||o.d;
+// Point (lx, ly) du repère de l'élément, dans le plan : la rotation se fait autour du coin (x, y).
+function epLoc(o,lx,ly){const a=(o.r||0)*Math.PI/180;return [o.x+lx*Math.cos(a)-ly*Math.sin(a),o.y+lx*Math.sin(a)+ly*Math.cos(a)]}
+const epCentre=o=>epLoc(o,o.w/2,epH(o)/2);
+const epNumPt=o=>EP_PETIT.includes(o.k)?epLoc(o,o.w/2,epH(o)+11):epCentre(o);
+// Distance d'un point au rectangle d'un élément (0 dedans), et à un segment.
+function epDistEl(o,p){const a=-(o.r||0)*Math.PI/180,X=p[0]-o.x,Y=p[1]-o.y,lx=X*Math.cos(a)-Y*Math.sin(a),ly=X*Math.sin(a)+Y*Math.cos(a);
+  return Math.hypot(Math.max(-lx,0,lx-o.w),Math.max(-ly,0,ly-epH(o)))}
+function epDistSeg(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy||1)));return Math.hypot(a[0]+t*dx-p[0],a[1]+t*dy-p[1])}
+// Pastilles numérotées sans chevauchement : place voulue (epNumPt) si elle est libre, sinon place libre la plus proche
+// (cercles de 22 à 94 cm autour), dans la pièce, à l'écart des autres pastilles et des petits objets. Trait de rappel si elle a bougé.
+// Petits objets placés d'abord : leur pastille doit rester près d'eux ; celle d'un gros objet peut aller n'importe où dessus.
+function epPastilles(P,V){const pts=epPts(P),lab=epNum(V),pet=lab.filter(o=>EP_PETIT.includes(o.k)),res=[];
+  const libre=(p,o)=>epDans(p,pts)&&pts.every((a,i)=>epDistSeg(p,a,pts[(i+1)%pts.length])>=10)&&res.every(r=>Math.hypot(r.x-p[0],r.y-p[1])>=20)&&pet.every(q=>epDistEl(q,p)>=(q===o?3:10));
+  for(const o of [...pet,...lab.filter(o=>!EP_PETIT.includes(o.k))]){const p0=epNumPt(o),pe=EP_PETIT.includes(o.k),an=pe?epLoc(o,o.w/2,epH(o)):epCentre(o);let p=p0;
+    if(!libre(p0,o))find:for(let r=22;r<=94;r+=12)for(let k=0;k<16;k++){const a=k*Math.PI/8,q=[an[0]+r*Math.cos(a),an[1]+r*Math.sin(a)];if(libre(q,o)){p=q;break find}}
+    res.push({o,j:lab.indexOf(o),x:p[0],y:p[1],trait:Math.hypot(p[0]-p0[0],p[1]-p0[1])>1,ax:an[0],ay:an[1]})}
+  return res}
 const epNum=V=>V.el.filter(o=>o.k!=='gir'); // éléments numérotés (légende), dans l'ordre de pose
-const epNeuf=()=>({f:'rect',L:250,l:200,a:100,b:80,av:{ouv:[],el:[]},ap:null});
-// Après un changement de forme ou de cote : ouvertures des murs disparus retirées, les autres ramenées dans leur mur.
+const epNeuf=()=>({pts:epForme('rect',250,200),av:{ouv:[],el:[]},ap:null});
+
+/* --- Géométrie : contour valable, collisions avec les murs. --- */
+const epAire=pts=>pts.reduce((s,a,i)=>{const b=pts[(i+1)%pts.length];return s+a[0]*b[1]-b[0]*a[1]},0)/2;
+// Segments [a,b] et [c,d] qui se croisent franchement : un simple contact ne compte pas.
+function epCroise(a,b,c,d){const o=(p,q,r)=>(q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]);return o(c,d,a)*o(c,d,b)<0&&o(a,b,c)*o(a,b,d)<0}
+function epDans(p,pts){let r=false;for(let i=0,j=pts.length-1;i<pts.length;j=i++){const [xi,yi]=pts[i],[xj,yj]=pts[j];if((yi>p[1])!==(yj>p[1])&&p[0]<(xj-xi)*(p[1]-yi)/(yj-yi)+xi)r=!r}return r}
+// Contour valable : 3 angles au moins, murs de 10 cm au moins, sens horaire, aucun mur qui en croise un autre.
+function epContourOk(pts){const n=pts.length;if(n<3||epAire(pts)<=0)return false;
+  for(let i=0;i<n;i++){if(epMur(pts,i).len<10)return false;for(let j=i+2;j<n;j++)if(!(i===0&&j===n-1)&&epCroise(pts[i],pts[(i+1)%n],pts[j],pts[(j+1)%n]))return false}return true}
+// Élément dans la pièce : ses 4 coins (rentrés de 0,5 cm : il peut toucher un mur) à l'intérieur, et aucun mur ne le traverse. Le cercle de giration est libre.
+function epLibre(P,o){if(o.k==='gir')return true;const pts=epPts(P),h=epH(o),e=.5,c=[[e,e],[o.w-e,e],[o.w-e,h-e],[e,h-e]].map(([x,y])=>epLoc(o,x,y));
+  return c.every(p=>epDans(p,pts))&&c.every((p,i)=>pts.every((a,j)=>!epCroise(p,c[(i+1)%4],a,pts[(j+1)%pts.length])))}
+// Élément qui traverse un mur : déplacé à la position libre la plus proche (pas de 5 cm, 2 m au plus). Faux s'il ne tient nulle part.
+function epCaser(P,o){if(epLibre(P,o))return true;const x0=o.x,y0=o.y;
+  for(let r=5;r<=200;r+=5){const C=[];for(let i=-r;i<=r;i+=5)C.push([i,-r],[i,r],[-r,i],[r,i]);C.sort((a,b)=>Math.hypot(...a)-Math.hypot(...b));
+    for(const [dx,dy] of C){o.x=x0+dx;o.y=y0+dy;if(epLibre(P,o))return true}}
+  o.x=x0;o.y=y0;return false}
+
+/* --- Contour : murs et angles. --- */
+// Après un changement de contour : ouvertures des murs disparus retirées, les autres ramenées dans leur mur.
 function epFixOuv(P){const pts=epPts(P);for(const V of [P.av,P.ap].filter(Boolean))V.ouv=V.ouv.filter(o=>o.m<pts.length).map(o=>{const M=epMur(pts,o.m);o.w=Math.min(o.w,M.len);o.p=Math.max(0,Math.min(o.p,M.len-o.w));return o})}
-// Changement de forme : chaque ouverture garde son mur réel (bas et gauche du rectangle = murs 4 et 5 du L) ; celles du décrochement du L sont retirées.
-function epForme(P,f){if(P.f===f)return;const map=f==='L'?{0:[0,0],1:[1,0],2:[4,-P.a],3:[5,0]}:{0:[0,0],1:[1,0],4:[2,P.a],5:[3,0]};
-  for(const V of [P.av,P.ap].filter(Boolean))V.ouv=V.ouv.filter(o=>map[o.m]).map(o=>({...o,m:map[o.m][0],p:o.p+map[o.m][1]}));P.f=f;epFixOuv(P)}
-// Pose au point p : une ouverture va sur le mur le plus proche, un élément est centré sur p.
-function epPoser(P,V,k,p){const s=EPL.S[k];
+const epOuvMap=(P,f)=>{for(const V of [P.av,P.ap].filter(Boolean))V.ouv.forEach(f)};
+// Mur m glissé parallèlement à lui-même de « off » cm (vers l'extérieur si positif) : les murs voisins s'allongent ou raccourcissent.
+function epGlisseMur(pts,m,off){const n=pts.length,M=epMur(pts,m),q=pts.map(p=>[...p]);for(const i of [m,(m+1)%n])q[i]=[q[i][0]+M.uy*off,q[i][1]-M.ux*off];return epContourOk(q)?q:null}
+// Longueur tapée : la fin du mur avance dans son axe et le mur suivant suit en restant parallèle à lui-même.
+function epLongueur(pts,m,v){const n=pts.length,M=epMur(pts,m),d=v-M.len,q=pts.map(p=>[...p]);
+  for(const i of n>3?[(m+1)%n,(m+2)%n]:[(m+1)%n])q[i]=[q[i][0]+M.ux*d,q[i][1]+M.uy*d];return epContourOk(q)?q:null}
+// Angle ajouté au milieu du mur m : les ouvertures de la seconde moitié passent sur le nouveau mur.
+function epCoupe(P,m){const pts=epPts(P),M=epMur(pts,m),h=M.len/2;
+  P.pts=[...pts.slice(0,m+1),[M.a[0]+M.ux*h,M.a[1]+M.uy*h],...pts.slice(m+1)];
+  epOuvMap(P,o=>{if(o.m>m)o.m++;else if(o.m===m&&o.p>=h){o.m++;o.p-=h}});epFixOuv(P)}
+// Angle c retiré : ses deux murs n'en font plus qu'un. Faux si le contour obtenu n'est pas valable.
+function epRetireAngle(P,c){const pts=epPts(P),n=pts.length,q=pts.filter((_,i)=>i!==c);if(!epContourOk(q))return false;
+  const av=(c+n-1)%n,lav=epMur(pts,av).len,nv=c>0?c-1:n-2;P.pts=q;
+  epOuvMap(P,o=>{if(o.m===c){o.m=nv;o.p+=lav}else if(o.m===av)o.m=nv;else if(o.m>c)o.m--});epFixOuv(P);return true}
+// Guides d'un angle glissé : alignement sur les autres angles (donc 90° avec ses voisins), diagonale à 45° depuis un voisin. Renvoie [point, guides].
+function epAimant(pts,c,p,mode){const g=[];if(mode==='libre')return [p,g];const tol=12,n=pts.length;let [x,y]=p,bx=null,by=null;
+  pts.forEach((q,i)=>{if(i===c)return;const ex=Math.abs(q[0]-x),ey=Math.abs(q[1]-y);if(ex<tol&&(!bx||ex<bx.d))bx={d:ex,q};if(ey<tol&&(!by||ey<by.d))by={d:ey,q}});
+  if(bx)x=bx.q[0];if(by)y=by.q[1];
+  if(mode==='45'&&!(bx&&by))diag:for(const q of [pts[(c+n-1)%n],pts[(c+1)%n]])for(const s of [1,-1]){
+    if(Math.abs((y-q[1])-s*(x-q[0]))/Math.SQRT2>=tol)continue;
+    if(bx)y=q[1]+s*(x-q[0]);else if(by)x=q[0]+s*(y-q[1]);else{const t=((x-q[0])+s*(y-q[1]))/2;x=q[0]+t;y=q[1]+s*t}
+    x=Math.round(x);y=Math.round(y);g.push([q[0],q[1],x,y]);break diag}
+  if(bx)g.push([bx.q[0],bx.q[1],x,y]);if(by)g.push([by.q[0],by.q[1],x,y]);return [[x,y],g]}
+
+// Pose au point p : une ouverture va sur le mur le plus proche, un élément est centré sur p puis écarté des murs. D = cotes de la préconisation pour un receveur.
+function epPoser(P,V,k,p,D){const s=EPL.S[k];
   if(EP_OUV.includes(k)){const pts=epPts(P);let b=null;
     pts.forEach((_,m)=>{const M=epMur(pts,m),t=Math.max(0,Math.min(M.len,(p[0]-M.a[0])*M.ux+(p[1]-M.a[1])*M.uy)),d=Math.hypot(M.a[0]+M.ux*t-p[0],M.a[1]+M.uy*t-p[1]);if(!b||d<b.d)b={m,t,d,len:M.len}});
     const w=Math.min(s.w,b.len);V.ouv.push({k,m:b.m,p:Math.max(0,Math.min(b.len-w,epSnap(b.t-w/2))),w,gd:false,ext:false});return {t:'o',i:V.ouv.length-1}}
-  const w=s.w,d=k==='gir'?s.w:s.d;V.el.push({k,x:epSnap(p[0]-w/2),y:epSnap(p[1]-(k==='gir'?w:s.vh||d)/2),r:0,w,d});return {t:'e',i:V.el.length-1}}
+  const [w,d]=D&&EP_REC.includes(k)?D:[s.w,k==='gir'?s.w:s.d],o={k,x:0,y:0,r:0,w,d};o.x=epSnap(p[0]-w/2);o.y=epSnap(p[1]-epH(o)/2);epCaser(P,o);V.el.push(o);return {t:'e',i:V.el.length-1}}
+// Élément glissé vers (nx, ny) : il avance jusqu'au mur puis glisse le long, d'abord en x, puis en y, par pas de 5 cm.
+// Un élément déjà coincé dans un mur (mur déplacé après coup) bouge librement.
+function epGlisse(P,o,nx,ny){if(!epLibre(P,o)){o.x=nx;o.y=ny;return}
+  const pas=(a,b)=>{const s=Math.sign(b-a),r=[];for(let v=b;s*(v-a)>.1;v-=s*5)r.push(v);return r}; // de la cible vers la position actuelle
+  for(const x of pas(o.x,nx))if(epLibre(P,{...o,x})){o.x=x;break}
+  for(const y of pas(o.y,ny))if(epLibre(P,{...o,y})){o.y=y;break}}
 // Quart de tour autour du centre.
 function epTourne(o){const c=epCentre(o);o.r=((o.r||0)+90)%360;const n=epCentre(o);o.x+=c[0]-n[0];o.y+=c[1]-n[1]}
+// Nouvelles cotes, centre conservé.
+function epCotes(o,w,d){const c=epCentre(o);o.w=w;o.d=d;const n=epCentre(o);o.x+=c[0]-n[0];o.y+=c[1]-n[1]}
+const epNb=s=>Math.round(+String(s??'').replace(',','.'));
+function epPreco(z){const p=z?.b?.on.includes('d2')&&z.b.p.d2;if(!p)return null;const L=epNb(p.L),l=epNb(p.l);return L>=30&&L<=400&&l>=30&&l<=400?[L,l]:null}
+// Cotes du receveur saisies dans les préconisations : reprises par le receveur ou la douche de l'après.
+function epSyncPreco(z){const D=epPreco(z),V=z?.plan?.ap;if(!D||!V)return;for(const o of V.el)if(EP_REC.includes(o.k)&&(o.w!==D[0]||o.d!==D[1])){epCotes(o,D[0],D[1]);epCaser(z.plan,o)}}
 
-/* --- Dessin : murs à l'extérieur du contour, ouvertures, éléments, cotes, numéros et légende. Renvoie [viewBox, contenu]. --- */
-function epSvg(P,V,sel){const {S,T,VERT,cm}=EPL,pts=epPts(P),W=P.L,H=P.l,ep=12;
+/* --- Dessin : murs à l'extérieur du contour, ouvertures, éléments, cotes, numéros et légende. Renvoie [viewBox, contenu].
+   murs : mode « Modifier les murs » (poignées des angles et des murs, éléments grisés). --- */
+let epGd=[]; // guides affichés pendant qu'on glisse un angle
+function epSvg(P,V,sel,murs){const {S,T,VERT,cm}=EPL,pts=epPts(P),[x0,y0,x1,y1]=epBox(pts),W=x1-x0,H=y1-y0,ep=12;
   // Même cadre pour l'avant et l'après (même échelle dans le PDF) : place de la plus longue légende et des portes ouvrant vers l'extérieur.
   const vues=[P.av,P.ap].filter(Boolean),nmax=Math.max(...vues.map(x=>epNum(x).length)),ext=Math.max(0,...vues.flatMap(x=>x.ouv.filter(o=>o.ext).map(o=>o.w)));
-  const lab=epNum(V),cols=W>=300?2:1,half=Math.ceil(nmax/cols),ml=70+ext,mt=60+ext,VW=W+2*ml,VH=H+mt+70+ext+(nmax?half*22+10:0);
+  const lab=epNum(V),cols=W>=300?2:1,half=Math.ceil(nmax/cols),dm=vues.some(x=>x.ouv.some(o=>['pb','pc'].includes(o.k)))?22:0,ml=70+ext+dm,mt=60+ext+dm,VW=W+2*ml,VH=H+mt+70+ext+dm+(nmax?half*22+10:0),X=x0-ml,Y=y0-mt;
   const poly=pts.map(p=>p.join(',')).join(' '),g=V.el.find(o=>o.k==='gir'),txt=(x,y,t,a='middle',s=13,c=T)=>`<text x="${x}" y="${y}" text-anchor="${a}" font-size="${s}" fill="${c}">${t}</text>`;
-  const cH=(x0,x1,y,t)=>`<path d="M${x0} ${y}H${x1}M${x0} ${y-5}v10M${x1} ${y-5}v10" stroke="${T}" stroke-width=".8"/>`+txt((x0+x1)/2,y-5,t);
-  const cV=(y0,y1,x,t)=>`<path d="M${x} ${y0}V${y1}M${x-5} ${y0}h10M${x-5} ${y1}h10" stroke="${T}" stroke-width=".8"/><g transform="rotate(-90 ${x-6} ${(y0+y1)/2})">${txt(x-6,(y0+y1)/2,t)}</g>`;
-  const el=V.el.map((o,i)=>[o,i]).sort(([a],[b])=>(b.k==='gir')-(a.k==='gir')).map(([o,i])=>{const s=S[o.k],h=o.k==='gir'?o.w:s.vh||o.d;
+  const el=V.el.map((o,i)=>[o,i]).sort(([a],[b])=>epCouche(a.k)-epCouche(b.k)).map(([o,i])=>{const s=S[o.k],h=epH(o);
     return `<g data-e="${i}" class="epe${sel?.t==='e'&&sel.i===i?' sel':''}" transform="translate(${o.x} ${o.y}) rotate(${o.r||0})"><rect width="${o.w}" height="${Math.max(h,24)}" fill="#fff" fill-opacity="0"/>${s.f(o.w,o.d)}</g>`}).join('');
   const ouv=V.ouv.map((o,i)=>{const M=epMur(pts,o.m),x=M.a[0]+M.ux*o.p,y=M.a[1]+M.uy*o.p,t=(o.gd?`translate(${o.w} 0) scale(-1 1) `:'')+(o.ext?'translate(0 -12) scale(1 -1)':'');
     const dp=o.ext&&o.k==='pb'?o.w+18:34,pas=['pb','pc'].includes(o.k)?'<g pointer-events="none">'+txt(M.a[0]+M.ux*(o.p+o.w/2)+M.uy*dp,M.a[1]+M.uy*(o.p+o.w/2)-M.ux*dp+4,'passage '+cm(o.w),'middle',12)+'</g>':'';
     return `<g data-o="${i}" class="epo${sel?.t==='o'&&sel.i===i?' sel':''}" transform="translate(${x} ${y}) rotate(${Math.atan2(M.uy,M.ux)*180/Math.PI})"><rect x="0" y="-16" width="${o.w}" height="28" fill="#fff" fill-opacity="0"/><g transform="${t}">${S[o.k].f(o.w,S[o.k].d)}</g></g>${pas}`}).join('');
-  const num=lab.map((o,j)=>{const [x,y]=epCentre(o);return `<circle cx="${x}" cy="${y}" r="9" fill="#1b6d96" stroke="#fff" stroke-width="1.5"/>`+txt(x,y+4,j+1,'middle',11,'#fff')}).join('')
-    +lab.map((o,j)=>{const x=-ml+16+(j<half?0:VW/2),y=H+66+ext+(j%half)*22;return `<circle cx="${x}" cy="${y-4}" r="8" fill="#1b6d96"/>`+txt(x,y,j+1,'middle',10,'#fff')+txt(x+13,y,S[o.k].n,'start',13)}).join('');
-  const cotes=cH(0,W,-30,cm(W)+' m')+cV(0,H,-30,cm(H)+' m')+(P.f==='L'?cH(0,W-P.a,H+30,cm(W-P.a)+' m')+cV(0,H-P.b,W+30,cm(H-P.b)+' m'):'');
-  return [`${-ml} ${-mt} ${VW} ${VH}`,`<defs>${EPL.DEFS}<mask id="epm"><rect x="${-ml}" y="${-mt}" width="${VW}" height="${VH}" fill="#fff"/><polygon points="${poly}" fill="#000"/></mask></defs>
-   <rect x="${-ml}" y="${-mt}" width="${VW}" height="${VH}" fill="#fff"/><polygon points="${poly}" fill="#fbfbf8"/>${el}
+  // Numéro d'un petit objet, posé devant lui : on le touche pour sélectionner l'objet (hors mode murs).
+  // Traits de rappel d'abord, pastilles ensuite : aucun trait ne passe sur un numéro.
+  const PA=epPastilles(P,V),num=PA.filter(r=>r.trait).map(({x,y,ax,ay})=>`<path d="M${ax} ${ay}L${x} ${y}" stroke="#1b6d96" stroke-width="1"/><circle cx="${ax}" cy="${ay}" r="1.8" fill="#1b6d96"/>`).join('')+PA.map(({o,j,x,y})=>{const c=`<circle cx="${x}" cy="${y}" r="9" fill="#1b6d96" stroke="#fff" stroke-width="1.5"/>`+txt(x,y+4,j+1,'middle',11,'#fff');
+    return EP_PETIT.includes(o.k)&&murs===false?`<g data-e="${V.el.indexOf(o)}" pointer-events="all" style="cursor:pointer"><circle cx="${x}" cy="${y}" r="16" fill="#fff" fill-opacity="0"/>${c}</g>`:c}).join('')
+    +lab.map((o,j)=>{const x=X+16+(j<half?0:VW/2),y=y1+66+ext+dm+(j%half)*22;return `<circle cx="${x}" cy="${y-4}" r="8" fill="#1b6d96"/>`+txt(x,y,j+1,'middle',10,'#fff')+txt(x+13,y,S[o.k].n,'start',13)}).join('');
+  // Cote de chaque mur, à l'extérieur, lisible de gauche à droite.
+  // Mur avec porte : cote écartée pour laisser la place à « passage » (et au battant d'une porte ouvrant vers l'extérieur).
+  const cotes=pts.map((_,m)=>{const M=epMur(pts,m),nx=M.uy,ny=-M.ux,[ax,ay]=M.a,bx=ax+M.ux*M.len,by=ay+M.uy*M.len,D=V.ouv.filter(o=>o.m===m&&['pb','pc'].includes(o.k)),
+      dc=D.length?22+Math.max(0,...D.filter(o=>o.ext&&o.k==='pb').map(o=>o.w)):0;let an=Math.atan2(M.uy,M.ux)*180/Math.PI;if(an>90||an<=-90)an+=180;
+    const c1=24+dc,c0=19+dc,ct=34+dc;
+    return `<path d="M${ax+nx*c1} ${ay+ny*c1}L${bx+nx*c1} ${by+ny*c1}M${ax+nx*c0} ${ay+ny*c0}l${nx*10} ${ny*10}M${bx+nx*c0} ${by+ny*c0}l${nx*10} ${ny*10}" stroke="${T}" stroke-width=".8"/><text transform="translate(${(ax+bx)/2+nx*ct} ${(ay+by)/2+ny*ct}) rotate(${an})" text-anchor="middle" dominant-baseline="central" font-size="13" fill="${T}">${cm(M.len)} m</text>`}).join('');
+  const poig=murs?`<g>${pts.map((a,m)=>{const b=pts[(m+1)%pts.length],on=sel?.t==='m'&&sel.i===m;return `<line data-m="${m}" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#1b6d96" stroke-opacity="${on?.45:.12}" stroke-width="26"/>`}).join('')}
+    ${epGd.map(([a,b,c,d])=>`<path d="M${a} ${b}L${c} ${d}" stroke="#d35400" stroke-width="1.2" stroke-dasharray="6 4" pointer-events="none"/>`).join('')}
+    ${pts.map((p,c)=>`<circle data-c="${c}" cx="${p[0]}" cy="${p[1]}" r="11" fill="${sel?.t==='c'&&sel.i===c?'#1b6d96':'#fff'}" stroke="#1b6d96" stroke-width="3"/>`).join('')}</g>`:'';
+  return [`${X} ${Y} ${VW} ${VH}`,`<defs>${EPL.DEFS}<mask id="epm"><rect x="${X}" y="${Y}" width="${VW}" height="${VH}" fill="#fff"/><polygon points="${poly}" fill="#000"/></mask></defs>
+   <rect x="${X}" y="${Y}" width="${VW}" height="${VH}" fill="#fff"/><polygon points="${poly}" fill="#fbfbf8"/><g${murs?' pointer-events="none" opacity=".45"':''}>${el}</g>
    ${g?`<g pointer-events="none">${txt(epCentre(g)[0],epCentre(g)[1]+20,'Ø '+cm(g.w),'middle',11,VERT)}</g>`:''}
-   <polygon points="${poly}" fill="none" stroke="${T}" stroke-width="${2*ep}" stroke-linejoin="miter" mask="url(#epm)"/>${ouv}<g pointer-events="none">${cotes}${num}</g>`]}
+   <polygon points="${poly}" fill="none" stroke="${T}" stroke-width="${2*ep}" stroke-linejoin="miter" mask="url(#epm)"/><g${murs?' pointer-events="none" opacity=".45"':''}>${ouv}</g><g pointer-events="none">${cotes}${num}</g>${poig}`]}
 // Vignette d'un symbole pour la palette.
 function epIcone(k){const s=EPL.S[k],o=EP_OUV.includes(k),top=s.top||(o?14:4),w=s.w+12+(s.ex||0),h=(k==='gir'?s.w:s.vh||s.d)+top+6;
   return `<svg viewBox="-6 ${-top} ${w} ${h}" aria-hidden="true">${o?`<path d="M-6 -6H${s.w+6+(s.ex||0)}" stroke="${EPL.T}" stroke-width="12"/>`:''}${EPL.pose(k,0,0)}</svg>`}
@@ -4700,104 +4796,149 @@ async function epImg(P,V,cap){const [,,W,H]=epSvg(P,V,null)[0].split(' ').map(Nu
   const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0);return {src:c.toDataURL('image/jpeg',.85),w:c.width,h:c.height,cap}}
 
 /* --- Écran « Plan de la pièce » (view 'eplan') --- */
-let epVue='av',epTool=null,epSel=null,epDrag=null;
+let epVue='av',epTool=null,epSel=null,epDrag=null,epMurs=false,epMode='90';
 const epResume=z=>{const P=z.plan;if(!P)return 'Plan avant / après travaux, à l’échelle, avec les équipements numérotés.';
-  const n=V=>`${V.el.length} élément${V.el.length>1?'s':''}, ${V.ouv.length} porte${V.ouv.length>1?'s':''} ou fenêtre${V.ouv.length>1?'s':''}`;
-  return `${P.f==='L'?'Pièce en L':'Pièce'} ${EPL.cm(P.L)} × ${EPL.cm(P.l)} m · Avant : ${n(P.av)} · Après : ${P.ap?n(P.ap):'à créer'}`};
+  const n=V=>`${V.el.length} élément${V.el.length>1?'s':''}, ${V.ouv.length} porte${V.ouv.length>1?'s':''} ou fenêtre${V.ouv.length>1?'s':''}`,[x0,y0,x1,y1]=epBox(epPts(P));
+  return `Pièce ${EPL.cm(x1-x0)} × ${EPL.cm(y1-y0)} m · Avant : ${n(P.av)} · Après : ${P.ap?n(P.ap):'à créer'}`};
 function ergoViewPlan(app,bar,bi){if(view!=='eplan')return false;const z=ergoZcur();if(!z){view='ezones';return ergoViewZ(app,bar,bi)}
   $('.wrap').classList.add('epw');
-  const P=z.plan||(z.plan=epNeuf()),V=P[epVue],{S,cm}=EPL,num=n=>`<input type="number" inputmode="numeric" step="5" ${n}>`;
+  const P=z.plan||(z.plan=epNeuf());if(!P.pts)P.pts=epPts(P);const V=P[epVue],{S,cm}=EPL,num=n=>`<input type="number" inputmode="numeric" step="5" ${n}>`,pts=P.pts;
   const tabs=`<div class="row" role="group" aria-label="Vue du plan">${[['av','Avant (existant)'],['ap','Après (aménagement proposé)']].map(([k,t])=>`<button data-act="er-plv" data-v="${k}" aria-pressed="${epVue===k}">${t}</button>`).join('')}</div>`;
   bi.innerHTML=`<button class="btn-primary" data-act="er-zret">Terminé</button>`;
   if(!V){app.innerHTML=`${topbar('Plan de la pièce',ergoZTitre(z),'er-zret')}${tabs}<p class="muted">L’après se crée en copiant l’existant, puis se modifie : on retire, on ajoute, on déplace.</p>
     <div class="row"><button class="btn-primary" data-act="er-plap">Créer l’après à partir de l’existant</button></div>`;return true}
-  const o=epSel&&(epSel.t==='e'?V.el[epSel.i]:V.ouv[epSel.i]);if(!o)epSel=null;
-  const vide=!P.av.el.length&&!P.av.ouv.length;
-  const piece=`<details class="grp"${vide?' open':''}><summary><b>Pièce</b> : ${P.f==='L'?'en L':'rectangle'} ${cm(P.L)} × ${cm(P.l)} m</summary>
-    <p class="muted">Cotes intérieures, communes à l’avant et à l’après.</p>
-    <div class="chips" role="radiogroup" aria-label="Forme de la pièce">${[['rect','Rectangle'],['L','En L']].map(([k,t])=>`<label class="chip"><input type="radio" name="epf" data-pf="f" value="${k}" ${P.f===k?'checked':''}>${t}</label>`).join('')}</div>
-    <div class="form">${zFld('Longueur (cm)',num(`data-pf="L" value="${P.L}" min="50"`),'')}${zFld('Largeur (cm)',num(`data-pf="l" value="${P.l}" min="50"`),'')}
-    ${P.f==='L'?zFld('Retrait en longueur (cm)',num(`data-pf="a" value="${P.a}" min="20"`),'')+zFld('Retrait en largeur (cm)',num(`data-pf="b" value="${P.b}" min="20"`),''):''}</div></details>`;
+  if(epSel&&!(epSel.t==='e'?V.el:epSel.t==='o'?V.ouv:pts)[epSel.i])epSel=null;
+  const o=epSel&&{e:V.el,o:V.ouv}[epSel.t]?.[epSel.i],[x0,y0,x1,y1]=epBox(pts);
+  // Mode murs : bouton toujours visible au-dessus du plan ; le panneau de droite ne montre alors que les réglages du contour.
+  const bmurs=`<div class="row"><button data-act="er-plmurs" aria-pressed="${epMurs}" class="${epMurs?'btn-primary':''}">${epMurs?'✓ Terminer les murs':'✎ Modifier les murs'}</button>
+    <span class="muted">${pts.length} murs, ${cm(x1-x0)} × ${cm(y1-y0)} m hors tout${epMurs?'':' · contour commun à l’avant et à l’après'}</span></div>`;
+  const piece=`<div class="grp"><b>Murs de la pièce</b><p class="muted">Glissez un mur ou un angle (ronds bleus). Touchez un mur pour taper sa longueur ou le couper. Contour commun à l’avant et à l’après.</p>
+    <div class="chips" role="radiogroup" aria-label="Guides des angles">${[['90','90°'],['45','45°'],['libre','Libre']].map(([k,t])=>`<label class="chip"><input type="radio" name="epm" data-pm value="${k}" ${epMode===k?'checked':''}>${t}</label>`).join('')}</div>
+    <p class="muted">Repartir d’une forme (efface le contour actuel) :</p>
+    <div class="row">${[['rect','Rectangle'],['L','En L']].map(([k,t])=>`<button data-act="er-plforme" data-f="${k}">${t}</button>`).join('')}</div></div>`;
   let carte='';
   if(o&&epSel.t==='e'){const n=epNum(V).indexOf(o);
     carte=`<div class="grp"><b>${n>=0?n+1+'. ':''}${S[o.k].n}</b><div class="form">${(EPL.DIMS[o.k]||[['w','Largeur'],['d','Profondeur']]).map(([k,l])=>zFld(l+' (cm)',num(`data-pd="${k}" value="${Math.round(o[k])}" min="5"`),'')).join('')}</div>
-      <div class="row"><button data-act="er-plrot">↻ ¼ de tour</button><button class="btn-danger" data-act="er-pldel">Retirer</button></div><p class="muted">Glissez l’élément au doigt pour le déplacer.</p></div>`}
-  if(o&&epSel.t==='o'){const M=epMur(epPts(P),o.m);
+      ${epVue==='ap'&&EP_REC.includes(o.k)&&epPreco(z)?'<p class="muted">Cotes reprises de la préconisation « Dimensions » du receveur.</p>':''}
+      <div class="row"><button data-act="er-plrot">↻ ¼ de tour</button><button class="btn-danger" data-act="er-pldel">Retirer</button></div><p class="muted">Glissez l’élément au doigt pour le déplacer. Il s’arrête contre les murs.</p></div>`}
+  if(o&&epSel.t==='o'){const M=epMur(pts,o.m);
     carte=`<div class="grp"><b>${S[o.k].n}</b><div class="form">${zFld('Largeur (cm)',num(`data-pd="w" value="${o.w}" min="40"`),'')}${zFld('Distance depuis l’angle (cm)',num(`data-pd="p" value="${Math.round(o.p)}" min="0"`),'',`<div class="hint">Mur de ${Math.round(M.len)} cm.</div>`)}</div>
       <div class="chips">${o.k!=='f2'?`<label class="chip"><input type="checkbox" data-pk="gd" ${o.gd?'checked':''}>${o.k==='pc'?'Coulisse de l’autre côté':'Gonds de l’autre côté'}</label>`:''}${['pb','pc'].includes(o.k)?`<label class="chip"><input type="checkbox" data-pk="ext" ${o.ext?'checked':''}>${o.k==='pc'?'Panneau côté extérieur':'Ouvre vers l’extérieur'}</label>`:''}</div>
       <div class="row"><button class="btn-danger" data-act="er-pldel">Retirer</button></div><p class="muted">Glissez l’ouverture au doigt le long de son mur.</p></div>`}
+  if(epSel?.t==='m')carte=`<div class="grp"><b>Mur ${epSel.i+1}</b><div class="form">${zFld('Longueur (cm)',num(`data-pw value="${Math.round(epMur(pts,epSel.i).len)}" min="10"`),'','<div class="hint">La fin du mur avance ou recule ; le mur suivant suit.</div>')}</div>
+      <div class="row"><button data-act="er-plcoupe">Ajouter un angle au milieu</button></div></div>`;
+  if(epSel?.t==='c')carte=`<div class="grp"><b>Angle ${epSel.i+1}</b><p class="muted">Glissez l’angle ; les guides orange l’alignent sur les autres angles.</p>
+      <div class="row"><button class="btn-danger" data-act="er-plcdel" ${pts.length<4?'disabled':''}>Retirer cet angle</button></div></div>`;
   const pal=EP_FAM.map(([t,ks])=>`<h3>${t}</h3><div class="eppal">${ks.map(k=>`<button data-act="er-plt" data-k="${k}" aria-pressed="${epTool===k}">${epIcone(k)}<span>${S[k].n}</span></button>`).join('')}</div>`).join('');
-  const [vb,inner]=epSvg(P,V,epSel);
+  const [vb,inner]=epSvg(P,V,epSel,epMurs);
   app.innerHTML=`${topbar('Plan de la pièce',ergoZTitre(z),'er-zret')}${tabs}
    ${epVue==='ap'?`<div class="row"><button class="btn-danger" data-act="er-plapre">Recopier l’existant (efface l’après)</button></div>`:''}
-   <div class="eplay"><div>${epTool?`<div class="banner"><span class="grow">Touchez le plan pour poser : <b>${S[epTool].n}</b>${EP_OUV.includes(epTool)?' (sur le mur le plus proche)':''}.</span><button data-act="er-plt" data-k="${epTool}">Annuler</button></div>`:''}
+   <div class="eplay"><div>${bmurs}${epTool?`<div class="banner"><span class="grow">Touchez le plan pour poser : <b>${S[epTool].n}</b>${EP_OUV.includes(epTool)?' (sur le mur le plus proche)':''}.</span><button data-act="er-plt" data-k="${epTool}">Annuler</button></div>`:''}
     <svg class="epsvg" viewBox="${vb}" role="img" aria-label="Plan de la pièce, vue ${epVue==='av'?'avant travaux':'après travaux'}">${inner}</svg></div>
-    <div>${carte}${piece}${pal}</div></div>`;
-  epBrancher(app.querySelector('.epsvg'),P,V);return true}
+    <div>${carte}${epMurs?piece:pal}</div></div>`;
+  epBrancher(app.querySelector('.epsvg'),P,V,z);return true}
 // Toucher : pose (outil choisi), sélection, ou glissement au-delà de 12 px au doigt (4 px à la souris).
-function epBrancher(sv,P,V){
+function epBrancher(sv,P,V,z){
   const pt=e=>{const q=new DOMPoint(e.clientX,e.clientY).matrixTransform(sv.getScreenCTM().inverse());return [q.x,q.y]};
-  const draw=()=>{sv.innerHTML=epSvg(P,V,epSel)[1]};
+  const draw=()=>{sv.innerHTML=epSvg(P,V,epSel,epMurs)[1]};
   sv.addEventListener('pointerdown',e=>{const p=pt(e);
-    if(epTool){epSel=epPoser(P,V,epTool,p);epTool=null;save();return keep()}
-    const t=e.target.closest('[data-e],[data-o]');if(!t){if(epSel){epSel=null;keep()}return}
-    epSel=t.dataset.e!=null?{t:'e',i:+t.dataset.e}:{t:'o',i:+t.dataset.o};const o=epSel.t==='e'?V.el[epSel.i]:V.ouv[epSel.i];
-    epDrag={x:e.clientX,y:e.clientY,p0:p,o0:{...o},seuil:e.pointerType==='mouse'?4:12,bouge:false};
+    if(epTool){epSel=epPoser(P,V,epTool,p,epVue==='ap'?epPreco(z):null);epTool=null;save();return keep()}
+    const t=e.target.closest('[data-e],[data-o],[data-m],[data-c]');if(!t){if(epSel){epSel=null;keep()}return}
+    const d=t.dataset;epSel=d.e!=null?{t:'e',i:+d.e}:d.o!=null?{t:'o',i:+d.o}:d.m!=null?{t:'m',i:+d.m}:{t:'c',i:+d.c};
+    const o={e:V.el,o:V.ouv}[epSel.t]?.[epSel.i];
+    epDrag={x:e.clientX,y:e.clientY,p0:p,o0:o&&{...o},pts0:P.pts.map(q=>[...q]),seuil:e.pointerType==='mouse'?4:12,bouge:false};
     try{sv.setPointerCapture(e.pointerId)}catch(x){}e.preventDefault();draw()});
   sv.addEventListener('pointermove',e=>{if(!epDrag)return;if(!epDrag.bouge&&Math.hypot(e.clientX-epDrag.x,e.clientY-epDrag.y)<epDrag.seuil)return;
-    epDrag.bouge=true;const p=pt(e),dx=p[0]-epDrag.p0[0],dy=p[1]-epDrag.p0[1];
-    if(epSel.t==='e'){const o=V.el[epSel.i];o.x=epSnap(epDrag.o0.x+dx);o.y=epSnap(epDrag.o0.y+dy)}
-    else{const o=V.ouv[epSel.i],M=epMur(epPts(P),o.m);o.p=Math.max(0,Math.min(M.len-o.w,epSnap(epDrag.o0.p+dx*M.ux+dy*M.uy)))}
+    epDrag.bouge=true;const p=pt(e),dx=p[0]-epDrag.p0[0],dy=p[1]-epDrag.p0[1],{t,i}=epSel;
+    if(t==='e')epGlisse(P,V.el[i],epSnap(epDrag.o0.x+dx),epSnap(epDrag.o0.y+dy));
+    else if(t==='o'){const o=V.ouv[i],M=epMur(P.pts,o.m);o.p=Math.max(0,Math.min(M.len-o.w,epSnap(epDrag.o0.p+dx*M.ux+dy*M.uy)))}
+    else{const P0=epDrag.pts0;let q=null;
+      if(t==='m'){const M=epMur(P0,i);q=epGlisseMur(P0,i,epSnap(dx*M.uy-dy*M.ux))}
+      else{const [np,g]=epAimant(P0,i,[epSnap(P0[i][0]+dx),epSnap(P0[i][1]+dy)],epMode);epGd=g;q=P0.map(r=>[...r]);q[i]=np;if(!epContourOk(q))q=null}
+      if(q){P.pts=q;epFixOuv(P)}}
     draw()});
-  const fin=()=>{if(!epDrag)return;const b=epDrag.bouge;epDrag=null;if(b)save();keep()};
+  const fin=()=>{if(!epDrag)return;const b=epDrag.bouge;epDrag=null;epGd=[];if(b)save();keep()};
   sv.addEventListener('pointerup',fin);sv.addEventListener('pointercancel',fin)}
-// Saisie (événement change) : forme et cotes de la pièce, cotes de l'élément choisi, cases d'une ouverture.
+// Saisie (événement change) : guides, longueur d'un mur, cotes de l'élément choisi, cases d'une ouverture.
 function ergoPlanChg(el){if(view!=='eplan')return false;const P=ergoZcur()?.plan;if(!P)return false;const V=P[epVue],non=t=>{toast(t);keep();return true};
-  if(el.dataset.pf){const k=el.dataset.pf;
-    if(k==='f')epForme(P,el.value);
-    else{const v=Math.round(+el.value),[a,b]={L:[50,2000],l:[50,2000],a:[20,P.L-20],b:[20,P.l-20]}[k];if(!(v>=a&&v<=b))return non(`Valeur refusée : entre ${a} et ${b} cm`);P[k]=v}
-    P.a=Math.min(P.a,P.L-20);P.b=Math.min(P.b,P.l-20);epFixOuv(P);save();keep();return true}
-  const o=epSel&&V&&(epSel.t==='e'?V.el[epSel.i]:V.ouv[epSel.i]);if(!o)return false;
+  if(el.dataset.pm!=null){epMode=el.value;return true}
+  if(el.dataset.pw!=null&&epSel?.t==='m'){const v=Math.round(+el.value),q=v>=10&&v<=2000&&epLongueur(P.pts,epSel.i,v);if(!q)return non('Longueur refusée : les murs se croiseraient');P.pts=q;epFixOuv(P);save();keep();return true}
+  const o=epSel&&V&&{e:V.el,o:V.ouv}[epSel.t]?.[epSel.i];if(!o)return false;
   if(el.dataset.pd){const k=el.dataset.pd,v=Math.round(+el.value);
     if(epSel.t==='o'){const M=epMur(epPts(P),o.m);
       if(k==='w'){if(!(v>=40&&v<=M.len))return non(`Largeur refusée : entre 40 et ${Math.floor(M.len)} cm`);o.w=v;o.p=Math.min(o.p,M.len-v)}
       else{if(!(v>=0&&v<=M.len-o.w))return non(`Distance refusée : entre 0 et ${Math.floor(M.len-o.w)} cm`);o.p=v}}
-    else{if(!(v>=5&&v<=1000))return non('Valeur refusée : entre 5 et 1 000 cm');const c=epCentre(o);o[k]=v;
-      if(o.k==='gir'){o.d=v;const n=epCentre(o);o.x+=c[0]-n[0];o.y+=c[1]-n[1]}} // le cercle garde son centre
+    else{if(!(v>=5&&v<=1000))return non('Valeur refusée : entre 5 et 1 000 cm');const av={...o};
+      epCotes(o,o.k==='gir'||k==='w'?v:o.w,o.k==='gir'||k==='d'?v:o.d); // le centre ne bouge pas
+      if(!epCaser(P,o)){Object.assign(o,av);return non('Trop grand : l’élément ne tient pas dans la pièce')}}
     save();keep();return true}
   if(el.dataset.pk&&epSel.t==='o'){o[el.dataset.pk]=el.checked;save();keep();return true}
   return false}
 async function ergoPlanAct(a,b){const z=ergoZcur();
-  if(a==='er-plan'){view='eplan';epVue='av';epTool=null;epSel=null;return go()}
+  if(a==='er-plan'){view='eplan';epVue='av';epTool=null;epSel=null;epMurs=false;epSyncPreco(z);return go()}
   const P=z?.plan;if(!P)return;const V=P[epVue];
   if(a==='er-plv'){epVue=b.dataset.v;epTool=null;epSel=null;return keep()}
-  if(a==='er-plap'){P.ap=structuredClone(P.av);save();return keep()}
-  if(a==='er-plapre'){if(!armed(b,'Confirmer : l’après est effacé'))return;P.ap=structuredClone(P.av);epSel=null;save();return keep()}
-  if(a==='er-plt'){epTool=epTool===b.dataset.k?null:b.dataset.k;epSel=null;return keep()}
-  if(!epSel||!V)return;
-  if(a==='er-plrot'&&epSel.t==='e'){epTourne(V.el[epSel.i]);save();return keep()}
-  if(a==='er-pldel'){(epSel.t==='e'?V.el:V.ouv).splice(epSel.i,1);epSel=null;save();return keep()}}
+  if(a==='er-plap'){P.ap=structuredClone(P.av);epSyncPreco(z);save();return keep()}
+  if(a==='er-plapre'){if(!armed(b,'Confirmer : l’après est effacé'))return;P.ap=structuredClone(P.av);epSyncPreco(z);epSel=null;save();return keep()}
+  if(a==='er-plt'){epTool=epTool===b.dataset.k?null:b.dataset.k;epSel=null;epMurs=false;return keep()}
+  if(a==='er-plmurs'){epMurs=!epMurs;epSel=null;epTool=null;return keep()}
+  if(a==='er-plforme'){if(!armed(b,'Confirmer : contour remplacé'))return;const [x0,y0,x1,y1]=epBox(epPts(P));P.pts=epForme(b.dataset.f,epSnap(Math.max(100,x1-x0)),epSnap(Math.max(100,y1-y0)));epFixOuv(P);epSel=null;save();return keep()}
+  if(!epSel)return;
+  if(a==='er-plcoupe'&&epSel.t==='m'){epCoupe(P,epSel.i);epSel={t:'c',i:epSel.i+1};save();return keep()}
+  if(a==='er-plcdel'&&epSel.t==='c'){if(!epRetireAngle(P,epSel.i))return toast('Impossible : les murs se croiseraient');epSel=null;save();return keep()}
+  if(!V)return;
+  if(a==='er-plrot'&&epSel.t==='e'){const o=V.el[epSel.i],av={...o};epTourne(o);if(!epCaser(P,o)){Object.assign(o,av);return toast('Pas la place de tourner l’élément')}save();return keep()}
+  if(a==='er-pldel'&&['e','o'].includes(epSel.t)){(epSel.t==='e'?V.el:V.ouv).splice(epSel.i,1);epSel=null;save();return keep()}}
 
 queueMicrotask(()=>{
 console.assert(JSON.stringify(epPts({f:'rect',L:250,l:200}))==='[[0,0],[250,0],[250,200],[0,200]]'
-  &&JSON.stringify(epPts({f:'L',L:320,l:260,a:120,b:100}))==='[[0,0],[320,0],[320,160],[200,160],[200,260],[0,260]]','ASSERT FAIL epPts');
+  &&JSON.stringify(epPts({f:'L',L:320,l:260,a:120,b:100}))==='[[0,0],[320,0],[320,160],[200,160],[200,260],[0,260]]','ASSERT FAIL epPts anciens plans');
 console.assert((([x,y])=>Math.abs(x-22.5)<1e-6&&Math.abs(y-140)<1e-6)(epCentre({k:'lav',x:0,y:170,r:270,w:60,d:45}))&&epCentre({k:'gir',x:50,y:40,w:150,d:150}).join()==='125,115','ASSERT FAIL epCentre');
 console.assert(epSnap(12)===10&&epSnap(13)===15&&epSnap(-3)===-5,'ASSERT FAIL epSnap');
 {const o={k:'wc',x:0,y:0,r:0,w:38,d:68},c=epCentre(o);epTourne(o);const n=epCentre(o);console.assert(o.r===90&&Math.abs(n[0]-c[0])<1e-9&&Math.abs(n[1]-c[1])<1e-9,'ASSERT FAIL epTourne garde le centre')}
 // Une porte posée près d'un angle reste dans son mur ; une fenêtre va sur le mur le plus proche.
-{const P={...epNeuf(),L:250,l:200},s=epPoser(P,P.av,'pb',[240,-5]),o=P.av.ouv[s.i];console.assert(o.m===0&&o.p===170&&o.w===80,'ASSERT FAIL epPoser porte dans son mur');
+{const P=epNeuf(),s=epPoser(P,P.av,'pb',[240,-5]),o=P.av.ouv[s.i];console.assert(o.m===0&&o.p===170&&o.w===80,'ASSERT FAIL epPoser porte dans son mur');
  epPoser(P,P.av,'f1',[-4,100]);console.assert(P.av.ouv[1].m===3,'ASSERT FAIL epPoser mur le plus proche');
- // Passage du L au rectangle : l'ouverture d'un mur disparu est retirée, les autres restent dans leur mur.
- const Q={...epNeuf(),f:'L',L:320,l:260,a:120,b:100};Q.av.ouv=[{k:'pb',m:5,p:10,w:80},{k:'f1',m:0,p:300,w:60}];Q.f='rect';Q.L=200;epFixOuv(Q);
+ // Contour raccourci : l'ouverture d'un mur disparu est retirée, les autres restent dans leur mur.
+ const Q={pts:[[0,0],[200,0],[200,260],[0,260]],av:{ouv:[{k:'pb',m:5,p:10,w:80},{k:'f1',m:0,p:300,w:60}],el:[]},ap:null};epFixOuv(Q);
  console.assert(Q.av.ouv.length===1&&Q.av.ouv[0].m===0&&Q.av.ouv[0].p===140,'ASSERT FAIL epFixOuv')}
-{const R={...epNeuf(),L:250,l:200,a:100,b:80};R.av.ouv=[{k:'pb',m:2,p:150,w:80},{k:'f1',m:3,p:50,w:60}];epForme(R,'L');
- console.assert(R.av.ouv.map(o=>o.m+':'+o.p).join()==='4:50,5:50','ASSERT FAIL epForme rectangle vers L');
- R.av.ouv.push({k:'pb',m:3,p:10,w:60});epForme(R,'rect');console.assert(R.av.ouv.map(o=>o.m+':'+o.p).join()==='2:150,3:50','ASSERT FAIL epForme L vers rectangle')}
+// Contour libre : sens horaire, murs qui ne se croisent pas, mur glissé, longueur tapée, angle ajouté puis retiré avec les ouvertures.
+{const R=epForme('rect',250,200);console.assert(epContourOk(R)&&!epContourOk([...R].reverse())&&!epContourOk([[0,0],[250,0],[0,200],[250,200]]),'ASSERT FAIL epContourOk');
+ console.assert(JSON.stringify(epGlisseMur(R,1,50))==='[[0,0],[300,0],[300,200],[0,200]]'&&epGlisseMur(R,1,-250)===null,'ASSERT FAIL epGlisseMur');
+ console.assert(JSON.stringify(epLongueur(R,0,300))==='[[0,0],[300,0],[300,200],[0,200]]','ASSERT FAIL epLongueur');
+ const P={pts:R,av:{ouv:[{k:'pb',m:2,p:150,w:80},{k:'f1',m:3,p:20,w:60}],el:[]},ap:null};epCoupe(P,2);
+ console.assert(P.pts.length===5&&P.pts[3].join()==='125,200'&&P.av.ouv.map(o=>o.m+':'+o.p).join()==='3:25,4:20','ASSERT FAIL epCoupe');
+ console.assert(epRetireAngle(P,3)&&P.pts.length===4&&P.av.ouv.map(o=>o.m+':'+o.p).join()==='2:150,3:20','ASSERT FAIL epRetireAngle')}
+// Guides : un angle lâché près de l'alignement d'un autre s'y cale (90°) ; en 45°, il se cale sur la diagonale d'un voisin.
+{const R=epForme('rect',250,200);console.assert(epAimant(R,2,[258,195],'90')[0].join()==='250,200'&&epAimant(R,2,[258,195],'libre')[0].join()==='258,195','ASSERT FAIL epAimant 90');
+ console.assert(epAimant([[0,0],[100,0],[0,100]],1,[96,-100],'45')[0].join()==='98,-98','ASSERT FAIL epAimant 45')}
+// Collisions : un élément ne traverse pas un mur, ni le coin rentrant d'un L ; il peut toucher un mur.
+{const P={pts:epForme('L',300,300),av:{ouv:[],el:[]},ap:null};
+ console.assert(epLibre(P,{k:'wc',x:0,y:0,r:0,w:38,d:68})&&!epLibre(P,{k:'wc',x:-10,y:0,r:0,w:38,d:68})&&!epLibre(P,{k:'bai',x:150,y:150,r:0,w:170,d:75})&&epLibre(P,{k:'gir',x:-50,y:-50,w:150,d:150}),'ASSERT FAIL epLibre');
+ const o={k:'bai',x:150,y:150,r:0,w:170,d:75};console.assert(epCaser(P,o)&&epLibre(P,o),'ASSERT FAIL epCaser');
+ // Glissé d'un coup loin derrière le mur gauche et le haut : le WC s'arrête dans l'angle.
+ const w={k:'wc',x:100,y:100,r:0,w:38,d:68};epGlisse(P,w,-200,-150);console.assert(w.x===0&&w.y===0,'ASSERT FAIL epGlisse');
+ const s=epPoser(P,P.av,'lav',[5,5]);console.assert(epLibre(P,P.av.el[s.i]),'ASSERT FAIL epPoser écarte du mur')}
+// Préconisation « Dimensions : 100 × 140 cm » : reprise par le receveur de l'après, à la pose et après coup ; ignorée si la ligne est décochée.
+{const z={b:{on:['d2'],p:{d2:{L:'100',l:'140'}}},plan:{pts:epForme('rect',250,200),av:{ouv:[],el:[]},ap:{ouv:[],el:[{k:'rec',x:0,y:0,r:0,w:120,d:80}]}}};
+ epSyncPreco(z);const r=z.plan.ap.el[0];console.assert(r.w===100&&r.d===140&&epLibre(z.plan,r),'ASSERT FAIL epSyncPreco');
+ const s=epPoser(z.plan,z.plan.ap,'recc',[125,100],epPreco(z));console.assert(z.plan.ap.el[s.i].w===100&&z.plan.ap.el[s.i].d===140,'ASSERT FAIL epPoser cotes du receveur');
+ z.b.on=[];console.assert(epPreco(z)===null,'ASSERT FAIL epPreco ligne décochée')}
 {const P=epNeuf();console.assert(!epAImprimer(P)&&!epAImprimer(undefined),'ASSERT FAIL epAImprimer plan vide');P.av.el.push({k:'wc',x:0,y:0,r:0,w:38,d:68});
- const s=epSvgDoc(P,P.av,2);console.assert(epAImprimer(P)&&s.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')&&!s.includes(' sel"')&&s.includes('id="ep-cer"'),'ASSERT FAIL epSvgDoc autonome')}
+ const s=epSvgDoc(P,P.av,2);console.assert(epAImprimer(P)&&s.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')&&!s.includes(' sel"')&&s.includes('id="ep-cer"')&&!s.includes('data-c='),'ASSERT FAIL epSvgDoc autonome')}
 {const P=epNeuf();P.av.el.push({k:'wc',x:0,y:0,r:0,w:38,d:68});P.ap=structuredClone(P.av);P.ap.el.push({k:'lav',x:100,y:0,r:0,w:60,d:45},{k:'bar',x:0,y:0,r:0,w:60,d:10});P.ap.ouv.push({k:'pb',m:2,p:0,w:80,ext:true});
  console.assert(epSvg(P,P.av,null)[0]===epSvg(P,P.ap,null)[0],'ASSERT FAIL epSvg même cadre avant / après')}
+// Couches : le receveur posé après un mitigeur et une barre reste dessous ; le numéro d'un petit objet le sélectionne à l'écran, pas dans le PDF.
+{const P=epNeuf();P.av.el.push({k:'mid',x:100,y:0,r:0,w:30,d:10},{k:'bar',x:20,y:0,r:0,w:60,d:10},{k:'rec',x:0,y:0,r:0,w:120,d:80});
+ const e=epSvg(P,P.av,null,false)[1],ordre=[...e.matchAll(/<g data-e="(\d)" class/g)].map(m=>m[1]).join();
+ console.assert(ordre==='2,0,1'&&e.includes('<g data-e="0" pointer-events="all"')&&!epSvgDoc(P,P.av,1).includes('pointer-events="all"')&&!epSvg(P,P.av,null,true)[1].includes('pointer-events="all"'),'ASSERT FAIL epCouche et numéro cliquable')}
+// Pastilles d'objets serrés dans un coin de douche : aucune ne se chevauche, aucune sur un petit objet voisin, toutes dans la pièce.
+{const P={pts:epForme('rect',120,115),av:{ouv:[],el:[{k:'rec',x:0,y:0,r:0,w:90,d:90},{k:'mid',x:40,y:0,r:0,w:30,d:10},{k:'bco',x:30,y:0,r:0,w:60,d:30},{k:'sie',x:0,y:0,r:0,w:45,d:45},{k:'bar',x:0,y:40,r:90,w:60,d:10},{k:'pf',x:90,y:0,r:90,w:90,d:6}]},ap:null};
+ const R=epPastilles(P,P.av),pet=P.av.el.filter(o=>EP_PETIT.includes(o.k));
+ console.assert(R.length===6&&R.every((a,i)=>R.every((b,k)=>k===i||Math.hypot(a.x-b.x,a.y-b.y)>=20))&&R.every(r=>epDans([r.x,r.y],P.pts)&&pet.every(q=>q===r.o||epDistEl(q,[r.x,r.y])>=10)),'ASSERT FAIL epPastilles')}
 console.assert(epNum({el:[{k:'gir'},{k:'wc'},{k:'lav'}]}).map(o=>o.k).join()==='wc,lav','ASSERT FAIL epNum sans le cercle');
+// Numéro d'une barre coudée : devant la barre, hors de sa pastille ; celui d'un WC reste au centre.
+console.assert(epNumPt({k:'bco',x:0,y:0,r:0,w:60,d:30}).join()==='30,41'&&epNumPt({k:'wc',x:0,y:0,r:0,w:38,d:68}).join()==='19,34','ASSERT FAIL epNumPt');
 });
 
 /* ========== Visite de fin de travaux (v.type='fin', n° FIN-…) ==========
@@ -4954,9 +5095,194 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
   const v={t:[{id:'a',st:'Réalisé'},{id:'b',st:'Partiel',com:''},{id:'c',st:''}],it:{},f:{dateVis:'2026-11-03',adresse:'x',concl:'Travaux conformes'}},C=finControles(v).map(c=>c[0]+':'+c[1]).join(' / ');
   console.assert(/^ko:1 travail sans statut/.test(C)&&/partiel ou non réalisé sans commentaire/.test(C)&&/réalisé sans photo/.test(C)&&/Conclusion « conformes »/.test(C),'ASSERT FAIL finControles',C)});
 
+/* ========== Fiche de suivi MaPrimeRénov' remise au propriétaire, tuile du dossier d'audit ==========
+   Coordonnées et date : celles de l'audit (v.f). v.sui : et (étape en cours, 1 à 17), docs {devis, dp} (documents à transmettre), docsL [texte libre],
+         trav [libellés cochés de SUI_TRAV], travL [texte libre], aides {pa, pld} (tableaux affichés).
+   Étapes : fiche « Les différentes étapes d'un dossier MaprimeRénov énergie avec SOLIHA » (v4 du 17/04/2024).
+   Documents, travaux et barèmes : fiche de visite à domicile V11. Barèmes modifiables dans Paramètres (P.suiBar). */
+const SUI_PH=[['Éligibilité',[240,222,160],[110,82,0]],['Étude technique',[208,230,200],[47,107,37]],['Subventions',[186,218,170],[47,107,37]],['Travaux et paiement',[200,222,240],[27,95,134]]];
+// [phase, texte, qui agit]
+const SUI_ET=[[0,'Premier contact avec SOLIHA (téléphone, mail, permanence, entreprise, inscription en ligne).','Vous'],
+  [0,'Courrier de SOLIHA : aides mobilisables, nos missions, liste des documents à fournir.','SOLIHA'],
+  [0,'Envoi des documents demandés et inscription sur monprojet.anah.gouv.fr.','Vous'],
+  [0,'Dossier complet : SOLIHA vous contacte pour fixer le rendez-vous à domicile.','SOLIHA'],
+  [1,'Visite à domicile pour l’audit énergétique.','SOLIHA'],
+  [1,'Envoi de l’audit avec les scénarios de travaux, leur coût estimé et les aides possibles.','SOLIHA'],
+  [1,'Vous demandez des devis pour un des scénarios et vous nous les envoyez.','Vous'],
+  [1,'Vérification des devis.','SOLIHA'],
+  [2,'Dépôt de la demande de subventions sur la plateforme dédiée.','SOLIHA'],
+  [2,'Vous recevez l’accord de subvention, puis vous signez les devis.','Vous'],
+  [2,'Si vous le souhaitez : demande d’avance MaPrimeRénov’ (devis signés par vous et l’entreprise, avec son cachet, à envoyer à SOLIHA).','Vous'],
+  [3,'Réalisation des travaux.','Entreprises'],
+  [3,'Fin des travaux : envoi des factures et du RIB à SOLIHA, par mail ou par courrier.','Vous'],
+  [3,'Vérification des factures.','SOLIHA'],
+  [3,'Visite de contrôle de fin de travaux.','SOLIHA'],
+  [3,'Envoi des factures et justificatifs de fin de travaux à MaPrimeRénov’.','SOLIHA'],
+  [3,'Versement du solde de la subvention.','Anah']];
+const SUI_DOCS=[['devis','Devis détaillés des artisans pour le scénario retenu, avec les quantités et prix unitaires, en précisant fourniture et pose.',
+    ['N° SIREN de l’entreprise, adresse des travaux, nom et adresse du propriétaire ;','N° d’assurance décennale et nom de la compagnie d’assurance ;','pour les travaux d’économie d’énergie : qualification RGE de l’entreprise pour chaque type de travaux.']],
+  ['dp','Déclaration préalable de travaux : vérifiez en mairie si elle est nécessaire. Si oui, envoyez-nous :',
+    ['la copie du dossier déposé au service urbanisme ;','la copie du récépissé de dépôt ;','la copie de l’accord.']]];
+const SUI_TRAV=[['Menuiseries',['Fenêtres ou portes-fenêtres','Fenêtres de toiture','Porte d’entrée ou de service','Fermetures isolantes']],
+  ['Isolation',['Isolation du plancher des combles perdus','Isolation des rampants de toiture','Isolation de la toiture terrasse','Isolation des murs par l’intérieur','Isolation des murs par l’extérieur','Isolation du plancher bas']],
+  ['Chauffage et eau chaude',['Chaudière bois ou biomasse','Poêle ou insert à bûches','Poêle à granulés ou à plaquettes','Pompe à chaleur air/eau, eau/eau ou géothermique','Pompe à chaleur air/air','Chauffe-eau thermodynamique']],
+  ['Ventilation',['VMC simple flux hygroréglable type A','VMC simple flux hygroréglable type B','VMC double flux']]];
+// Barèmes de la fiche VAD V11 ; chaque appareil peut les corriger dans Paramètres (P.suiBar).
+const SUI_BAR0={pa2:30000,pa3:40000,paTm:80,paMo:60,paIn:45,paSu:10,pldPl:70000,pldTm:80,pldMo:60,pldBo:10};
+const SUI_BARL=[['pa2','Parcours accompagné : plafond, gain de 2 classes','€'],['pa3','Parcours accompagné : plafond, gain de 3 classes ou plus','€'],['paTm','Parcours accompagné : très modestes','%'],['paMo','Parcours accompagné : modestes','%'],['paIn','Parcours accompagné : intermédiaires','%'],['paSu','Parcours accompagné : supérieurs','%'],
+  ['pldPl','Logement Décent : plafond','€'],['pldTm','Logement Décent : très modestes','%'],['pldMo','Logement Décent : modestes','%'],['pldBo','Logement Décent : bonus sortie de passoire','%']];
+const suiBar=()=>({...SUI_BAR0,...(P.suiBar||{})});
+const suiMigre=x=>{const d=SUI_VIDE(),s=x||{};return {...d,...s,docs:{...d.docs,...s.docs},aides:{...d.aides,...s.aides}}};
+const SUI_VIDE=()=>({et:5,docs:{devis:true,dp:true},docsL:['',''],trav:[],travL:['',''],aides:{pa:true,pld:true}});
+const suiEur=n=>Math.round(+n||0).toLocaleString('fr-FR').replace(/\s/g,' ')+' €';
+const suiTravTous=v=>[...v.sui.trav,...v.sui.travL.filter(filled)];
+const suiDocsTous=v=>[...SUI_DOCS.filter(([k])=>v.sui.docs[k]),...v.sui.docsL.filter(filled).map(t=>['',t,[]])];
+const suiNom=v=>[v.f.pNom,v.f.pPrenom].filter(filled).join(' ');
+function suiControles(v){const L=[],f=v.f,add=(n,t,vw)=>L.push([n,t,vw]);
+  if(!filled(f.pNom))add('ko','Nom du propriétaire manquant','adossier');if(!f.dateVis)add('ko','Date de la visite manquante','adossier');
+  if(!P.nom)add('ko','Profil sans nom (Mon profil)','profil');
+  if(!suiTravTous(v).length)add('av','Aucun travail préconisé','strav');
+  if(!v.sui.aides.pa&&!v.sui.aides.pld)add('av','Aucun tableau d’aides affiché','saides');
+  if(!P.tel&&!P.mail)add('av','Profil sans téléphone ni e-mail : le propriétaire ne pourra pas vous joindre','profil');
+  return L}
+
+/* --- écrans --- */
+// Écrans de la tuile « Fiche de suivi » du dossier d'audit ; « Terminé » revient au sommaire de la fiche (suivi).
+const suiTile=v=>`<button class="tile" data-act="go" data-v="suivi"><img class="ic" src="${ICO_DEG.synthese}" alt=""><span class="num">PROPRIÉTAIRE</span><span class="lbl">Fiche de suivi MaPrimeRénov’</span>${pills([[`Étape ${v.sui.et} sur ${SUI_ET.length}`,'info']])}</button>`;
+function suiView(app,bar,bi){if(!['suivi','setape','sdocs','strav','saides'].includes(view))return false;const v=cur,f=v.f,s=v.sui;bar.hidden=false;const fini=`<button class="btn-primary" data-act="go" data-v="suivi">Terminé</button>`,top=t=>topbar(t,who(v),'suivi');
+  if(view==='suivi'){const ko=suiControles(v).filter(c=>c[0]==='ko').length,nt=suiTravTous(v).length,nd=suiDocsTous(v).length;
+    const tile=(id,n,t,ic,st)=>`<button class="tile" data-act="go" data-v="${id}"><img class="ic" src="${ic}" alt=""><span class="num">${n}</span><span class="lbl">${esc(t)}</span>${pills(st)}</button>`;
+    app.innerHTML=`${topbar('Fiche de suivi MaPrimeRénov’',who(v),'dash')}
+     <p class="muted">Fiche recto-verso à remettre au propriétaire. Nom, adresse et date de visite : ceux du dossier d’audit.</p>
+     <div class="tiles">
+      ${tile('setape','ÉTAPE','Où en est le dossier',ICO.synth,[[`Étape ${s.et} sur ${SUI_ET.length}`,'info']])}
+      ${tile('sdocs','DOCUMENTS','Documents à transmettre',ICO.admin,[[nd?nd+' document'+(nd>1?'s':''):'Aucun',nd?'info':'']])}
+      ${tile('strav','TRAVAUX','Travaux préconisés',ICO.trav,[[nt?nt+' travau'+(nt>1?'x':''):'À faire',nt?'ok':'warn']])}
+      ${tile('saides','AIDES','Aides affichées',ICO.synth,[[[s.aides.pa&&'Parcours accompagné',s.aides.pld&&'Logement Décent'].filter(Boolean).join(' + ')||'Aucune',s.aides.pa||s.aides.pld?'info':'warn']])}</div>
+     ${ko?`<p class="hint warn">${ko} point${ko>1?'s':''} à corriger avant la fiche.</p>`:''}`;
+    bi.innerHTML=`<button data-act="dash">Retour à l’audit</button><button class="btn-primary" data-act="su-pdf">${svg('pdf')}Fiche PDF</button>`;return true}
+  if(view==='setape'){app.innerHTML=`${top('Où en est le dossier')}
+     <p class="muted">Touchez l’étape où se trouve le propriétaire : elle sera marquée « Vous êtes ici », les précédentes seront cochées.</p>
+     ${SUI_PH.map(([t],p)=>`<h2 class="sec">${esc(t)}</h2><div class="chips" role="radiogroup" aria-label="${esc(t)}" style="flex-direction:column;align-items:stretch">${SUI_ET.map((e,i)=>e[0]!==p?'':
+       `<label class="chip" style="min-height:44px"><input type="radio" name="sui_et" data-sk="et" value="${i+1}" ${s.et===i+1?'checked':''}><b>${i+1}.</b>&nbsp;${esc(e[1])} (${esc(e[2])})</label>`).join('')}</div>`).join('')}`;
+    bi.innerHTML=fini;return true}
+  if(view==='sdocs'){app.innerHTML=`${top('Documents à transmettre')}
+     <p class="muted">Seuls les documents cochés figurent sur la fiche. Décochez ceux que le propriétaire vous a déjà remis.</p>
+     <div class="form">${SUI_DOCS.map(([k,t,d])=>`<label class="chip" style="min-height:44px;align-items:flex-start"><input type="checkbox" data-sk="docs" data-k="${k}" ${s.docs[k]?'checked':''}><span>${esc(t)}<br><small class="muted">${d.map(esc).join(' ')}</small></span></label>`).join('')}
+      ${s.docsL.map((t,i)=>`<div class="field full"><span>Autre document à demander</span><input type="text" data-sk="docsL" data-i="${i}" value="${esc(t)}" autocapitalize="sentences"></div>`).join('')}</div>
+     <div class="row"><button data-act="su-add" data-k="docsL">${svg('plus')}Ajouter une ligne</button></div>`;bi.innerHTML=fini;return true}
+  if(view==='strav'){app.innerHTML=`${top('Travaux préconisés')}
+     ${SUI_TRAV.map(([c,L])=>`<h2 class="sec">${esc(c)}</h2><div class="chips">${L.map(l=>`<label class="chip" style="min-height:44px"><input type="checkbox" data-sk="trav" value="${esc(l)}" ${s.trav.includes(l)?'checked':''}>${esc(l)}</label>`).join('')}</div>`).join('')}
+     <h2 class="sec">Autres travaux</h2><div class="form">${s.travL.map((t,i)=>`<div class="field full"><span>Travail préconisé</span><input type="text" data-sk="travL" data-i="${i}" value="${esc(t)}" autocapitalize="sentences"></div>`).join('')}</div>
+     <div class="row"><button data-act="su-add" data-k="travL">${svg('plus')}Ajouter une ligne</button></div>`;bi.innerHTML=fini;return true}
+  if(view==='saides'){const B=suiBar();app.innerHTML=`${top('Aides affichées')}
+     <p class="muted">Tableaux repris de la fiche de visite. Taux et plafonds modifiables dans Paramètres.</p>
+     <div class="form"><label class="chip" style="min-height:44px"><input type="checkbox" data-sk="aides" data-k="pa" ${s.aides.pa?'checked':''}>MaPrimeRénov’ Parcours accompagné (plafond ${suiEur(B.pa2)} / ${suiEur(B.pa3)})</label>
+      <label class="chip" style="min-height:44px"><input type="checkbox" data-sk="aides" data-k="pld" ${s.aides.pld?'checked':''}>Ma Prime Logement Décent (plafond ${suiEur(B.pldPl)})</label></div>`;bi.innerHTML=fini;return true}
+  return false}
+// Texte libre à la frappe ; cases et étape au changement (réaffichage des pastilles).
+function suiInp(el){if(!el.dataset.sk||['radio','checkbox'].includes(el.type))return false;cur.sui[el.dataset.sk][+el.dataset.i]=el.value;save();return true}
+function suiChg(el){const k=el.dataset.sk;if(!k)return false;const s=cur.sui;
+  if(k==='et')s.et=+el.value;else if(k==='docs'||k==='aides')s[k][el.dataset.k]=el.checked;
+  else if(k==='trav')s.trav=el.checked?[...new Set([...s.trav,el.value])]:s.trav.filter(x=>x!==el.value);else return true;save();keep();return true}
+// Paramètres : barèmes (champ vide = valeur de la fiche VAD).
+const suiParHtml=()=>{const B=P.suiBar||{};return `<div class="field full"><span>Fiche de suivi MaPrimeRénov’ : taux et plafonds des aides</span>
+  ${SUI_BARL.map(([k,l,u])=>`<div class="row"><span class="grow">${esc(l)}</span><input type="text" inputmode="numeric" data-sb="${k}" value="${esc(B[k]??'')}" placeholder="${SUI_BAR0[k]}" aria-label="${esc(l)} (${u})" style="max-width:8rem"> ${u}</div>`).join('')}
+  <div class="hint">Champ vide : valeur de la fiche de visite (indiquée en gris). À vérifier à chaque changement de barème.</div></div>`};
+function suiBarInp(el){const n=String(el.value).replace(/\s/g,'').replace(',','.'),B=P.suiBar=P.suiBar||{};if(n===''||isNaN(+n))delete B[el.dataset.sb];else B[el.dataset.sb]=+n;saveP()}
+async function suiAct(a,b){
+  if(!cur||!isAud(cur))return;
+  if(a==='su-add'){cur.sui[b.dataset.k].push('');save();return keep()}
+  // Point à corriger : ouvre l'écran concerné ; points à vérifier : signalés, la fiche est produite.
+  if(a==='su-pdf'){const C=suiControles(cur),ko=C.find(c=>c[0]==='ko');if(ko){toast(ko[1]);view=ko[2];return go()}
+    if(C.length)toast('À vérifier : '+C.map(c=>c[1]).join(' ; '));if(!window.jspdf){toast("Le module PDF n'est pas chargé : ouvrez l'application une fois avec internet.");return}return suiPdf(cur)}}
+
+/* --- fiche PDF recto-verso --- */
+async function suiPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',format:'a4'}),f=v.f,s=v.sui,B=suiBar();
+  const INK=[29,35,41],MUT=[91,102,112],ACC=[27,95,134],LINE=[213,218,223],RED=[179,38,30],ROSE=[255,245,244],TINT=[238,243,246],WHITE=[255,255,255],OK=[47,107,37],VOUS=[[122,75,0],[255,241,214]],AUT=[MUT,[238,240,242]];
+  const T=x=>PDFT(String(x??'').replace(/[  ]/g,' '));
+  const W=210,H=297,ML=14,MR=14,CW=W-ML-MR,BOT=H-16;let y=12;
+  const font=(sz,st='normal',c=INK)=>{doc.setFont('helvetica',st);doc.setFontSize(sz);doc.setTextColor(...c)};
+  const LH=sz=>sz*.3528*1.3,lines=(x,w,sz,st='normal')=>{font(sz,st);return doc.splitTextToSize(T(x),w)};
+  const need=h=>{if(y+h>BOT){doc.addPage('a4','portrait');y=14}};
+  const para=(x,sz,st,c,xx,w)=>{for(const l of lines(x,w,sz,st)){need(LH(sz));font(sz,st,c);doc.text(l,xx,y+LH(sz)*.78);y+=LH(sz)}};
+  const head=async(t1,t2,sous)=>{try{const lg=await loadImg(LOGO);doc.addImage(LOGO,'PNG',ML,y,40,40*lg.naturalHeight/lg.naturalWidth,undefined,'FAST')}catch(e){}
+    font(16,'bold',ACC);doc.text(T(t1),ML+48,y+6);if(t2)doc.text(T(t2),ML+48,y+12.5);font(9.5,'normal',MUT);doc.text(T(sous),ML+48,y+(t2?18.5:12.5));
+    y+=23;doc.setFillColor(...ACC);doc.rect(ML,y,CW,1.1,'F');y+=4};
+  const tick=(x,yy,c)=>{doc.setDrawColor(...c);doc.setLineWidth(.6);doc.line(x-1.5,yy,x-.4,yy+1.1);doc.line(x-.4,yy+1.1,x+1.7,yy-1.3)};
+  const warn=(x,yy)=>{doc.setDrawColor(...RED);doc.setLineWidth(.6);doc.triangle(x,yy-3.4,x-3.6,yy+2.8,x+3.6,yy+2.8);font(9,'bold',RED);doc.text('!',x,yy+2.1,{align:'center'})};
+  const rappel=(t,sous)=>{const L=lines(t,CW-20,10.5,'bold'),S=sous?lines(sous,CW-20,8.5):[],h=L.length*LH(10.5)+S.length*LH(8.5)+6;need(h+2);
+    doc.setFillColor(...ROSE);doc.setDrawColor(...RED);doc.setLineWidth(.6);doc.roundedRect(ML,y,CW,h,2,2,'FD');warn(ML+8,y+h/2);
+    let yy=y+3;font(10.5,'bold',INK);L.forEach(l=>{doc.text(l,ML+15,yy+LH(10.5)*.78);yy+=LH(10.5)});font(8.5,'normal',MUT);S.forEach(l=>{doc.text(l,ML+15,yy+LH(8.5)*.78);yy+=LH(8.5)});y+=h+3};
+  const qui=(q,x,yy)=>{const [fg,bg]=q==='Vous'?VOUS:AUT;font(7.5,'bold',fg);const w=19;doc.setFillColor(...bg);doc.roundedRect(x,yy-2.4,w,4.8,2.3,2.3,'F');doc.text(T(q),x+w/2,yy+.9,{align:'center'})};
+  const dossier=[suiNom(v)||'Propriétaire non renseigné',[f.adresse,cpv(v)].filter(filled).join(', ')].filter(filled).join(' · ');
+
+  /* recto : où en est le dossier */
+  await head('Votre dossier MaPrimeRénov’','où en êtes-vous ?','Étude personnalisée · Demande d’aide à l’amélioration de l’habitat');
+  {const rows=[['Bénéficiaire',dossier],['Date de la visite',f.dateVis?frDate(f.dateVis):''],['Votre interlocuteur',[[P.nom,P.qual].filter(Boolean).join(', '),P.tel,P.mail].filter(Boolean).join(' · ')]].filter(([,x])=>filled(x));
+    const R=rows.map(([l,x])=>[l,lines(x,CW-48,9.5)]),h=R.reduce((n,[,L])=>n+L.length*LH(9.5),0)+4+(R.length-1)*1;
+    doc.setFillColor(...TINT);doc.roundedRect(ML,y,CW,h,2,2,'F');let yy=y+2;for(const [l,L] of R){font(9,'normal',MUT);doc.text(T(l+' :'),ML+4,yy+LH(9.5)*.78);font(9.5,'bold',INK);L.forEach(t=>{doc.text(t,ML+44,yy+LH(9.5)*.78);yy+=LH(9.5)});yy+=1}y+=h+4}
+  {const n=SUI_ET.length,lab=T(`Étape ${s.et} sur ${n}`);font(11,'bold',ACC);const lw=doc.getTextWidth(lab)+4,bw=CW-lw;
+    doc.setFillColor(227,231,234);doc.roundedRect(ML,y,bw,3,1.5,1.5,'F');doc.setFillColor(...ACC);doc.roundedRect(ML,y,Math.max(3,bw*s.et/n),3,1.5,1.5,'F');doc.text(lab,ML+CW,y+3,{align:'right'});y+=6.5}
+  const RH=7.2,GAP=1,X=ML+11,RW=CW-11;
+  for(const [p,[pt,pbg,pfg]] of SUI_PH.entries()){const E=SUI_ET.map((e,i)=>[e,i+1]).filter(([e])=>e[0]===p),h=E.length*(RH+GAP)-GAP;
+    doc.setFillColor(...pbg);doc.roundedRect(ML,y,9,h,1.5,1.5,'F');font(h<20?6.5:8,'bold',pfg);doc.text(T(pt),ML+5.8,y+h/2+doc.getTextWidth(T(pt))/2,{angle:90});
+    for(const [[,t,q],i] of E){const ici=i===s.et,fait=i<s.et,suite=i===s.et+1;
+      if(ici){doc.setFillColor(...ROSE);doc.setDrawColor(...RED);doc.setLineWidth(.6)}else if(suite){doc.setFillColor(243,248,251);doc.setDrawColor(...ACC);doc.setLineWidth(.35);doc.setLineDashPattern([1,.8],0)}else{doc.setFillColor(...(fait?[250,251,252]:WHITE));doc.setDrawColor(...LINE);doc.setLineWidth(.3)}
+      doc.roundedRect(X,y,RW,RH,1.4,1.4,'FD');doc.setLineDashPattern([],0);const cy=y+RH/2;
+      doc.setFillColor(...(ici?RED:fait?OK:suite?ACC:[233,237,240]));doc.circle(X+4.5,cy,2.7,'F');
+      if(fait)tick(X+4.5,cy,WHITE);else{font(8,'bold',ici||suite?WHITE:MUT);doc.text(String(i),X+4.5,cy+1,{align:'center'})}
+      const lib=suite?'Prochaine étape : '+t.charAt(0).toLowerCase()+t.slice(1):t,tw=RW-(ici?55:33),sz=lines(lib,tw,ici?9.5:9).length>1?7.8:(ici?9.5:9);
+      font(sz,ici?'bold':'normal',fait?MUT:INK);const L=lines(lib,tw,sz,ici?'bold':'normal').slice(0,2);L.forEach((l,k)=>doc.text(l,X+9.5,cy+1-(L.length-1)*LH(sz)/2+k*LH(sz)));
+      if(ici){font(7.5,'bold',WHITE);const lw=doc.getTextWidth(T('VOUS ÊTES ICI'))+4;doc.setFillColor(...RED);doc.roundedRect(X+RW-23-lw,cy-2.4,lw,4.8,1,1,'F');doc.text(T('VOUS ÊTES ICI'),X+RW-23-lw/2,cy+.9,{align:'center'})}
+      qui(q,X+RW-21,cy);y+=RH+GAP}y+=1.5}
+  {font(7.5,'normal',MUT);let x=ML;for(const [c,t] of [[OK,'Étape faite'],[RED,'Aujourd’hui'],[ACC,'Prochaine étape']]){doc.setFillColor(...c);doc.circle(x+1.3,y+1.3,1.3,'F');doc.text(T(t),x+3.5,y+2.2);x+=doc.getTextWidth(T(t))+9}
+    doc.text(T('« Vous » : action à votre charge'),x+2,y+2.2);y+=6}
+  rappel('Ne commencez pas les travaux et ne signez aucun devis avant d’avoir reçu l’accord de toutes les subventions.','Sinon, les aides peuvent être refusées. En cas de doute, appelez-nous.');
+  font(8,'normal',MUT);doc.text(T('Tournez la page : ce que vous devez nous transmettre'),ML+CW,y+2,{align:'right'});
+
+  /* verso : ce qu'il reste à faire */
+  doc.addPage('a4','portrait');y=12;await head('Ce qu’il vous reste à faire','',f.dateVis?'Suite à la visite du '+frDate(f.dateVis):'Suite à notre visite');
+  let num=0;const sec=t=>{need(14);num++;doc.setFillColor(...ACC);doc.circle(ML+3.2,y+3.2,3.2,'F');font(9.5,'bold',WHITE);doc.text(String(num),ML+3.2,y+4.4,{align:'center'});font(12,'bold',ACC);doc.text(T(t),ML+9,y+4.5);y+=9.5};
+  const box=yy=>{doc.setDrawColor(...INK);doc.setLineWidth(.35);doc.roundedRect(ML+.5,yy,4,4,.6,.6,'S')};
+  const D=suiDocsTous(v);if(D.length){sec('Documents à nous transmettre (par mail ou courrier)');
+    for(const [,t,d] of D){const L=lines(t,CW-9,10);need(L.length*LH(10)+d.length*LH(8.5)+3);box(y+.6);font(10,'normal',INK);L.forEach((l,k)=>doc.text(l,ML+8,y+LH(10)*(k+.78)));y+=L.length*LH(10)+.5;
+      for(const x of d)for(const l of lines(x,CW-14,8.5)){font(8.5,'normal',MUT);doc.text('•',ML+9,y+LH(8.5)*.78);doc.text(l,ML+12,y+LH(8.5)*.78);y+=LH(8.5)}y+=2.5}y+=1}
+  const TR=suiTravTous(v);if(TR.length){sec('Travaux préconisés');
+    for(const t of TR){const L=lines(t,CW-8,10);need(L.length*LH(10)+2);doc.setFillColor(...ACC);doc.circle(ML+2,y+2.2,.9,'F');font(10,'normal',INK);L.forEach((l,k)=>doc.text(l,ML+6,y+LH(10)*(k+.78)));y+=L.length*LH(10)+.6;
+      doc.setDrawColor(...LINE);doc.setLineWidth(.2);doc.line(ML+6,y,ML+CW,y);y+=1.6}y+=2}
+  // Tableau d'aides : en-tête bleu, première colonne à gauche, cellules fusionnées pour les taux du parcours accompagné.
+  const table=(titre,sous,hd,cw,rows,fus)=>{const hh=9,rh=r=>Math.max(...r.map((c,i)=>lines(c,cw[i]-3,9).length))*LH(9)+3,RH2=rows.map(rh),th=hh+RH2.reduce((a,b)=>a+b,0);need(th+14);
+    font(10.5,'bold',INK);doc.text(T(titre),ML,y+4);const tw=doc.getTextWidth(T(titre));if(sous){font(8.5,'normal',MUT);doc.text(T(sous),ML+tw+2.5,y+4)}y+=6.5;
+    let x=ML;doc.setFillColor(...ACC);doc.rect(ML,y,CW,hh,'F');hd.forEach((c,i)=>{const L=lines(c,cw[i]-3,8.5,'bold');font(8.5,'bold',WHITE);L.forEach((l,k)=>doc.text(l,x+cw[i]/2,y+hh/2+1-(L.length-1)*LH(8.5)/2+k*LH(8.5),{align:'center'}));x+=cw[i]});y+=hh;
+    const y0=y;doc.setDrawColor(200,207,213);doc.setLineWidth(.3);
+    rows.forEach((r,j)=>{let x=ML;r.forEach((c,i)=>{if(fus&&i>0&&j>0){x+=cw[i];return}const hcell=fus&&i>0?RH2.reduce((a,b)=>a+b,0):RH2[j];doc.rect(x,y,cw[i],hcell,'S');
+      const L=lines(c,cw[i]-3,9);font(9,'normal',INK);L.forEach((l,k)=>doc.text(l,i?x+cw[i]/2:x+1.5,y+hcell/2+1-(L.length-1)*LH(9)/2+k*LH(9),i?{align:'center'}:{}));x+=cw[i]});y+=RH2[j]});y=Math.max(y,y0)+3};
+  if(s.aides.pa||s.aides.pld){sec('Les aides possibles');
+    if(s.aides.pa){table('MaPrimeRénov’ Parcours accompagné','rénovation énergétique d’ampleur',['Plafond de travaux HT','Très modestes','Modestes','Intermédiaires','Supérieurs'],[CW-4*28,28,28,28,28],
+      [['Gain de 2 classes : '+suiEur(B.pa2),B.paTm+' %',B.paMo+' %',B.paIn+' %',B.paSu+' %'],['Gain de 3 classes ou plus : '+suiEur(B.pa3),'','','','']],true);
+      for(const t of ['2 sauts de classe minimum ;','2 gestes d’isolation, avec au moins 25 % de surface traitée par poste ;','taux selon le nombre de sauts de classe et les revenus du ménage.']){font(8.5,'normal',MUT);need(LH(8.5));doc.text('•',ML+1,y+LH(8.5)*.78);doc.text(T(t),ML+4,y+LH(8.5)*.78);y+=LH(8.5)}y+=3}
+    if(s.aides.pld)table('Ma Prime Logement Décent','',['Plafond de travaux HT','Très modestes','Modestes'],[CW-2*40,40,40],
+      [[suiEur(B.pldPl),B.pldTm+' %',B.pldMo+' %'],['Bonus sortie de passoire : logement classé F ou G avant travaux, et D après travaux','+'+B.pldBo+' %','+'+B.pldBo+' %']]);
+    para('Le montant estimé de vos aides, selon le scénario retenu, figurera dans l’audit énergétique que nous vous enverrons.',8.5,'normal',MUT,ML,CW);y+=3}
+  rappel('Rappel : ne pas commencer les travaux avant les accords de toutes les subventions et ne pas signer les devis.');
+  piedPdf(doc,v,'Suivi MaPrimeRénov’',ML,MR);
+  await offer(`${preNum(v)}Suivi_MaPrimeRenov_${slug(suiNom(v))||'proprietaire'}_${f.dateVis||today()}.pdf`,doc.output('blob'))}
+
+// Auto-tests, après le chargement de l'application (filled() et today() sont déclarés plus loin).
+queueMicrotask(()=>{const v={f:{pNom:'',dateVis:''},sui:suiMigre({et:6,docs:{dp:false}})};
+  console.assert(SUI_ET.length===17&&SUI_ET[4][1].includes('audit')&&v.sui.et===6&&v.sui.docs.devis&&!v.sui.docs.dp&&v.sui.aides.pa&&suiMigre().et===5,'ASSERT FAIL suiMigre');
+  const C=suiControles(v).map(c=>c[0]+':'+c[1]).join(' / ');console.assert(/ko:Nom du propriétaire/.test(C)&&/ko:Date de la visite/.test(C)&&/av:Aucun travail/.test(C),'ASSERT FAIL suiControles',C);
+  v.sui.trav=['VMC double flux'];v.sui.travL=['  ','Reprise de l’enduit'];v.sui.docsL=['Avis d’imposition',''];
+  console.assert(suiTravTous(v).join('|')==='VMC double flux|Reprise de l’enduit'&&suiDocsTous(v).map(d=>d[0]||d[1]).join('|')==='devis|Avis d’imposition','ASSERT FAIL suiTravTous/suiDocsTous');
+  console.assert(suiNom({f:{pNom:'DURAND',pPrenom:'Paul'}})==='DURAND Paul'&&suiNom({f:{pNom:'DURAND'}})==='DURAND','ASSERT FAIL suiNom');
+  console.assert(ACT_VUE.includes('suivi'),'ASSERT FAIL retour vers la fiche de suivi sans action');
+  console.assert(newVisit('aud').sui?.et===5,'ASSERT FAIL audit créé sans fiche de suivi');
+  const p0=P.suiBar;P.suiBar={paTm:75};console.assert(suiBar().paTm===75&&suiBar().paMo===60,'ASSERT FAIL suiBar');P.suiBar=p0});
+
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.21-1042';
+const APP_VER='2026.11.21-1417';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -5006,7 +5332,7 @@ function migrate(v){
   if(isDeg(v)){v.g=v.g||[];return v}
   if(isErgo(v))return ergoMigre(v);
   if(isFin(v)){v.t=v.t||[];return v}
-  if(isAud(v)){const d=AUD_VIDE(),a=audMigre({...v.a});v.a={...d,...a,gen:{...d.gen,...a.gen},env:{...d.env,...a.env}};return v}
+  if(isAud(v)){const d=AUD_VIDE(),a=audMigre({...v.a});v.a={...d,...a,gen:{...d.gen,...a.gen},env:{...d.env,...a.env}};v.sui=suiMigre(v.sui);return v}
   if(isLoc(v)){const d=locVide(),l=v.loc||{};
     // Ancienne saisie : n° et voie du bien séparés, adresse du propriétaire en texte libre.
     if(l.bien&&l.bien.adresse===undefined){l.bien.adresse=[l.bien.numero,l.bien.voie].filter(Boolean).join(' ');delete l.bien.numero;delete l.bien.voie}
@@ -5117,7 +5443,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const today=()=>new Date().toISOString().slice(0,10);
 const frDate=d=>d&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d.split('-').reverse().join('/'):(d||'');
 const newVisit=(t,b)=>({dfTxt:1,dfV:3,phV:1,id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),created:Date.now(),updated:Date.now(),
-  ...(t==='fin'?{type:'fin',f:{dateVis:today()},t:[]}:t==='ergo'?{type:'ergo',f:{dateVis:today(),dateDiag:today()},z:ergoZonesDefaut()}:t==='aud'?{type:'aud',f:{dateVis:today(),dispositif:'MaPrimeRénov’ Parcours accompagné'},a:AUD_VIDE()}:t==='loc'?{type:'loc',f:{dateVis:today()},loc:locVide()}:t==='deg'?{type:'deg',bien:b,f:{op:P.lastOp||'',dateVis:today(),...(b==='imm'?{g1_nom:'Logement 1'}:{})},g:b==='imm'?[{id:'g0',k:'bc',n:{}},{id:'g1',k:'lc',n:{}}]:[{id:'g0',k:'mi',n:{}}]}:t==='pdl'?{type:'pdl',f:{commune:'Thouars',cp:COMMUNES.Thouars.cp,ville:COMMUNES.Thouars.ville,typeVis:'Visite de contrôle',dateVis:today()}}:{f:{dem:'CAF',typeVis:'Visite initiale',dateVis:today(),mrCiv:'Madame, Monsieur'}}),it:{},done:{},sig:''});
+  ...(t==='fin'?{type:'fin',f:{dateVis:today()},t:[]}:t==='ergo'?{type:'ergo',f:{dateVis:today(),dateDiag:today()},z:ergoZonesDefaut()}:t==='aud'?{type:'aud',f:{dateVis:today(),dispositif:'MaPrimeRénov’ Parcours accompagné'},a:AUD_VIDE(),sui:SUI_VIDE()}:t==='loc'?{type:'loc',f:{dateVis:today()},loc:locVide()}:t==='deg'?{type:'deg',bien:b,f:{op:P.lastOp||'',dateVis:today(),...(b==='imm'?{g1_nom:'Logement 1'}:{})},g:b==='imm'?[{id:'g0',k:'bc',n:{}},{id:'g1',k:'lc',n:{}}]:[{id:'g0',k:'mi',n:{}}]}:t==='pdl'?{type:'pdl',f:{commune:'Thouars',cp:COMMUNES.Thouars.cp,ville:COMMUNES.Thouars.ville,typeVis:'Visite de contrôle',dateVis:today()}}:{f:{dem:'CAF',typeVis:'Visite initiale',dateVis:today(),mrCiv:'Madame, Monsieur'}}),it:{},done:{},sig:''});
 function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(t._t);t._t=setTimeout(()=>t.hidden=true,Math.max(2600,msg.length*60))}
 function save(now){if(!cur)return;cur.updated=Date.now();clearTimeout(saveT);const v=cur,go=()=>store.put(v).catch(e=>toast('Enregistrement impossible : '+e.message));if(now)return go();saveT=setTimeout(go,350)}
 // Alerte « commentaire manquant » d'une pathologie, mise à jour pendant la saisie.
@@ -5474,6 +5800,7 @@ function render(){
       ${pChoix('theme','Apparence',['Automatique','Clair','Sombre'],'Automatique : suit le réglage clair ou sombre de l’appareil.')}
       ${pChoix('texte','Taille du texte',['Normal','Grand'],'Agrandit le texte de tous les écrans. Les rapports PDF ne changent pas.')}
       ${pChoix('ergoRet','Rapport ergothérapeute : colonne « Travaux retenus »',['Oui','Non'])}
+      ${suiParHtml()}
       <div class="field full"><span>Loc’Avantages</span><div><button data-act="ldopen">Dispositifs et règles de calcul</button></div></div>
       <div class="field full"><span>Mode administrateur (Loc’Avantages)</span>${adminHtml()}</div>
       <div class="field full"><span>Sauvegarde automatique</span>${!('showDirectoryPicker' in window)?'<span class="muted">Non disponible sur ce navigateur : utilisez le bouton « Sauvegarder » de chaque dossier.</span>'
@@ -5509,7 +5836,7 @@ function render(){
   if(view==='ldisp'||view==='ldfiche'||view==='lregles'||view==='ldedit'||view==='ldanah')return ldView(app,bar,bi);
   if(isDeg(cur)&&degView(app,bar,bi))return;
   if(isLoc(cur)&&locView(app,bar,bi))return;
-  if(isAud(cur)&&audView(app,bar,bi))return;
+  if(isAud(cur)&&(suiView(app,bar,bi)||audView(app,bar,bi)))return;
   if(isErgo(cur)&&ergoView(app,bar,bi))return;
   if(isFin(cur)&&finView(app,bar,bi))return;
   const logo=logoOf(cur),RV=RR(cur),pdl=isPdl(cur);
@@ -6009,7 +6336,7 @@ const locPlanResume=R=>{const o=CONV.locPlan(cur.loc,R),L=Object.fromEntries(CON
    ${o.pret?r('Prêt bancaire',o.pret):''}${o.apport?r('Apport de fonds personnels',o.apport):''}${Object.entries(o.lignes).filter(([,m])=>m>0).map(([k,m])=>r(L[k],m)).join('')}${r('Total des aides publiques',o.aidesPub,1)}${r('Total des ressources',o.totalRes,1)}</tbody></table></div>`
    +o.err.map(t=>`<div class="banner danger" role="alert">${esc(t)}</div>`).join('')+o.avert.map(t=>`<div class="banner">Attention : ${esc(t)}</div>`).join('')};
 // Actions qui ouvrent simplement une vue (flèche retour). Bug du 17/11/2026 : la flèche des documents du dépôt (vers ldepot) ne faisait rien.
-const ACT_VUE=['dash','ldepot'],LOC_RETOUR_DOC='ldepot';
+const ACT_VUE=['dash','ldepot','suivi'],LOC_RETOUR_DOC='ldepot';
 console.assert(ACT_VUE.includes(LOC_RETOUR_DOC),'ASSERT FAIL retour des documents du dépôt sans action');
 // Bibliothèque pdf-lib et modèle du cerfa : fichiers à part (1,4 Mo), chargés seulement pour produire un document du dépôt.
 const locJs={};const chargerJs=src=>locJs[src]||=new Promise((ok,ko)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=()=>{delete locJs[src];s.remove();ko(new Error('fichier '+src+' introuvable : ouvrez l’application une fois avec internet'))};document.head.append(s)});
@@ -6236,6 +6563,7 @@ document.addEventListener('input',e=>{
   if(el.dataset.lliste&&ldEd){ldSet(el.dataset.lliste,el.value.split('\n').map(x=>x.trim()).filter(Boolean));return}
   if(el.dataset.lrestr&&ldEd){const [i,k,j]=el.dataset.lrestr.split('.'),r=ldEd.rues.restr[Object.keys(ldEd.rues.restr)[+i]],v=k==='texte'?el.value:parseInt(el.value,10)||0;if(j!=null)r[k][+j]=v;else r[k]=v;return}
   if(el.dataset.lchoix!==undefined&&ldEd){ldSet(el.dataset.lchoix+'.choix',el.value.split('\n').map(x=>x.trim()).filter(Boolean));return}
+  if(el.dataset.sb)return suiBarInp(el);
   if(el.dataset.p){P[el.dataset.p]=el.value.trim();saveP();if(['theme','texte'].includes(el.dataset.p))appliqueAff();return}
   if(el.dataset.mr){const m=MAIRIES.l[el.dataset.mr];if(m){m[el.dataset.mk]=el.value;m.maj=today();saveMairies()}return}
   if(el.dataset.cf){const c=CARNET.l[el.dataset.cf];if(c){c[el.dataset.ck]=el.value.trim();c.maj=today();saveCarnet();cbDL()}return}
@@ -6252,6 +6580,7 @@ document.addEventListener('input',e=>{
   if(el.dataset.gn==='pt'||el.dataset.gn==='motif'){const s=degS(el);s[el.dataset.gn]=el.value;save();return}
   if(isErgo(cur)&&ergoInp(el))return;
   if(isFin(cur)&&finInp(el))return;
+  if(isAud(cur)&&suiInp(el))return;
   if(el.dataset.f==='justifNon'){cur.f.justifNon=!el.checked;save();return}  // case cochée = phrase affichée (défaut des anciens dossiers)
   if(el.dataset.f&&!el.dataset.ft){cur.f[el.dataset.f]=el.value;save();if(/^mr/.test(el.dataset.f))memoMairie(cur);return}
   if(el.dataset.it&&el.dataset.k==='note'){it(el.dataset.it)[el.dataset.k]=el.value;save();cmMaj(el.dataset.it);if(el.nextElementSibling?.classList.contains('wc'))el.nextElementSibling.textContent=motsTxt(el.value)}
@@ -6284,6 +6613,7 @@ document.addEventListener('change',async e=>{
   if(el.dataset.vcp!==undefined)cpLien(el);
   if(isErgo(cur)&&ergoChg(el))return;
   if(isFin(cur)&&finChg(el))return;
+  if(isAud(cur)&&suiChg(el))return;
   if(el.dataset.lcom!==undefined)return locCommune(el.value,true);
   if(el.dataset.lphoto!==undefined){const f=el.files[0];el.value='';if(f)await locPhoto(f);return}
   // Audit : listes, cases et origine réaffichent l'écran (champs conditionnels) ; l'année d'un générateur aussi, en fin de saisie.
@@ -6351,6 +6681,7 @@ document.addEventListener('click',async e=>{
   if(a.startsWith('er-'))return ergoAct(a,b);
   if(a.startsWith('an-'))return annAct(a,b);
   if(a.startsWith('fi-'))return finAct(a,b);
+  if(a.startsWith('su-'))return suiAct(a,b);
   if(a.startsWith('pc')&&cur&&/^pc(go|p|aj|fer|tout|line|def|ann|edit|ok|del|fin|ras|new|ren|sup)$/.test(a))return pcAct(a,b);
   if(a==='new'){cbNew='';view='choose';return go()}
   if(a==='cbrepr'){const b=cbBloc(cur),c=CARNET.l[cur.cb];if(b&&c){const d=cbRead(cur,b);for(const [x,y] of Object.entries(c))if(y)d[x]=y;cbFill(cur,b,d);await save(true);keep();toast('Coordonnées reprises de la fiche')}return}
