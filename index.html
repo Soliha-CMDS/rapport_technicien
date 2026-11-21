@@ -434,6 +434,22 @@ label.chip.erb{border-radius:10px;width:100%;align-items:flex-start}
 .limpot{margin-top:12px;background:var(--warn-bg);color:var(--warn);border-radius:var(--r);padding:12px 14px;display:grid;gap:4px}.limpot .lih{display:flex;align-items:center;gap:8px;font-weight:700;margin-bottom:4px}
 .limpot .lir{display:flex;justify-content:space-between;gap:12px;font-variant-numeric:tabular-nums}.limpot p{margin:4px 0 0;font-size:.9rem}
 
+/* Écran Audit : carte du plan en bandeau, fiches en boutons compacts par groupe */
+.plancarte{display:flex;gap:18px;align-items:center;background:var(--surface);border:2px solid var(--accent);border-radius:var(--r);padding:14px 18px;margin-bottom:6px}
+.plancarte>img{width:84px;height:84px;flex:none}
+.plancarte .k{font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.plancarte h2{font-size:1.3rem;color:var(--accent);margin:2px 0 4px}
+.plancarte p{color:var(--muted);margin:0 0 8px}
+.plancarte .btn-primary{margin-top:10px}
+.agrps{display:grid;grid-template-columns:1fr;gap:4px 22px}
+@media (min-width:900px){.agrps{grid-template-columns:1fr 2fr}}
+.agrp h2{font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:12px 0 6px}
+.minis{display:flex;flex-wrap:wrap;gap:8px}
+.mini{display:flex;align-items:center;gap:8px;min-height:48px;padding:6px 12px;background:var(--surface);border:1px solid var(--line);border-radius:12px;color:var(--fg);font:inherit;font-weight:700;cursor:pointer;text-align:left}
+.mini img{width:28px;height:28px;flex:none}
+.mini .pills{margin:0}
+@media (max-width:600px){.plancarte{flex-direction:column;align-items:flex-start}.plancarte>img{width:56px;height:56px}}
+
 </style>
 
 <div class="wrap">
@@ -3540,8 +3556,8 @@ window.PLAN_HOTE={lire:()=>cur&&isAud(cur)&&cur.a.plan?JSON.stringify(cur.a.plan
     aCol=c;aId=id;aRet=null;aPlan=true;view='ael';setTimeout(go)},
   choix:null,suivant:null,cible:null,
   ecran:v=>{aLog=true;aPlan=false;aFin=false;if(v.startsWith('col:')){aCol=v.slice(4);view='acol'}else view=v;setTimeout(go)},
-  retour:()=>{view='dash';setTimeout(go)},
-  fin:()=>{const ch=PLAN_HOTE.choix;PLAN_HOTE.choix=null;if(ch){aCol=ch.c;aId=ch.id;view='ael'}else view='dash';setTimeout(go)},
+  retour:()=>{view='aaudit';setTimeout(go)},
+  fin:()=>{const ch=PLAN_HOTE.choix;PLAN_HOTE.choix=null;if(ch){aCol=ch.c;aId=ch.id;view='ael'}else view='aaudit';setTimeout(go)},
   // F-121 : isolation proposée pour un mur relié à une fiche ; appareils des fiches à placer sur l'état des lieux. F-130 : n°, catégorie et localisation d'un constat.
   propMur:id=>audPropMur(cur.a.murs.find(x=>x.id===id)),
   propZone:(c,id)=>audPropZone(c,cur.a[c].find(x=>x.id===id)),
@@ -3579,6 +3595,13 @@ function audPlanBloc(c,e){const L=cur.a.plan?.liens?.[e.id]||[],m=c==='murs',z=c
     ${m?`<div class="muted">Total : ${audNb(L.reduce((s,x)=>s+x.nette,0))} m² nets (${audNb(L.reduce((s,x)=>s+x.brute,0))} m² bruts)</div>`:z&&L.length>1?`<div class="muted">Total : ${audNb(L.reduce((s,x)=>s+x.surf,0))} m²</div>`:''}`
     :`<div class="muted">${m?'Aucun mur relié.':z?'Aucune zone reliée.':c==='portes'?'Aucune porte reliée.':'Aucune fenêtre reliée.'}</div>`}
     <div class="row"><button data-act="au-planch">Choisir sur le plan</button>${L.length&&(m||z)?'<button data-act="au-planrep">Reprendre du plan</button>':''}</div></div>`}
+// Carte du plan en tête de l'écran Audit : niveaux fermés, éléments rattachés aux fiches (plan.liens), reste à rattacher (plan.releve).
+const audPlanChiffres=a=>{const P=a.plan||{},R=P.releve||{};return {niv:(P.niveaux||[]).filter(n=>n.closed).length,liens:Object.values(P.liens||{}).reduce((n,L)=>n+L.length,0),reste:['murs','baies','zones'].reduce((n,k)=>n+(R[k]||[]).length,0)}};
+const audPlanCarte=a=>{const c=audPlanChiffres(a),pl=(n,u,us)=>n+' '+(n>1?us:u);
+  return `<div class="plancarte"><img src="${ICO_DEG.organisation}" alt=""><div class="grow"><h2>Plan</h2>
+   <p>Dessinez les niveaux, placez murs, baies et équipements : les fiches se remplissent depuis le plan.</p>
+   ${pills(c.niv?[[pl(c.niv,'niveau','niveaux'),'info'],...(c.liens?[[pl(c.liens,'élément lié aux fiches','éléments liés aux fiches'),'ok']]:[]),...(c.reste?[[c.reste+' à rattacher','warn']]:[])]:[['Plan à dessiner','warn']])}
+   <button class="btn-primary" data-act="go" data-v="aplan">${c.niv?'Ouvrir le plan':'Dessiner le plan'} →</button></div></div>`};
 const audPlanEtat=a=>{const N=(a.plan?.niveaux||[]).filter(n=>n.closed).length;return [[N?N+' niveau'+(N>1?'x':''):'À faire',N?'ok':'']]};
 
 // F-136 : contrôle de fin de visite, d'après le § 6.11 du PRD (champs qui existent dans l'application).
@@ -3609,34 +3632,41 @@ function audControles(v){const a=v.a,f=v.f,g=a.gen,C=[],add=(n,t,x)=>C.push([n,t
 /* --- écrans --- */
 let aCol='murs',aId=null,aRet=null,aPlan=false,aLog=false,aFin=false,aCtl=[];
 function audView(app,bar,bi){
-  if(view==='dash'&&aLog){aLog=false;view='aplan'}  // écran ouvert depuis le plan (« Logement », « Avant de partir ») : retour au plan
+  if((view==='aaudit'||view==='dash')&&aLog){aLog=false;view='aplan'}  // écran ouvert depuis le plan (« Logement », « Avant de partir ») : retour au plan
   const a=cur.a;bar.hidden=false;if(view!=='aplan')PLAN_HOTE.choix=null;  // liaison abandonnée si l'on quitte le plan
   const tile=(act,attr,n,t,ic,st)=>`<button class="tile" data-act="${act}" ${attr}><img class="ic" src="${ICO_DEG[ic]}" alt=""><span class="num">${n}</span><span class="lbl">${esc(t)}</span>${pills(st)}</button>`;
   const cnt=c=>{const n=a[c].length;return [[n?n+' '+(n>1?'fiches':'fiche'):'À faire',n?'ok':'']]};
-  if(view==='dash'){const M=Object.fromEntries(audModules(cur));
+  // Accueil du dossier : Dossier et propriétaire, Fiche de suivi MaPrimeRénov', Audit (la grille ci-dessous).
+  if(view==='dash'){const M=Object.fromEntries(audModules(cur)),p=prog(cur);
     app.innerHTML=`${topbar(who(cur),kind(cur),'list')}${progHtml(cur,1)}
      <div class="tiles">
       ${tile('go','data-v="adossier"','DOSSIER','Dossier et propriétaire','descriptif',[[M.adossier?'Complet':'À compléter',M.adossier?'ok':'']])}
-      ${tile('go','data-v="agen"','LOGEMENT','Année, niveaux, mitoyenneté','organisation',[[M.agen?'Complet':'À compléter',M.agen?'ok':'']])}
-      ${tile('go','data-v="aenv"','ENVIRONNEMENT','Façades et site','facade',[[M.aenv?'Renseigné':'À faire',M.aenv?'ok':'']])}
-      ${tile('go','data-v="aplan"','PLAN','Plan de la maison (niveaux, vues)','organisation',audPlanEtat(a))}
-      ${(()=>{const C=audControles(cur),k=C.filter(x=>x[0]==='ko').length,w=C.length-k;return tile('go','data-v="afin"','AVANT DE PARTIR','Contrôle de fin de visite','synthese',k||w?[...(k?[[k+' à compléter','']]:[]),...(w?[[w+' à vérifier','']]:[])]:[['Complet','ok']])})()}
-      ${['murs','pb','plaf','baies','portes'].map(c=>tile('au-col',`data-c="${c}"`,'ENVELOPPE',ADEF[c].t,ADEF[c].ic,cnt(c))).join('')}
-      ${['chauf','ecs','vent'].map(c=>tile('au-col',`data-c="${c}"`,'ÉQUIPEMENTS',ADEF[c].t,ADEF[c].ic,cnt(c))).join('')}
-      ${tile('au-col','data-c="constats"','CONSTATS','Désordres et particularités','humidite',cnt('constats'))}
-      ${tile('au-col','data-c="contraintes"','CONTRAINTES','Contraintes','depose',cnt('contraintes'))}
-      ${tile('au-col','data-c="travaux"','PROPRIÉTAIRE','Travaux déjà réalisés','synthese',[[a.aucunTrav?'Aucun':a.travaux.length?a.travaux.length+' travaux':'À faire',a.aucunTrav||a.travaux.length?'ok':'']])}
       ${suiTile(cur)}
+      ${tile('go','data-v="aaudit"','AUDIT ÉNERGÉTIQUE','Audit','isolation',[[`${p.f} / ${p.n} modules`,p.f===p.n?'ok':'info']])}
      </div>`;
-    bi.innerHTML=`<button data-act="au-constat">${svg('plus')}Constat</button><button class="btn-primary" data-act="go" data-v="afiche">Fiche de saisie DPEV5</button>`;return true}
+    bi.innerHTML=`<button class="btn-primary" data-act="list">Terminé</button>`;return true}
+  // Écran Audit (maquette A validée le 21/11/2026) : le plan en bandeau, puis les fiches en boutons compacts par groupe.
+  if(view==='aaudit'){const M=Object.fromEntries(audModules(cur)),C=audControles(cur),k=C.filter(x=>x[0]==='ko').length,w=C.length-k;
+    const mini=(act,attr,t,ic,st)=>`<button class="mini" data-act="${act}" ${attr}><img src="${ICO_DEG[ic]}" alt=""><span>${esc(t)}</span>${pills(st)}</button>`,col=c=>mini('au-col',`data-c="${c}"`,ADEF[c].t,ADEF[c].ic,cnt(c));
+    const grp=(t,h)=>`<section class="agrp"><h2>${esc(t)}</h2><div class="minis">${h}</div></section>`;
+    app.innerHTML=`${topbar('Audit',who(cur),'dash')}${progHtml(cur)}
+     ${audPlanCarte(a)}
+     <div class="agrps">
+      ${grp('Le logement',mini('go','data-v="agen"','Logement','organisation',[[M.agen?'Complet':'À compléter',M.agen?'ok':'']])+mini('go','data-v="aenv"','Environnement','facade',[[M.aenv?'Renseigné':'À faire',M.aenv?'ok':'']]))}
+      ${grp('Enveloppe',['murs','pb','plaf','baies','portes'].map(col).join(''))}
+      ${grp('Équipements',['chauf','ecs','vent'].map(col).join(''))}
+      ${grp('Constats et propriétaire',mini('au-col','data-c="constats"','Constats','humidite',cnt('constats'))+mini('au-col','data-c="contraintes"','Contraintes','depose',cnt('contraintes'))
+        +mini('au-col','data-c="travaux"','Travaux déjà réalisés','synthese',[[a.aucunTrav?'Aucun':a.travaux.length?a.travaux.length+' travaux':'À faire',a.aucunTrav||a.travaux.length?'ok':'']]))}
+     </div>`;
+    bi.innerHTML=`<button data-act="au-constat">${svg('plus')}Constat</button><button data-act="go" data-v="afin">Avant de partir · ${k?k+' à compléter':w?w+' à vérifier':'complet'}</button><button class="btn-primary" data-act="go" data-v="afiche">Fiche de saisie DPEV5</button>`;return true}
   if(view==='adossier'){app.innerHTML=`${topbar('Dossier et propriétaire',who(cur),'dash')}${cbAvert(cur)}<div class="form">${AUD_ADM.map(field).join('')}</div>`;
     bi.innerHTML=`<button class="btn-primary" data-act="dash">Terminé</button>`;return true}
   if(view==='agen'||view==='aenv'){const g=view==='agen',e=g?a.gen:a.env,b=g?'gen':'env';
-    app.innerHTML=`${topbar(g?'Le logement':'Environnement du bien',who(cur),'dash')}<div class="form">${(g?AUD_GEN:AUD_ENV).map(x=>audFld(b,e,x)).join('')}${audNote(b,e)}</div>
+    app.innerHTML=`${topbar(g?'Le logement':'Environnement du bien',who(cur),'aaudit')}<div class="form">${(g?AUD_GEN:AUD_ENV).map(x=>audFld(b,e,x)).join('')}${audNote(b,e)}</div>
      ${g?audPh('gen',false):`<h3>Photos des façades</h3><p class="muted">Au moins la façade principale, idéalement chaque orientation.</p>${audPh('facades',!it('a:facades').ph.length)}`}`;
-    bi.innerHTML=`<button data-act="au-constat">${svg('plus')}Constat</button><button class="btn-primary" data-act="dash">Terminé</button>`;return true}
+    bi.innerHTML=`<button data-act="au-constat">${svg('plus')}Constat</button><button class="btn-primary" data-act="aaudit">Terminé</button>`;return true}
   if(view==='acol'){const d=ADEF[aCol],L=a[aCol];
-    app.innerHTML=`${topbar(d.t,who(cur),'dash')}
+    app.innerHTML=`${topbar(d.t,who(cur),'aaudit')}
      ${aCol==='travaux'?`<div class="chips" style="margin-bottom:12px"><label class="chip"><input type="checkbox" data-ak="aucunTrav" ${a.aucunTrav?'checked':''}>Aucun travaux réalisés (déclaré par le propriétaire)</label></div>`:''}
      <div class="visits">${L.length?L.map((e,i)=>{const n=it('a:'+e.id).ph.length;
        return `<div class="case"><div><div class="name">${esc(audDesig(aCol,e,i))}</div><div class="muted">${esc(audResume(aCol,e)||'À compléter')}</div></div>
@@ -3653,16 +3683,16 @@ function audView(app,bar,bi){
      <div class="row" style="margin-top:12px"><button data-act="au-dup" data-id="${e.id}">Dupliquer cette fiche</button></div>`;
     bi.innerHTML=`${aCol==='constats'?'':`<button data-act="au-constat">${svg('plus')}Constat</button>`}${aPlan&&['murs','baies','portes'].includes(aCol)?'<button data-act="au-suiv" title="Élément suivant du plan">Suivant</button>':`<button data-act="au-add" data-c="${aCol}">${svg('plus')}${esc(d.s)}</button>`}<button class="btn-primary" data-act="au-back">Terminé</button>`;return true}
   if(view==='aplan'){$('.wrap').classList.add('plein');bar.hidden=true;
-    app.innerHTML=`${topbar('Plan de la maison',who(cur),'dash')}<iframe class="planfr" title="Plan de la maison"></iframe>`;app.querySelector('iframe').srcdoc=PLAN_HTML;return true}
+    app.innerHTML=`${topbar('Plan de la maison',who(cur),'aaudit')}<iframe class="planfr" title="Plan de la maison"></iframe>`;app.querySelector('iframe').srcdoc=PLAN_HTML;return true}
   if(view==='afin'){const C=aCtl=audControles(cur),ko=C.filter(c=>c[0]==='ko'),av=C.filter(c=>c[0]==='av');
     const li=c=>`<div class="ctl ${c[0]}">${svg(c[0]==='ko'?'x':'warn')}<span class="grow">${esc(c[1])}</span><button data-act="au-fin" data-k="${C.indexOf(c)}">Ouvrir</button></div>`;
-    app.innerHTML=`${topbar('Avant de partir',who(cur),'dash')}
+    app.innerHTML=`${topbar('Avant de partir',who(cur),'aaudit')}
      ${ko.length?`<h2 class="sec ctlh ko">À compléter (${ko.length})</h2><div class="ctls">${ko.map(li).join('')}</div>`:''}
      ${av.length?`<h2 class="sec ctlh av">À vérifier (${av.length})</h2><div class="ctls">${av.map(li).join('')}</div>`:''}
      ${C.length?'':'<div class="empty">Tout est complet : vous pouvez quitter le logement.</div>'}
      <p class="muted">Ces points ne bloquent rien : ils évitent un retour sur place.</p>`;
-    bi.innerHTML=`<button class="btn-primary" data-act="dash">Terminé</button>`;return true}
-  if(view==='afiche'){app.innerHTML=`${topbar('Fiche de saisie DPEV5',who(cur),'dash')}${audFiche(cur)}`;bi.innerHTML=`<button data-act="au-xml">Exporter pour DPEV5</button><button class="btn-primary" data-act="dash">Retour au dossier</button>`;return true}
+    bi.innerHTML=`<button class="btn-primary" data-act="aaudit">Terminé</button>`;return true}
+  if(view==='afiche'){app.innerHTML=`${topbar('Fiche de saisie DPEV5',who(cur),'aaudit')}${audFiche(cur)}`;bi.innerHTML=`<button data-act="au-xml">Exporter pour DPEV5</button><button class="btn-primary" data-act="aaudit">Retour au dossier</button>`;return true}
   return false}
 
 /* --- fiche de saisie DPEV5 : relevé, puis libellés DPEV5 proposés --- */
@@ -3804,7 +3834,7 @@ async function audAct(a,b){const c=b.dataset.c||aCol,L=cur.a[c];
     for(const x of k)e[x]=R[x];save();toast(k.length?'Repris du plan : '+k.map(x=>audOpt(aCol,x)[1].toLowerCase()).join(', '):'Rien à reprendre');return go()}
   if(a==='au-suiv'){PLAN_HOTE.suivant={c:aCol,id:aId};view='aplan';return go()}
   if(a==='au-back'&&aPlan&&view==='ael'){aPlan=false;view='aplan';return go()}
-  if(a==='au-back'){if(view==='ael'&&aRet){({c:aCol,id:aId}=aRet);aRet=null;view='ael'}else view=view==='ael'?'acol':'dash';return go()}
+  if(a==='au-back'){if(view==='ael'&&aRet){({c:aCol,id:aId}=aRet);aRet=null;view='ael'}else view=view==='ael'?'acol':'aaudit';return go()}
   if(a==='au-constat'){const e=audNew('constats');if(view==='ael'){aRet={c:aCol,id:aId};e.lien=aId;if(AUD_COLS.includes(aCol))e.loc=audDesig(aCol,cur.a[aCol].find(x=>x.id===aId),cur.a[aCol].findIndex(x=>x.id===aId))}else aRet=null;
     cur.a.constats.push(e);aCol='constats';aId=e.id;view='ael';save();return go()}
   if(a==='au-xml')return audExportXml(cur);
@@ -5174,7 +5204,7 @@ function suiView(app,bar,bi){if(!['suivi','setape','sdocs','strav','saides'].inc
       ${tile('strav','TRAVAUX','Travaux préconisés',ICO.trav,[[nt?nt+' travau'+(nt>1?'x':''):'À faire',nt?'ok':'warn']])}
       ${tile('saides','REVENUS ET AIDES','Niveau de revenus, aides affichées',ICO.synth,[[suiCat(v)==null?'Revenus à saisir':SUI_CAT[suiCat(v)],suiCat(v)==null?'warn':'info'],[[s.aides.pa&&'Parcours accompagné',suiPld(v)&&'Logement Décent'].filter(Boolean).join(' + ')||'Aucune aide',s.aides.pa||suiPld(v)?'info':'warn']])}</div>
      ${ko?`<p class="hint warn">${ko} point${ko>1?'s':''} à corriger avant la fiche.</p>`:''}`;
-    bi.innerHTML=`<button data-act="dash">Retour à l’audit</button><button class="btn-primary" data-act="su-pdf">${svg('pdf')}Fiche PDF</button>`;return true}
+    bi.innerHTML=`<button data-act="su-mail">Envoyer par mail</button><button class="btn-primary" data-act="su-pdf">${svg('pdf')}Fiche PDF</button>`;return true}
   if(view==='setape'){app.innerHTML=`${top('Où en est le dossier')}
      <p class="muted">Touchez l’étape où se trouve le propriétaire : elle sera marquée « Vous êtes ici », les précédentes seront cochées.</p>
      <p class="muted">Version ${suiPmo(v)?'très modeste / modeste : avec avance et acompte':'intermédiaire / supérieur : sans avance ni acompte'} (d’après le niveau de revenus).</p>
@@ -5215,11 +5245,17 @@ async function suiAct(a,b){
   if(!cur||!isAud(cur))return;
   if(a==='su-add'){cur.sui[b.dataset.k].push('');save();return keep()}
   // Point à corriger : ouvre l'écran concerné ; points à vérifier : signalés, la fiche est produite.
-  if(a==='su-pdf'){const C=suiControles(cur),ko=C.find(c=>c[0]==='ko');if(ko){toast(ko[1]);view=ko[2];return go()}
-    if(C.length)toast('À vérifier : '+C.map(c=>c[1]).join(' ; '));if(!window.jspdf){toast("Le module PDF n'est pas chargé : ouvrez l'application une fois avec internet.");return}return suiPdf(cur)}}
+  if(a==='su-pdf'||a==='su-mail'){const C=suiControles(cur),ko=C.find(c=>c[0]==='ko');if(ko){toast(ko[1]);view=ko[2];return go()}
+    if(!window.jspdf){toast("Le module PDF n'est pas chargé : ouvrez l'application une fois avec internet.");return}
+    if(a==='su-pdf'){if(C.length)toast('À vérifier : '+C.map(c=>c[1]).join(' ; '));return suiPdf(cur)}
+    // Envoi : partage sur tablette (adresse copiée), sinon messagerie et PDF enregistré à joindre (envoiMail).
+    await save(true);const v=cur,m=suiMail(v);if(!filled(v.f.pMail))toast('E-mail du propriétaire absent (Dossier et propriétaire) : à saisir dans la messagerie');
+    try{const r=await suiPdf(v,1);await envoiMail(r.nom,r.blob,v.f.pMail,m.sujet,m.corps)}catch(err){toast('Envoi impossible : '+err.message)}}}
+// Mail au propriétaire : texte validé par l'utilisateur le 21/11/2026.
+const suiMail=v=>({sujet:'Suivi de votre dossier MaPrimeRénov’',corps:`Madame, Monsieur,\n\nSuite à notre visite${v.f.dateVis?' du '+frDate(v.f.dateVis):''}, vous trouverez ci-joint la fiche de suivi de votre dossier MaPrimeRénov’ : l’étape où il en est, les documents à nous transmettre et les aides possibles.\n\nJe reste à votre disposition pour toute question.`});
 
 /* --- fiche PDF recto-verso --- */
-async function suiPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',format:'a4'}),f=v.f,s=v.sui,B=suiBar(),cat=suiCat(v),EV=suiEtapes(v),pos=suiPos(v);
+async function suiPdf(v,envoi){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',format:'a4'}),f=v.f,s=v.sui,B=suiBar(),cat=suiCat(v),EV=suiEtapes(v),pos=suiPos(v);
   const INK=[29,35,41],MUT=[91,102,112],ACC=[27,95,134],LINE=[213,218,223],RED=[179,38,30],ROSE=[255,245,244],TINT=[238,243,246],WHITE=[255,255,255],OK=[47,107,37],VOUS=[[122,75,0],[255,241,214]],AUT=[MUT,[238,240,242]];
   const T=x=>PDFT(String(x??'').replace(/[  ]/g,' '));
   const W=210,H=297,ML=14,MR=14,CW=W-ML-MR,BOT=H-16;let y=12;
@@ -5301,7 +5337,8 @@ async function suiPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',for
     para('Le montant estimé de vos aides, selon le scénario retenu, figurera dans l’audit énergétique que nous vous enverrons.',8.5,'normal',MUT,ML,CW);y+=3}
   rappel('Rappel : ne pas commencer les travaux avant les accords de toutes les subventions et ne pas signer les devis.');
   piedPdf(doc,v,'Suivi MaPrimeRénov’',ML,MR);
-  await offer(`${preNum(v)}Suivi_MaPrimeRenov_${slug(suiNom(v))||'proprietaire'}_${f.dateVis||today()}.pdf`,doc.output('blob'))}
+  const nom=`${preNum(v)}Suivi_MaPrimeRenov_${slug(suiNom(v))||'proprietaire'}_${f.dateVis||today()}.pdf`;if(envoi)return {nom,blob:doc.output('blob')};
+  await offer(nom,doc.output('blob'))}
 
 // Auto-tests, après le chargement de l'application (filled() et today() sont déclarés plus loin).
 queueMicrotask(()=>{const v={f:{pNom:'',dateVis:''},sui:suiMigre({et:6,docs:{dp:false}})};
@@ -5316,13 +5353,15 @@ queueMicrotask(()=>{const v={f:{pNom:'',dateVis:''},sui:suiMigre({et:6,docs:{dp:
   console.assert(suiTravTous(v).join('|')==='VMC double flux|Reprise de l’enduit'&&suiDocsTous(v).map(d=>d[0]||d[1]).join('|')==='devis|Avis d’imposition','ASSERT FAIL suiTravTous/suiDocsTous');
   console.assert(suiNom({f:{pNom:'DURAND',pPrenom:'Paul'}})==='DURAND Paul'&&suiNom({f:{pNom:'DURAND'}})==='DURAND','ASSERT FAIL suiNom');
   console.assert(Object.entries(SUI_LIEN).every(([n,[,u]])=>SUI_ET.some(e=>e.n===n)&&/^https:\/\//.test(u))&&/avance/.test(SUI_ET[10].t)&&/acompte/.test(SUI_ET[11].t),'ASSERT FAIL liens des étapes 11 et 11 b');
+  console.assert((x=>x.niv===1&&x.liens===3&&x.reste===2)(audPlanChiffres({plan:{niveaux:[{closed:true},{}],liens:{f1:[{},{}],f2:[{}]},releve:{murs:[{}],zones:[{}]}}}))&&audPlanChiffres({}).niv===0,'ASSERT FAIL audPlanChiffres');
+  console.assert(ACT_VUE.includes('aaudit')&&/18\/11\/2026/.test(suiMail({f:{dateVis:'2026-11-18'}}).corps)&&!/ du /.test(suiMail({f:{}}).corps.split('\n')[2]),'ASSERT FAIL accueil audit ou mail de la fiche de suivi');
   console.assert(ACT_VUE.includes('suivi'),'ASSERT FAIL retour vers la fiche de suivi sans action');
   console.assert(newVisit('aud').sui?.et==='5','ASSERT FAIL audit créé sans fiche de suivi');
   const p0=P.suiBar;P.suiBar={paTm:75};console.assert(suiBar().paTm===75&&suiBar().paMo===60,'ASSERT FAIL suiBar');P.suiBar=p0});
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.21-1636';
+const APP_VER='2026.11.21-1934';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -5642,7 +5681,7 @@ const cpv=v=>[v.f.cp,v.f.ville].filter(Boolean).join(' ');
 const who=v=>isFin(v)?v.f.pNom||[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Propriétaire non renseigné':isErgo(v)?v.f.noms||'Demandeur non renseigné':isAud(v)?[v.f.pNom,v.f.pPrenom].filter(Boolean).join(' ')||[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Propriétaire non renseigné':isLoc(v)?locWho(v):isDeg(v)?v.f.pNom||[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Propriétaire non renseigné':isPdl(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', ')||'Logement non renseigné':[v.f.nom,v.f.prenom].filter(Boolean).join(' ')||'Occupant non renseigné';
 const where=v=>isFin(v)||isErgo(v)||isAud(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', '):isLoc(v)?locWhere(v):isDeg(v)?[v.f.adresse,cpv(v)].filter(Boolean).join(', '):isPdl(v)?(v.f.pNom||v.f.pSoc?'Propriétaire : '+(v.f.pSoc||[v.f.pNom,v.f.pPrenom].filter(Boolean).join(' ')):''):[v.f.adresse,cpv(v)].filter(Boolean).join(', ');
 const logoOf=v=>isPdl(v)?COMMUNES[v.f.commune]?.logo:COM[v.f.dem]?.logo;
-const kind=v=>isFin(v)?'Fin de travaux'+(v.f.srcNum?' · '+v.f.srcNum:''):isErgo(v)?'Rapport ergothérapeute':isAud(v)?'Audit énergétique · '+(v.f.dispositif||'maison individuelle'):isLoc(v)?'Loc’Avantages · '+v.loc.logements.length+' logement'+(v.loc.logements.length>1?'s':'')+(v.loc.variante?' · '+v.loc.variante:''):isDeg(v)?['Dégradation',v.bien==='imm'?`Immeuble · ${v.g.length-1} logement${v.g.length>2?'s':''}`:'Maison individuelle',v.f.op].filter(Boolean).join(' · '):isPdl(v)?'Permis de louer · '+v.f.commune+' · '+(v.f.typeVis||''):(COM[v.f.dem]?.label||'')+' · '+(v.f.typeVis||'');
+const kind=v=>isFin(v)?'Fin de travaux'+(v.f.srcNum?' · '+v.f.srcNum:''):isErgo(v)?'Rapport ergothérapeute':isAud(v)?'Rénovation énergétique · '+(v.f.dispositif||'maison individuelle'):isLoc(v)?'Loc’Avantages · '+v.loc.logements.length+' logement'+(v.loc.logements.length>1?'s':'')+(v.loc.variante?' · '+v.loc.variante:''):isDeg(v)?['Dégradation',v.bien==='imm'?`Immeuble · ${v.g.length-1} logement${v.g.length>2?'s':''}`:'Maison individuelle',v.f.op].filter(Boolean).join(' · '):isPdl(v)?'Permis de louer · '+v.f.commune+' · '+(v.f.typeVis||''):(COM[v.f.dem]?.label||'')+' · '+(v.f.typeVis||'');
 
 // Dossiers en cours ou terminés, filtrés par type et par les mots recherchés (tous présents, sans accents ni casse).
 const dosCle=v=>mkey([who(v),where(v),kind(v),v.num,v.f.refDos,frDate(v.f.dateVis),v.f.nom,v.f.pNom,v.f.pSoc].join(' '));
@@ -5682,8 +5721,8 @@ function caseHtml(v){
 }
 /* ---------- tableau de bord de l'accueil (maquettes A téléphone + C tablette validées le 30/10/2026) ---------- */
 // Visites à venir (date de visite aujourd'hui ou plus tard), dossiers à reprendre, chiffres clés, création d'un dossier par type.
-const TDB_TYPES=[['dec','Contrôle décence',()=>ICO.logement],['pdl','Permis de louer',()=>ICO.admin],['deg','Dégradation',()=>ICO_DEG.deg],['aud','Audit énergétique',()=>ICO_DEG.isolation],['ergo','Ergothérapie',()=>ICO.ergo],['loc','Loc’Avantages',()=>ICO.synth],['fin','Fin de travaux',()=>ICO.trav]];
-const TDB_LAB={dec:'Décence',pdl:'Permis de louer',deg:'Dégradation',aud:'Audit énergétique',ergo:'Ergothérapie',loc:'Loc’Avantages',fin:'Fin de travaux'};
+const TDB_TYPES=[['dec','Contrôle décence',()=>ICO.logement],['pdl','Permis de louer',()=>ICO.admin],['deg','Dégradation',()=>ICO_DEG.deg],['aud','Rénovation énergétique',()=>ICO_DEG.isolation],['ergo','Ergothérapie',()=>ICO.ergo],['loc','Loc’Avantages',()=>ICO.synth],['fin','Fin de travaux',()=>ICO.trav]];
+const TDB_LAB={dec:'Décence',pdl:'Permis de louer',deg:'Dégradation',aud:'Rénovation énergétique',ergo:'Ergothérapie',loc:'Loc’Avantages',fin:'Fin de travaux'};
 const tdbTag=v=>{const t=v.type||'dec';return `<span class="tg tg-${t}">${esc(TDB_LAB[t]||'')}</span>`};
 const tdbNew=([t,l,ic])=>`<button class="tdb-ty" ${t==='deg'?'data-act="go" data-v="degbien"':`data-act="newt" data-t="${t}"`}><img src="${ic()}" alt=""><span>${esc(l)}</span></button>`;
 // Rapport à produire : visite passée, rapport PDF pas encore généré (hors simulation Loc'Avantages).
@@ -5761,7 +5800,7 @@ function render(){
     app.innerHTML=`${topbar(fin?'Dossiers terminés':'Dossiers en cours',fin?'Rapport PDF généré':'Constats non finalisés','list')}
      ${lf?`<div class="banner"><span class="grow">Filtre : ${lf==='prod'?'rapports à produire':'rapports produits ce mois-ci'}</span><button data-act="lfx">Voir tous les dossiers</button></div>`:''}
      ${T0.length?`<div class="field"><span>Rechercher</span><input type="text" enterkeyhint="search" id="lq" value="${esc(lq)}" placeholder="Nom, adresse, ville, n° de dossier…" autocomplete="off"></div>
-     ${types.length>1?`<div class="chips" style="margin:10px 0 14px">${[['','Tous'],['dec','Décence'],['pdl','Permis de louer'],['deg','Dégradation'],['loc','Loc’Avantages'],['aud','Audit énergétique'],['ergo','Ergothérapie']].filter(([k])=>!k||types.includes(k)).map(([k,l])=>`<label class="chip"><input type="radio" name="lt" data-lt="${k}" ${lt===k?'checked':''}>${l}</label>`).join('')}</div>`:''}`:''}
+     ${types.length>1?`<div class="chips" style="margin:10px 0 14px">${[['','Tous'],['dec','Décence'],['pdl','Permis de louer'],['deg','Dégradation'],['loc','Loc’Avantages'],['aud','Rénovation énergétique'],['ergo','Ergothérapie']].filter(([k])=>!k||types.includes(k)).map(([k,l])=>`<label class="chip"><input type="radio" name="lt" data-lt="${k}" ${lt===k?'checked':''}>${l}</label>`).join('')}</div>`:''}`:''}
      <div class="visits" id="vlist">${T0.length?listeDossiers(fin)
       :`<div class="empty"><strong>${fin?'Aucun dossier terminé.':'Aucun dossier en cours.'}</strong><br>${fin?'Un dossier passe ici dès que son rapport PDF est généré.':'Touchez « Nouvelle visite » pour démarrer un constat.'}</div>`}</div>`;
     bar.hidden=false;bi.innerHTML=`<button class="btn-primary" data-act="new">${svg('plus')}Nouvelle visite</button>`;
@@ -6376,7 +6415,7 @@ const locPlanResume=R=>{const o=CONV.locPlan(cur.loc,R),L=Object.fromEntries(CON
    ${o.pret?r('Prêt bancaire',o.pret):''}${o.apport?r('Apport de fonds personnels',o.apport):''}${Object.entries(o.lignes).filter(([,m])=>m>0).map(([k,m])=>r(L[k],m)).join('')}${r('Total des aides publiques',o.aidesPub,1)}${r('Total des ressources',o.totalRes,1)}</tbody></table></div>`
    +o.err.map(t=>`<div class="banner danger" role="alert">${esc(t)}</div>`).join('')+o.avert.map(t=>`<div class="banner">Attention : ${esc(t)}</div>`).join('')};
 // Actions qui ouvrent simplement une vue (flèche retour). Bug du 17/11/2026 : la flèche des documents du dépôt (vers ldepot) ne faisait rien.
-const ACT_VUE=['dash','ldepot','suivi'],LOC_RETOUR_DOC='ldepot';
+const ACT_VUE=['dash','ldepot','suivi','aaudit'],LOC_RETOUR_DOC='ldepot';
 console.assert(ACT_VUE.includes(LOC_RETOUR_DOC),'ASSERT FAIL retour des documents du dépôt sans action');
 // Bibliothèque pdf-lib et modèle du cerfa : fichiers à part (1,4 Mo), chargés seulement pour produire un document du dépôt.
 const locJs={};const chargerJs=src=>locJs[src]||=new Promise((ok,ko)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=()=>{delete locJs[src];s.remove();ko(new Error('fichier '+src+' introuvable : ouvrez l’application une fois avec internet'))};document.head.append(s)});
