@@ -5096,12 +5096,13 @@ queueMicrotask(()=>{const T=finLignes('Les désordres constatés…\n\n1. Sécur
   console.assert(/^ko:1 travail sans statut/.test(C)&&/partiel ou non réalisé sans commentaire/.test(C)&&/réalisé sans photo/.test(C)&&/Conclusion « conformes »/.test(C),'ASSERT FAIL finControles',C)});
 
 /* ========== Fiche de suivi MaPrimeRénov' remise au propriétaire, tuile du dossier d'audit ==========
-   Coordonnées et date : celles de l'audit (v.f). v.sui : et (étape en cours, 1 à 17), docs {devis, dp} (documents à transmettre), docsL [texte libre],
+   Coordonnées et date : celles de l'audit (v.f). v.sui : et (numéro de l'étape en cours, texte : '1' à '17' ou '11 b'), rfr, foyer, cat ('' = calcul, '0' à '3'), docs {devis, dp} (documents à transmettre), docsL [texte libre],
          trav [libellés cochés de SUI_TRAV], travL [texte libre], aides {pa, pld} (tableaux affichés).
    Étapes : fiche « Les différentes étapes d'un dossier MaprimeRénov énergie avec SOLIHA » (v4 du 17/04/2024).
+   Niveau de revenus : plafonds MaPrimeRénov' de Loc'Avantages (mprCat, dispositifs.json) ; il choisit la version de la fiche.
    Documents, travaux et barèmes : fiche de visite à domicile V11. Barèmes modifiables dans Paramètres (P.suiBar). */
 const SUI_PH=[['Éligibilité',[240,222,160],[110,82,0]],['Étude technique',[208,230,200],[47,107,37]],['Subventions',[186,218,170],[47,107,37]],['Travaux et paiement',[200,222,240],[27,95,134]]];
-// [phase, texte, qui agit]
+// [phase, texte, qui agit, numéro, réservée aux très modestes et modestes]
 const SUI_ET=[[0,'Premier contact avec SOLIHA (téléphone, mail, permanence, entreprise, inscription en ligne).','Vous'],
   [0,'Courrier de SOLIHA : aides mobilisables, nos missions, liste des documents à fournir.','SOLIHA'],
   [0,'Envoi des documents demandés et inscription sur monprojet.anah.gouv.fr.','Vous'],
@@ -5112,13 +5113,17 @@ const SUI_ET=[[0,'Premier contact avec SOLIHA (téléphone, mail, permanence, en
   [1,'Vérification des devis.','SOLIHA'],
   [2,'Dépôt de la demande de subventions sur la plateforme dédiée.','SOLIHA'],
   [2,'Vous recevez l’accord de subvention, puis vous signez les devis.','Vous'],
-  [2,'Si vous le souhaitez : demande d’avance MaPrimeRénov’ (devis signés par vous et l’entreprise, avec son cachet, à envoyer à SOLIHA).','Vous'],
+  [2,'Si vous le souhaitez : demande d’avance MaPrimeRénov’ (devis signés par vous et l’entreprise, avec son cachet, à envoyer à SOLIHA).','Vous',0,1],
+  [2,'Si vous le souhaitez : demande d’acompte MaPrimeRénov’, sur présentation des factures des travaux déjà réalisés. Si vous avez reçu une avance, son montant sera déduit de l’acompte.','Vous','11 b',1],
   [3,'Réalisation des travaux.','Entreprises'],
   [3,'Fin des travaux : envoi des factures et du RIB à SOLIHA, par mail ou par courrier.','Vous'],
   [3,'Vérification des factures.','SOLIHA'],
   [3,'Visite de contrôle de fin de travaux.','SOLIHA'],
   [3,'Envoi des factures et justificatifs de fin de travaux à MaPrimeRénov’.','SOLIHA'],
-  [3,'Versement du solde de la subvention.','Anah']];
+  [3,'Versement du solde de la subvention.','Anah']].map(([ph,t,q,n,pmo],i)=>({ph,t,q,n:n||String(i<11?i+1:i),pmo:!!pmo}));
+// Lien cliquable sous une étape du PDF : [texte, adresse].
+const SUI_LIEN={'11':['Formulaire de demande d’avance à télécharger : ','https://www.formulaires.service-public.gouv.fr/cerfas/13934'],
+  '11 b':['Formulaire de demande d’acompte à télécharger : ','https://www.anah.gouv.fr/document/cerfa1346702-demande-de-paiement-d-acompte-po']};
 const SUI_DOCS=[['devis','Devis détaillés des artisans pour le scénario retenu, avec les quantités et prix unitaires, en précisant fourniture et pose.',
     ['N° SIREN de l’entreprise, adresse des travaux, nom et adresse du propriétaire ;','N° d’assurance décennale et nom de la compagnie d’assurance ;','pour les travaux d’économie d’énergie : qualification RGE de l’entreprise pour chaque type de travaux.']],
   ['dp','Déclaration préalable de travaux : vérifiez en mairie si elle est nécessaire. Si oui, envoyez-nous :',
@@ -5132,39 +5137,49 @@ const SUI_BAR0={pa2:30000,pa3:40000,paTm:80,paMo:60,paIn:45,paSu:10,pldPl:70000,
 const SUI_BARL=[['pa2','Parcours accompagné : plafond, gain de 2 classes','€'],['pa3','Parcours accompagné : plafond, gain de 3 classes ou plus','€'],['paTm','Parcours accompagné : très modestes','%'],['paMo','Parcours accompagné : modestes','%'],['paIn','Parcours accompagné : intermédiaires','%'],['paSu','Parcours accompagné : supérieurs','%'],
   ['pldPl','Logement Décent : plafond','€'],['pldTm','Logement Décent : très modestes','%'],['pldMo','Logement Décent : modestes','%'],['pldBo','Logement Décent : bonus sortie de passoire','%']];
 const suiBar=()=>({...SUI_BAR0,...(P.suiBar||{})});
-const suiMigre=x=>{const d=SUI_VIDE(),s=x||{};return {...d,...s,docs:{...d.docs,...s.docs},aides:{...d.aides,...s.aides}}};
-const SUI_VIDE=()=>({et:5,docs:{devis:true,dp:true},docsL:['',''],trav:[],travL:['',''],aides:{pa:true,pld:true}});
+const suiMigre=x=>{const d=SUI_VIDE(),s=x||{},r={...d,...s,docs:{...d.docs,...s.docs},aides:{...d.aides,...s.aides}};r.et=String(r.et);return r};
+const SUI_VIDE=()=>({et:'5',rfr:'',foyer:'',cat:'',docs:{devis:true,dp:true},docsL:['',''],trav:[],travL:['',''],aides:{pa:true,pld:true}});
 const suiEur=n=>Math.round(+n||0).toLocaleString('fr-FR').replace(/\s/g,' ')+' €';
 const suiTravTous=v=>[...v.sui.trav,...v.sui.travL.filter(filled)];
 const suiDocsTous=v=>[...SUI_DOCS.filter(([k])=>v.sui.docs[k]),...v.sui.docsL.filter(filled).map(t=>['',t,[]])];
 const suiNom=v=>[v.f.pNom,v.f.pPrenom].filter(filled).join(' ');
+// Niveau de revenus 0 (très modeste) à 3 (supérieur), null si inconnu ; sans niveau, version très modeste / modeste.
+const SUI_CAT=['Très modeste','Modeste','Intermédiaire','Supérieur'];
+const suiCat=v=>{const s=v.sui;return s.cat!==''&&s.cat!=null?+s.cat:mprCat(parseFloat(String(s.rfr).replace(/\s/g,'').replace(',','.')),parseFloat(s.foyer))};
+const suiPmo=v=>{const c=suiCat(v);return c==null||c<=1};
+const suiEtapes=v=>SUI_ET.filter(e=>!e.pmo||suiPmo(v));
+// Position de l'étape en cours dans la version ; une étape absente de la version (avance pour un ménage intermédiaire) vaut la suivante.
+const suiPos=v=>{const E=suiEtapes(v),k=SUI_ET.findIndex(e=>e.n===v.sui.et),i=E.findIndex(e=>SUI_ET.indexOf(e)>=k);return i<0?E.length-1:i};
+const suiPld=v=>v.sui.aides.pld&&suiPmo(v);
 function suiControles(v){const L=[],f=v.f,add=(n,t,vw)=>L.push([n,t,vw]);
   if(!filled(f.pNom))add('ko','Nom du propriétaire manquant','adossier');if(!f.dateVis)add('ko','Date de la visite manquante','adossier');
   if(!P.nom)add('ko','Profil sans nom (Mon profil)','profil');
   if(!suiTravTous(v).length)add('av','Aucun travail préconisé','strav');
-  if(!v.sui.aides.pa&&!v.sui.aides.pld)add('av','Aucun tableau d’aides affiché','saides');
+  if(!v.sui.aides.pa&&!suiPld(v))add('av','Aucun tableau d’aides affiché','saides');
+  if(suiCat(v)==null)add('av','Niveau de revenus non renseigné : fiche très modeste / modeste (avance et acompte), aucune case entourée','saides');
   if(!P.tel&&!P.mail)add('av','Profil sans téléphone ni e-mail : le propriétaire ne pourra pas vous joindre','profil');
   return L}
 
 /* --- écrans --- */
 // Écrans de la tuile « Fiche de suivi » du dossier d'audit ; « Terminé » revient au sommaire de la fiche (suivi).
-const suiTile=v=>`<button class="tile" data-act="go" data-v="suivi"><img class="ic" src="${ICO_DEG.synthese}" alt=""><span class="num">PROPRIÉTAIRE</span><span class="lbl">Fiche de suivi MaPrimeRénov’</span>${pills([[`Étape ${v.sui.et} sur ${SUI_ET.length}`,'info']])}</button>`;
+const suiTile=v=>`<button class="tile" data-act="go" data-v="suivi"><img class="ic" src="${ICO_DEG.synthese}" alt=""><span class="num">PROPRIÉTAIRE</span><span class="lbl">Fiche de suivi MaPrimeRénov’</span>${pills([[`Étape ${SUI_ET[SUI_ET.indexOf(suiEtapes(v)[suiPos(v)])].n}`,'info']])}</button>`;
 function suiView(app,bar,bi){if(!['suivi','setape','sdocs','strav','saides'].includes(view))return false;const v=cur,f=v.f,s=v.sui;bar.hidden=false;const fini=`<button class="btn-primary" data-act="go" data-v="suivi">Terminé</button>`,top=t=>topbar(t,who(v),'suivi');
   if(view==='suivi'){const ko=suiControles(v).filter(c=>c[0]==='ko').length,nt=suiTravTous(v).length,nd=suiDocsTous(v).length;
     const tile=(id,n,t,ic,st)=>`<button class="tile" data-act="go" data-v="${id}"><img class="ic" src="${ic}" alt=""><span class="num">${n}</span><span class="lbl">${esc(t)}</span>${pills(st)}</button>`;
     app.innerHTML=`${topbar('Fiche de suivi MaPrimeRénov’',who(v),'dash')}
      <p class="muted">Fiche recto-verso à remettre au propriétaire. Nom, adresse et date de visite : ceux du dossier d’audit.</p>
      <div class="tiles">
-      ${tile('setape','ÉTAPE','Où en est le dossier',ICO.synth,[[`Étape ${s.et} sur ${SUI_ET.length}`,'info']])}
+      ${tile('setape','ÉTAPE','Où en est le dossier',ICO.synth,[[`Étape ${suiEtapes(v)[suiPos(v)].n}`,'info']])}
       ${tile('sdocs','DOCUMENTS','Documents à transmettre',ICO.admin,[[nd?nd+' document'+(nd>1?'s':''):'Aucun',nd?'info':'']])}
       ${tile('strav','TRAVAUX','Travaux préconisés',ICO.trav,[[nt?nt+' travau'+(nt>1?'x':''):'À faire',nt?'ok':'warn']])}
-      ${tile('saides','AIDES','Aides affichées',ICO.synth,[[[s.aides.pa&&'Parcours accompagné',s.aides.pld&&'Logement Décent'].filter(Boolean).join(' + ')||'Aucune',s.aides.pa||s.aides.pld?'info':'warn']])}</div>
+      ${tile('saides','REVENUS ET AIDES','Niveau de revenus, aides affichées',ICO.synth,[[suiCat(v)==null?'Revenus à saisir':SUI_CAT[suiCat(v)],suiCat(v)==null?'warn':'info'],[[s.aides.pa&&'Parcours accompagné',suiPld(v)&&'Logement Décent'].filter(Boolean).join(' + ')||'Aucune aide',s.aides.pa||suiPld(v)?'info':'warn']])}</div>
      ${ko?`<p class="hint warn">${ko} point${ko>1?'s':''} à corriger avant la fiche.</p>`:''}`;
     bi.innerHTML=`<button data-act="dash">Retour à l’audit</button><button class="btn-primary" data-act="su-pdf">${svg('pdf')}Fiche PDF</button>`;return true}
   if(view==='setape'){app.innerHTML=`${top('Où en est le dossier')}
      <p class="muted">Touchez l’étape où se trouve le propriétaire : elle sera marquée « Vous êtes ici », les précédentes seront cochées.</p>
-     ${SUI_PH.map(([t],p)=>`<h2 class="sec">${esc(t)}</h2><div class="chips" role="radiogroup" aria-label="${esc(t)}" style="flex-direction:column;align-items:stretch">${SUI_ET.map((e,i)=>e[0]!==p?'':
-       `<label class="chip" style="min-height:44px"><input type="radio" name="sui_et" data-sk="et" value="${i+1}" ${s.et===i+1?'checked':''}><b>${i+1}.</b>&nbsp;${esc(e[1])} (${esc(e[2])})</label>`).join('')}</div>`).join('')}`;
+     <p class="muted">Version ${suiPmo(v)?'très modeste / modeste : avec avance et acompte':'intermédiaire / supérieur : sans avance ni acompte'} (d’après le niveau de revenus).</p>
+     ${SUI_PH.map(([t],p)=>`<h2 class="sec">${esc(t)}</h2><div class="chips" role="radiogroup" aria-label="${esc(t)}" style="flex-direction:column;align-items:stretch">${suiEtapes(v).map((e,i)=>e.ph!==p?'':
+       `<label class="chip" style="min-height:44px"><input type="radio" name="sui_et" data-sk="et" value="${esc(e.n)}" ${i===suiPos(v)?'checked':''}><b>${esc(e.n)}.</b>&nbsp;${esc(e.t)} (${esc(e.q)})</label>`).join('')}</div>`).join('')}`;
     bi.innerHTML=fini;return true}
   if(view==='sdocs'){app.innerHTML=`${top('Documents à transmettre')}
      <p class="muted">Seuls les documents cochés figurent sur la fiche. Décochez ceux que le propriétaire vous a déjà remis.</p>
@@ -5175,15 +5190,21 @@ function suiView(app,bar,bi){if(!['suivi','setape','sdocs','strav','saides'].inc
      ${SUI_TRAV.map(([c,L])=>`<h2 class="sec">${esc(c)}</h2><div class="chips">${L.map(l=>`<label class="chip" style="min-height:44px"><input type="checkbox" data-sk="trav" value="${esc(l)}" ${s.trav.includes(l)?'checked':''}>${esc(l)}</label>`).join('')}</div>`).join('')}
      <h2 class="sec">Autres travaux</h2><div class="form">${s.travL.map((t,i)=>`<div class="field full"><span>Travail préconisé</span><input type="text" data-sk="travL" data-i="${i}" value="${esc(t)}" autocapitalize="sentences"></div>`).join('')}</div>
      <div class="row"><button data-act="su-add" data-k="travL">${svg('plus')}Ajouter une ligne</button></div>`;bi.innerHTML=fini;return true}
-  if(view==='saides'){const B=suiBar();app.innerHTML=`${top('Aides affichées')}
+  if(view==='saides'){const B=suiBar(),c=suiCat(v);app.innerHTML=`${top('Revenus et aides')}
+     <h2 class="sec">Niveau de revenus du propriétaire</h2>
+     <div class="form"><div class="field"><span>Revenu fiscal de référence (€)</span><input type="text" inputmode="decimal" data-sk="rfr" value="${esc(s.rfr)}"></div>
+      <div class="field"><span>Personnes du foyer fiscal</span><input type="text" inputmode="numeric" data-sk="foyer" value="${esc(s.foyer)}"></div>
+      <div class="field full"><span>Niveau de revenus</span><select data-sk="cat" aria-label="Niveau de revenus"><option value="">Automatique (d’après le revenu)</option>${SUI_CAT.map((x,k)=>`<option value="${k}"${s.cat===String(k)?' selected':''}>${x}</option>`).join('')}</select>
+       <div class="hint${c==null?' warn':''}">${c==null?'Niveau inconnu : saisissez le revenu et le foyer, ou choisissez le niveau.':`Niveau retenu : <b>${SUI_CAT[c]}</b>, entouré en rouge dans les tableaux. Version ${c<=1?'avec avance et acompte':'sans avance ni acompte'}.`} Plafonds de revenus MaPrimeRénov’ hors Île-de-France (ceux de Loc’Avantages). Le revenu n’est pas imprimé.</div></div></div>
+     <h2 class="sec">Aides affichées</h2>
      <p class="muted">Tableaux repris de la fiche de visite. Taux et plafonds modifiables dans Paramètres.</p>
      <div class="form"><label class="chip" style="min-height:44px"><input type="checkbox" data-sk="aides" data-k="pa" ${s.aides.pa?'checked':''}>MaPrimeRénov’ Parcours accompagné (plafond ${suiEur(B.pa2)} / ${suiEur(B.pa3)})</label>
-      <label class="chip" style="min-height:44px"><input type="checkbox" data-sk="aides" data-k="pld" ${s.aides.pld?'checked':''}>Ma Prime Logement Décent (plafond ${suiEur(B.pldPl)})</label></div>`;bi.innerHTML=fini;return true}
+      ${suiPmo(v)?`<label class="chip" style="min-height:44px"><input type="checkbox" data-sk="aides" data-k="pld" ${s.aides.pld?'checked':''}>Ma Prime Logement Décent (plafond ${suiEur(B.pldPl)})</label>`:'<p class="muted">Ma Prime Logement Décent : réservée aux ménages très modestes et modestes, non imprimée.</p>'}</div>`;bi.innerHTML=fini;return true}
   return false}
 // Texte libre à la frappe ; cases et étape au changement (réaffichage des pastilles).
-function suiInp(el){if(!el.dataset.sk||['radio','checkbox'].includes(el.type))return false;cur.sui[el.dataset.sk][+el.dataset.i]=el.value;save();return true}
+function suiInp(el){if(!el.dataset.sk||['radio','checkbox'].includes(el.type)||el.tagName==='SELECT')return false;const k=el.dataset.sk;if(el.dataset.i!=null)cur.sui[k][+el.dataset.i]=el.value;else cur.sui[k]=el.value;save();return true}
 function suiChg(el){const k=el.dataset.sk;if(!k)return false;const s=cur.sui;
-  if(k==='et')s.et=+el.value;else if(k==='docs'||k==='aides')s[k][el.dataset.k]=el.checked;
+  if(k==='et'||k==='cat')s[k]=el.value;else if(k==='rfr'||k==='foyer'){}else if(k==='docs'||k==='aides')s[k][el.dataset.k]=el.checked;
   else if(k==='trav')s.trav=el.checked?[...new Set([...s.trav,el.value])]:s.trav.filter(x=>x!==el.value);else return true;save();keep();return true}
 // Paramètres : barèmes (champ vide = valeur de la fiche VAD).
 const suiParHtml=()=>{const B=P.suiBar||{};return `<div class="field full"><span>Fiche de suivi MaPrimeRénov’ : taux et plafonds des aides</span>
@@ -5198,7 +5219,7 @@ async function suiAct(a,b){
     if(C.length)toast('À vérifier : '+C.map(c=>c[1]).join(' ; '));if(!window.jspdf){toast("Le module PDF n'est pas chargé : ouvrez l'application une fois avec internet.");return}return suiPdf(cur)}}
 
 /* --- fiche PDF recto-verso --- */
-async function suiPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',format:'a4'}),f=v.f,s=v.sui,B=suiBar();
+async function suiPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',format:'a4'}),f=v.f,s=v.sui,B=suiBar(),cat=suiCat(v),EV=suiEtapes(v),pos=suiPos(v);
   const INK=[29,35,41],MUT=[91,102,112],ACC=[27,95,134],LINE=[213,218,223],RED=[179,38,30],ROSE=[255,245,244],TINT=[238,243,246],WHITE=[255,255,255],OK=[47,107,37],VOUS=[[122,75,0],[255,241,214]],AUT=[MUT,[238,240,242]];
   const T=x=>PDFT(String(x??'').replace(/[  ]/g,' '));
   const W=210,H=297,ML=14,MR=14,CW=W-ML-MR,BOT=H-16;let y=12;
@@ -5222,20 +5243,29 @@ async function suiPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',for
   {const rows=[['Bénéficiaire',dossier],['Date de la visite',f.dateVis?frDate(f.dateVis):''],['Votre interlocuteur',[[P.nom,P.qual].filter(Boolean).join(', '),P.tel,P.mail].filter(Boolean).join(' · ')]].filter(([,x])=>filled(x));
     const R=rows.map(([l,x])=>[l,lines(x,CW-48,9.5)]),h=R.reduce((n,[,L])=>n+L.length*LH(9.5),0)+4+(R.length-1)*1;
     doc.setFillColor(...TINT);doc.roundedRect(ML,y,CW,h,2,2,'F');let yy=y+2;for(const [l,L] of R){font(9,'normal',MUT);doc.text(T(l+' :'),ML+4,yy+LH(9.5)*.78);font(9.5,'bold',INK);L.forEach(t=>{doc.text(t,ML+44,yy+LH(9.5)*.78);yy+=LH(9.5)});yy+=1}y+=h+4}
-  {const n=SUI_ET.length,lab=T(`Étape ${s.et} sur ${n}`);font(11,'bold',ACC);const lw=doc.getTextWidth(lab)+4,bw=CW-lw;
-    doc.setFillColor(227,231,234);doc.roundedRect(ML,y,bw,3,1.5,1.5,'F');doc.setFillColor(...ACC);doc.roundedRect(ML,y,Math.max(3,bw*s.et/n),3,1.5,1.5,'F');doc.text(lab,ML+CW,y+3,{align:'right'});y+=6.5}
-  const RH=7.2,GAP=1,X=ML+11,RW=CW-11;
-  for(const [p,[pt,pbg,pfg]] of SUI_PH.entries()){const E=SUI_ET.map((e,i)=>[e,i+1]).filter(([e])=>e[0]===p),h=E.length*(RH+GAP)-GAP;
+  {const lab=T(`Étape ${EV[pos].n}`);font(11,'bold',ACC);const lw=doc.getTextWidth(lab)+4,bw=CW-lw;
+    doc.setFillColor(227,231,234);doc.roundedRect(ML,y,bw,3,1.5,1.5,'F');doc.setFillColor(...ACC);doc.roundedRect(ML,y,Math.max(3,bw*(pos+1)/EV.length),3,1.5,1.5,'F');doc.text(lab,ML+CW,y+3,{align:'right'});y+=6.5}
+  const RH=7.2,GAP=1,X=ML+11,RW=CW-11,LW=RW-9.5-23;
+  // Lien sous l'étape : texte et adresse sur une ligne, ou l'adresse seule sur la ligne suivante si elle ne tient pas.
+  const lienL=n=>{const l=SUI_LIEN[n];if(!l)return 0;font(7.8,'normal');const wa=doc.getTextWidth(T(l[0]));font(7.8,'bold');return wa+doc.getTextWidth(l[1].replace('https://',''))>LW?2:1};
+  // Texte d'une étape selon son état (en cours : gras) ; jusqu'à 3 lignes, la ligne s'agrandit au-delà de 2.
+  const txtOf=(e,i)=>{const ici=i===pos,suite=i===pos+1,lib=suite?'Prochaine étape : '+e.t.charAt(0).toLowerCase()+e.t.slice(1):e.t,st=ici?'bold':'normal',tw=RW-(ici?55:33),sz=lines(lib,tw,ici?9.5:9,st).length>1?7.8:(ici?9.5:9);
+    return {lib,st,sz,L:lines(lib,tw,sz,st).slice(0,3)}};
+  const extOf=(e,i)=>{const x=txtOf(e,i);return Math.max(0,x.L.length-2)*LH(x.sz)};
+  const rhOf=(e,i)=>RH+extOf(e,i)+lienL(e.n)*4.1+(lienL(e.n)?.5:0);
+  for(const [p,[pt,pbg,pfg]] of SUI_PH.entries()){const E=EV.map((e,i)=>[e,i]).filter(([e])=>e.ph===p);if(!E.length)continue;const h=E.reduce((n,[e,i])=>n+rhOf(e,i)+GAP,0)-GAP;
     doc.setFillColor(...pbg);doc.roundedRect(ML,y,9,h,1.5,1.5,'F');font(h<20?6.5:8,'bold',pfg);doc.text(T(pt),ML+5.8,y+h/2+doc.getTextWidth(T(pt))/2,{angle:90});
-    for(const [[,t,q],i] of E){const ici=i===s.et,fait=i<s.et,suite=i===s.et+1;
+    for(const [{t,q,n},i] of E){const ici=i===pos,fait=i<pos,suite=i===pos+1;
       if(ici){doc.setFillColor(...ROSE);doc.setDrawColor(...RED);doc.setLineWidth(.6)}else if(suite){doc.setFillColor(243,248,251);doc.setDrawColor(...ACC);doc.setLineWidth(.35);doc.setLineDashPattern([1,.8],0)}else{doc.setFillColor(...(fait?[250,251,252]:WHITE));doc.setDrawColor(...LINE);doc.setLineWidth(.3)}
-      doc.roundedRect(X,y,RW,RH,1.4,1.4,'FD');doc.setLineDashPattern([],0);const cy=y+RH/2;
+      const rh=rhOf(E.find(x=>x[1]===i)[0],i),ext=extOf(SUI_ET.find(x=>x.n===n),i);doc.roundedRect(X,y,RW,rh,1.4,1.4,'FD');doc.setLineDashPattern([],0);const cy=y+(RH+ext)/2;
       doc.setFillColor(...(ici?RED:fait?OK:suite?ACC:[233,237,240]));doc.circle(X+4.5,cy,2.7,'F');
-      if(fait)tick(X+4.5,cy,WHITE);else{font(8,'bold',ici||suite?WHITE:MUT);doc.text(String(i),X+4.5,cy+1,{align:'center'})}
-      const lib=suite?'Prochaine étape : '+t.charAt(0).toLowerCase()+t.slice(1):t,tw=RW-(ici?55:33),sz=lines(lib,tw,ici?9.5:9).length>1?7.8:(ici?9.5:9);
-      font(sz,ici?'bold':'normal',fait?MUT:INK);const L=lines(lib,tw,sz,ici?'bold':'normal').slice(0,2);L.forEach((l,k)=>doc.text(l,X+9.5,cy+1-(L.length-1)*LH(sz)/2+k*LH(sz)));
+      if(fait)tick(X+4.5,cy,WHITE);else{font(n.length>2?6.5:8,'bold',ici||suite?WHITE:MUT);doc.text(T(n),X+4.5,cy+1,{align:'center'})}
+      const {st,sz,L}=txtOf(SUI_ET.find(x=>x.n===n),i);font(sz,st,fait?MUT:INK);L.forEach((l,k)=>doc.text(l,X+9.5,cy+1-(L.length-1)*LH(sz)/2+k*LH(sz)));
       if(ici){font(7.5,'bold',WHITE);const lw=doc.getTextWidth(T('VOUS ÊTES ICI'))+4;doc.setFillColor(...RED);doc.roundedRect(X+RW-23-lw,cy-2.4,lw,4.8,1,1,'F');doc.text(T('VOUS ÊTES ICI'),X+RW-23-lw/2,cy+.9,{align:'center'})}
-      qui(q,X+RW-21,cy);y+=RH+GAP}y+=1.5}
+      qui(q,X+RW-21,cy);
+      if(SUI_LIEN[n]){const [a,u]=SUI_LIEN[n],ua=u.replace('https://',''),nl=lienL(n);font(7.8,'normal',fait?MUT:INK);const wa=doc.getTextWidth(T(a));let yl=y+RH+ext+2.6;doc.text(T(a),X+9.5,yl);
+        const xu=nl>1?X+9.5:X+9.5+wa;if(nl>1)yl+=4.1;font(7.8,'bold',ACC);const wu=doc.getTextWidth(ua);doc.text(ua,xu,yl);doc.setDrawColor(...ACC);doc.setLineWidth(.2);doc.line(xu,yl+.5,xu+wu,yl+.5);doc.link(xu,yl-2.6,wu,3.4,{url:u})}
+      y+=rh+GAP}y+=1.5}
   {font(7.5,'normal',MUT);let x=ML;for(const [c,t] of [[OK,'Étape faite'],[RED,'Aujourd’hui'],[ACC,'Prochaine étape']]){doc.setFillColor(...c);doc.circle(x+1.3,y+1.3,1.3,'F');doc.text(T(t),x+3.5,y+2.2);x+=doc.getTextWidth(T(t))+9}
     doc.text(T('« Vous » : action à votre charge'),x+2,y+2.2);y+=6}
   rappel('Ne commencez pas les travaux et ne signez aucun devis avant d’avoir reçu l’accord de toutes les subventions.','Sinon, les aides peuvent être refusées. En cas de doute, appelez-nous.');
@@ -5252,18 +5282,22 @@ async function suiPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',for
     for(const t of TR){const L=lines(t,CW-8,10);need(L.length*LH(10)+2);doc.setFillColor(...ACC);doc.circle(ML+2,y+2.2,.9,'F');font(10,'normal',INK);L.forEach((l,k)=>doc.text(l,ML+6,y+LH(10)*(k+.78)));y+=L.length*LH(10)+.6;
       doc.setDrawColor(...LINE);doc.setLineWidth(.2);doc.line(ML+6,y,ML+CW,y);y+=1.6}y+=2}
   // Tableau d'aides : en-tête bleu, première colonne à gauche, cellules fusionnées pour les taux du parcours accompagné.
-  const table=(titre,sous,hd,cw,rows,fus)=>{const hh=9,rh=r=>Math.max(...r.map((c,i)=>lines(c,cw[i]-3,9).length))*LH(9)+3,RH2=rows.map(rh),th=hh+RH2.reduce((a,b)=>a+b,0);need(th+14);
+  const table=(titre,sous,hd,cw,rows,fus,hl)=>{const hh=9,rh=r=>Math.max(...r.map((c,i)=>lines(c,cw[i]-3,9).length))*LH(9)+3,RH2=rows.map(rh),th=hh+RH2.reduce((a,b)=>a+b,0);need(th+14);
     font(10.5,'bold',INK);doc.text(T(titre),ML,y+4);const tw=doc.getTextWidth(T(titre));if(sous){font(8.5,'normal',MUT);doc.text(T(sous),ML+tw+2.5,y+4)}y+=6.5;
     let x=ML;doc.setFillColor(...ACC);doc.rect(ML,y,CW,hh,'F');hd.forEach((c,i)=>{const L=lines(c,cw[i]-3,8.5,'bold');font(8.5,'bold',WHITE);L.forEach((l,k)=>doc.text(l,x+cw[i]/2,y+hh/2+1-(L.length-1)*LH(8.5)/2+k*LH(8.5),{align:'center'}));x+=cw[i]});y+=hh;
     const y0=y;doc.setDrawColor(200,207,213);doc.setLineWidth(.3);
     rows.forEach((r,j)=>{let x=ML;r.forEach((c,i)=>{if(fus&&i>0&&j>0){x+=cw[i];return}const hcell=fus&&i>0?RH2.reduce((a,b)=>a+b,0):RH2[j];doc.rect(x,y,cw[i],hcell,'S');
-      const L=lines(c,cw[i]-3,9);font(9,'normal',INK);L.forEach((l,k)=>doc.text(l,i?x+cw[i]/2:x+1.5,y+hcell/2+1-(L.length-1)*LH(9)/2+k*LH(9),i?{align:'center'}:{}));x+=cw[i]});y+=RH2[j]});y=Math.max(y,y0)+3};
-  if(s.aides.pa||s.aides.pld){sec('Les aides possibles');
+      const L=lines(c,cw[i]-3,9);font(9,'normal',INK);L.forEach((l,k)=>doc.text(l,i?x+cw[i]/2:x+1.5,y+hcell/2+1-(L.length-1)*LH(9)/2+k*LH(9),i?{align:'center'}:{}));x+=cw[i]});y+=RH2[j]});
+    if(hl!=null){const xh=ML+cw.slice(0,hl).reduce((a,b)=>a+b,0);doc.setDrawColor(...RED);doc.setLineWidth(.8);doc.roundedRect(xh+.5,y0+.5,cw[hl]-1,y-y0-1,1.2,1.2,'S')}
+    y=Math.max(y,y0)+3};
+  if(s.aides.pa||suiPld(v)){sec('Les aides possibles');
+    if(cat!=null){need(8);const a=T('Votre niveau de revenus : '),c=T(SUI_CAT[cat]);font(10,'normal',INK);const wa=doc.getTextWidth(a);doc.text(a,ML,y+4);font(10,'bold',RED);const wc=doc.getTextWidth(c);doc.text(c,ML+wa,y+4);
+      font(8.5,'normal',MUT);doc.text(T('(entouré en rouge dans les tableaux)'),ML+wa+wc+2,y+4);y+=8}
     if(s.aides.pa){table('MaPrimeRénov’ Parcours accompagné','rénovation énergétique d’ampleur',['Plafond de travaux HT','Très modestes','Modestes','Intermédiaires','Supérieurs'],[CW-4*28,28,28,28,28],
-      [['Gain de 2 classes : '+suiEur(B.pa2),B.paTm+' %',B.paMo+' %',B.paIn+' %',B.paSu+' %'],['Gain de 3 classes ou plus : '+suiEur(B.pa3),'','','','']],true);
+      [['Gain de 2 classes : '+suiEur(B.pa2),B.paTm+' %',B.paMo+' %',B.paIn+' %',B.paSu+' %'],['Gain de 3 classes ou plus : '+suiEur(B.pa3),'','','','']],true,cat==null?null:cat+1);
       for(const t of ['2 sauts de classe minimum ;','2 gestes d’isolation, avec au moins 25 % de surface traitée par poste ;','taux selon le nombre de sauts de classe et les revenus du ménage.']){font(8.5,'normal',MUT);need(LH(8.5));doc.text('•',ML+1,y+LH(8.5)*.78);doc.text(T(t),ML+4,y+LH(8.5)*.78);y+=LH(8.5)}y+=3}
-    if(s.aides.pld)table('Ma Prime Logement Décent','',['Plafond de travaux HT','Très modestes','Modestes'],[CW-2*40,40,40],
-      [[suiEur(B.pldPl),B.pldTm+' %',B.pldMo+' %'],['Bonus sortie de passoire : logement classé F ou G avant travaux, et D après travaux','+'+B.pldBo+' %','+'+B.pldBo+' %']]);
+    if(suiPld(v))table('Ma Prime Logement Décent','',['Plafond de travaux HT','Très modestes','Modestes'],[CW-2*40,40,40],
+      [[suiEur(B.pldPl),B.pldTm+' %',B.pldMo+' %'],['Bonus sortie de passoire : logement classé F ou G avant travaux, et D après travaux','+'+B.pldBo+' %','+'+B.pldBo+' %']],false,cat==null?null:cat+1);
     para('Le montant estimé de vos aides, selon le scénario retenu, figurera dans l’audit énergétique que nous vous enverrons.',8.5,'normal',MUT,ML,CW);y+=3}
   rappel('Rappel : ne pas commencer les travaux avant les accords de toutes les subventions et ne pas signer les devis.');
   piedPdf(doc,v,'Suivi MaPrimeRénov’',ML,MR);
@@ -5271,18 +5305,24 @@ async function suiPdf(v){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',for
 
 // Auto-tests, après le chargement de l'application (filled() et today() sont déclarés plus loin).
 queueMicrotask(()=>{const v={f:{pNom:'',dateVis:''},sui:suiMigre({et:6,docs:{dp:false}})};
-  console.assert(SUI_ET.length===17&&SUI_ET[4][1].includes('audit')&&v.sui.et===6&&v.sui.docs.devis&&!v.sui.docs.dp&&v.sui.aides.pa&&suiMigre().et===5,'ASSERT FAIL suiMigre');
-  const C=suiControles(v).map(c=>c[0]+':'+c[1]).join(' / ');console.assert(/ko:Nom du propriétaire/.test(C)&&/ko:Date de la visite/.test(C)&&/av:Aucun travail/.test(C),'ASSERT FAIL suiControles',C);
+  console.assert(SUI_ET.length===18&&SUI_ET[4].t.includes('audit')&&v.sui.et==='6'&&v.sui.docs.devis&&!v.sui.docs.dp&&v.sui.aides.pa&&suiMigre().et==='5','ASSERT FAIL suiMigre');
+  console.assert(SUI_ET.map(e=>e.n).join()==='1,2,3,4,5,6,7,8,9,10,11,11 b,12,13,14,15,16,17'&&SUI_ET[11].pmo&&/avance.*déduit/.test(SUI_ET[11].t),'ASSERT FAIL numéros des étapes');
+  const C=suiControles(v).map(c=>c[0]+':'+c[1]).join(' / ');console.assert(/ko:Nom du propriétaire/.test(C)&&/ko:Date de la visite/.test(C)&&/av:Aucun travail/.test(C)&&/av:Niveau de revenus/.test(C),'ASSERT FAIL suiControles',C);
+  // Niveau de revenus : plafonds de Loc'Avantages (1 personne : 17 363 € très modeste), version et position de l'étape.
+  const w=c=>({f:{},sui:suiMigre({et:'11',...c})});console.assert(suiCat(w({rfr:'17 363',foyer:'1'}))===0&&suiCat(w({rfr:'17364',foyer:'1'}))===1&&suiCat(w({cat:'3'}))===3&&suiCat(w({}))==null
+    &&suiEtapes(w({})).length===18&&suiEtapes(w({cat:'2'})).length===16&&suiEtapes(w({cat:'2'}))[suiPos(w({cat:'2'}))].n==='12'&&suiEtapes(w({cat:'1'}))[suiPos(w({cat:'1'}))].n==='11'
+    &&suiPld(w({cat:'1'}))&&!suiPld(w({cat:'2'})),'ASSERT FAIL suiCat / suiEtapes / suiPos');
   v.sui.trav=['VMC double flux'];v.sui.travL=['  ','Reprise de l’enduit'];v.sui.docsL=['Avis d’imposition',''];
   console.assert(suiTravTous(v).join('|')==='VMC double flux|Reprise de l’enduit'&&suiDocsTous(v).map(d=>d[0]||d[1]).join('|')==='devis|Avis d’imposition','ASSERT FAIL suiTravTous/suiDocsTous');
   console.assert(suiNom({f:{pNom:'DURAND',pPrenom:'Paul'}})==='DURAND Paul'&&suiNom({f:{pNom:'DURAND'}})==='DURAND','ASSERT FAIL suiNom');
+  console.assert(Object.entries(SUI_LIEN).every(([n,[,u]])=>SUI_ET.some(e=>e.n===n)&&/^https:\/\//.test(u))&&/avance/.test(SUI_ET[10].t)&&/acompte/.test(SUI_ET[11].t),'ASSERT FAIL liens des étapes 11 et 11 b');
   console.assert(ACT_VUE.includes('suivi'),'ASSERT FAIL retour vers la fiche de suivi sans action');
-  console.assert(newVisit('aud').sui?.et===5,'ASSERT FAIL audit créé sans fiche de suivi');
+  console.assert(newVisit('aud').sui?.et==='5','ASSERT FAIL audit créé sans fiche de suivi');
   const p0=P.suiBar;P.suiBar={paTm:75};console.assert(suiBar().paTm===75&&suiBar().paMo===60,'ASSERT FAIL suiBar');P.suiBar=p0});
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.21-1417';
+const APP_VER='2026.11.21-1636';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
