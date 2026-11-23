@@ -5391,7 +5391,7 @@ queueMicrotask(()=>{const v={f:{pNom:'',dateVis:''},sui:suiMigre({et:6,docs:{dp:
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.23-1533';
+const APP_VER='2026.11.23-1611';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -5553,6 +5553,11 @@ const today=()=>new Date().toISOString().slice(0,10);
 const frDate=d=>d&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d.split('-').reverse().join('/'):(d||'');
 const newVisit=(t,b)=>({dfTxt:1,dfV:3,phV:1,id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),created:Date.now(),updated:Date.now(),
   ...(t==='fin'?{type:'fin',f:{dateVis:today()},t:[]}:t==='ergo'?{type:'ergo',f:{dateVis:today(),dateDiag:today()},z:ergoZonesDefaut()}:t==='aud'?{type:'aud',f:{dateVis:today(),dispositif:'MaPrimeRénov’ Parcours accompagné'},a:AUD_VIDE(),sui:SUI_VIDE()}:t==='loc'?{type:'loc',f:{dateVis:today()},loc:locVide()}:t==='deg'?{type:'deg',bien:b,f:{op:P.lastOp||'',dateVis:today(),...(b==='imm'?{g1_nom:'Logement 1'}:{})},g:b==='imm'?[{id:'g0',k:'bc',n:{}},{id:'g1',k:'lc',n:{}}]:[{id:'g0',k:'mi',n:{}}]}:t==='pdl'?{type:'pdl',f:{commune:'Thouars',cp:COMMUNES.Thouars.cp,ville:COMMUNES.Thouars.ville,typeVis:'Visite de contrôle',dateVis:today()}}:{f:{dem:'CAF',typeVis:'Visite initiale',dateVis:today(),mrCiv:'Madame, Monsieur'}}),it:{},done:{},sig:''});
+// Copie complète d'un dossier : nouvel identifiant et nouveau n°, date du jour, sans PDF, signature ni sauvegarde, pièces à revoir.
+function dupVisit(src){const v=structuredClone(src);Object.assign(v,{id:newVisit().id,created:Date.now(),done:{},sig:''});delete v.num;delete v.savedAt;delete v.pdfAt;
+  for(const H of [v,...(v.g||[])])H.pcs?.forEach(p=>delete p.vu);v.f.dateVis=today();return v}
+console.assert((s=>{const d=dupVisit(s);return d.id!=='x'&&!d.num&&!d.pdfAt&&!d.sig&&d.f.dateVis===today()&&d.f.pNom==='A'&&!d.g[0].pcs[0].vu&&s.g[0].pcs[0].vu&&s.f.dateVis==='2026-01-02'&&d.it.k!==s.it.k})
+  ({id:'x',num:'DEG-1',pdfAt:1,sig:'s',done:{a:1},f:{pNom:'A',dateVis:'2026-01-02'},it:{k:{ph:[]}},g:[{pcs:[{vu:1}]}]}),'ASSERT FAIL dupVisit');
 function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(t._t);t._t=setTimeout(()=>t.hidden=true,Math.max(2600,msg.length*60))}
 function save(now){if(!cur)return;cur.updated=Date.now();clearTimeout(saveT);const v=cur,go=()=>store.put(v).catch(e=>toast('Enregistrement impossible : '+e.message));if(now)return go();saveT=setTimeout(go,350)}
 // Alerte « commentaire manquant » d'une pathologie, mise à jour pendant la saisie.
@@ -5743,7 +5748,7 @@ function caseHtml(v){
    ${v.pdfAt?'':progHtml(v)}
    <div class="row"><button class="btn-primary" data-act="open" data-id="${v.id}">${v.pdfAt?'Ouvrir':'Reprendre'}</button>
     ${v.pdfAt?`<button data-act="reopen" data-id="${v.id}">Remettre en cours</button>`:''}
-    ${isErgo(v)?`<button data-act="er-dup" data-id="${v.id}">Dupliquer</button>`:''}
+    ${isErgo(v)?`<button data-act="er-dup" data-id="${v.id}">Dupliquer</button>`:isLoc(v)?'':`<button data-act="dupv" data-id="${v.id}">Dupliquer</button>`}
     <button data-act="fsave" data-id="${v.id}">${sauve(v)?'Sauvegardé ✓':'Sauvegarder'}</button>
     ${isPdl(v)||deg||isAud(v)||isErgo(v)||isFin(v)?'':`<button data-act="ctrl" data-id="${v.id}">Créer la visite de contrôle</button>`}
     ${isAud(v)||isFin(v)?'':`<button data-act="fi-new" data-id="${v.id}">Visite de fin de travaux</button>`}
@@ -6819,7 +6824,8 @@ document.addEventListener('click',async e=>{
     {const src=isDeg(cur)&&degSrc&&visits.find(x=>x.id===degSrc);degSrc='';if(src)degDepuis(cur,src)}
     visits.push(cur);if(numDos(cur))saveP();await save(true);view=isLoc(cur)?'lprop':isAud(cur)||isErgo(cur)||isFin(cur)?'dash':'admin';return go()}
   if(a==='open'){cur=visits.find(v=>v.id===b.dataset.id);view='dash';return go()}
-  if(a==='ctrl'){const src=visits.find(v=>v.id===b.dataset.id);cur=structuredClone(src);Object.assign(cur,{id:newVisit().id,created:Date.now(),done:{},sig:''});cur.pcs?.forEach(p=>delete p.vu);delete cur.num;delete cur.savedAt;delete cur.pdfAt;if(numDos(cur))saveP();cur.f.typeVis='Visite de contrôle';cur.f.dateVis=today();visits.push(cur);await save(true);view='dash';toast('Visite de contrôle créée à partir de la visite initiale');return go()}
+  if(a==='ctrl'||a==='dupv'){const src=visits.find(v=>v.id===b.dataset.id);if(!src)return;cur=dupVisit(src);if(a==='ctrl')cur.f.typeVis='Visite de contrôle';if(numDos(cur))saveP();
+    visits.push(cur);await save(true);view='dash';toast(a==='ctrl'?'Visite de contrôle créée à partir de la visite initiale':'Dossier dupliqué : vérifiez les informations');return go()}
   if(a==='delv'){if(!armed(b,'Confirmer la suppression'))return;await store.del(b.dataset.id);visits=visits.filter(v=>v.id!==b.dataset.id);return render()}
   if(a==='list'){await save(true);if(cur){carnetMemo(cur);if(!sauve(cur))await fsSave(cur,1)}cur=null;view='list';return go()}
   // Variante Loc'Avantages : copie du dossier (bailleur, bien, logements) ; PDF, sauvegarde et règles figées non repris.
