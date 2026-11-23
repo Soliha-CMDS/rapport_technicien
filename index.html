@@ -2859,6 +2859,28 @@ function degDepuis(d,s){const f=s.f;Object.assign(d.f,{pNom:[f.pNom,f.pPrenom].f
   pAdr:f.pAdr||'',pCp:f.pCp||'',pVille:f.pVille||'',adresse:f.adresse||'',cp:f.cp||'',ville:f.ville||'',...(f.dateVis?{dateVis:f.dateVis}:{})});if(s.cb)d.cb=s.cb;return d}
 console.assert((d=>d.f.pNom==='DURAND Paul'&&d.f.pStat==='Propriétaire bailleur'&&d.f.pVille==='Niort'&&d.f.adresse==='3 rue A'&&d.f.dateVis==='2026-10-09'&&d.f.op==='OPAH'&&d.cb==='k1')
   (degDepuis({f:{op:'OPAH',dateVis:'2026-11-03'}},{cb:'k1',f:{pNom:'DURAND',pPrenom:'Paul',pAdr:'1 av B',pCp:'79000',pVille:'Niort',adresse:'3 rue A',cp:'79100',ville:'Thouars',dateVis:'2026-10-09'}})),'ASSERT FAIL degDepuis');
+// Copie d'une maison en immeuble : élément de la grille maison → grille et élément de l'immeuble (tableau validé le 23/11/2026).
+// Les éléments ambigus vont dans le logement ; 2.4 (escalier et garde-corps) va dans les parties communes, le garde-corps du logement reste à noter.
+const MI_IMM={'1.1':'bc:1.1','2.1':'bc:2.1','2.2':'bc:2.2','2.3':'bc:2.3','2.4':'bc:2.4','3.1':'bc:3.1','3.2':'bc:3.2','3.3':'bc:3.3','4.1':'bc:4.1','4.2':'bc:4.2','5.2':'bc:6.3','22':'bc:18',
+  '5.1':'lc:2.2','5.3':'lc:4.1','5.4':'lc:4.2','6.1':'lc:5.1','6.2':'lc:5.2','7':'lc:6','8':'lc:7','9':'lc:16','10':'lc:8','11':'lc:9','12':'lc:13','13':'lc:14','14':'lc:15',
+  '15':'lc:10','16':'lc:12','17':'lc:11','18.1':'lc:1.1','18.2':'lc:1.2','19.1':'lc:2.1','20.1':'lc:3.1','20.2':'lc:3.2','21':'lc:17','23':'lc:18'};
+// Renvoie une copie « immeuble » : parties communes g0 (garde les travaux g0_*), logement g1 (pièces, constats du logement, surface, pièces principales).
+// Ampleur, prorata ou SO sont retirés si l'élément d'arrivée ne les prévoit pas. Les éléments propres à l'immeuble restent à noter : le rapport repasse en projet.
+function degVersImm(v){const d=structuredClone(v),m=d.g[0],bc={id:'g0',k:'bc',n:{}},lc={id:'g1',k:'lc',n:{},pcs:m.pcs,pcN:m.pcN,cstN:m.cstN,cst:[]};
+  const vers=id=>{const [k,j]=MI_IMM[id].split(':'),g=k==='bc'?bc:lc;return[g,GRILLES[k].els.find(e=>e.id===j)]};
+  for(const [id,s] of Object.entries(m.n)){if(!MI_IMM[id])continue;const [g,e]=vers(id);if(s.h==='SO'&&!e.so)continue;
+    const x={...s};if(!e.a)delete x.a;if(!e.p)delete x.pt;g.n[e.id]=x}
+  const it=d.it;d.it={};for(const [k,x] of Object.entries(it)){const id=k.slice(3);if(k.startsWith('g0:')&&MI_IMM[id]){const [g,e]=vers(id);d.it[g.id+':'+e.id]=x}else d.it[k]=x}
+  // Constats rattachés aux parties communes : leur commentaire et leurs photos sont déjà dans l'élément, seul le lien à la pièce se perd.
+  for(const c of m.cst||[]){const [g,e]=vers(c.l.slice(3));if(g===lc)lc.cst.push({...c,l:'g1:'+e.id})}
+  Object.assign(d.f,{g1_nom:'Logement 1',g1_surf:v.f.surf??'',g1_nbPP:v.f.nbPP??'',g1_conso:v.f.conso??''});
+  d.bien='imm';d.g=[bc,lc];delete d.num;delete d.pdfAt;delete d.savedAt;return d}
+console.assert(Object.keys(MI_IMM).length===35&&GRILLES.mi.els.every(e=>MI_IMM[e.id])&&new Set(Object.values(MI_IMM)).size===35
+  &&Object.values(MI_IMM).every(x=>{const [k,j]=x.split(':');return GRILLES[k].els.some(e=>e.id===j)}),'ASSERT FAIL MI_IMM : correspondance incomplète');
+console.assert((d=>d.bien==='imm'&&d.g[0].n['2.4'].h===2&&!('a' in d.g[0].n['2.4'])&&!d.g[0].n['6.3']&&d.g[1].n['4.1'].h===3&&d.g[1].n['13'].h==='SO'
+  &&d.it['g1:4.1'].note==='x'&&d.it.facade&&!d.it['g0:5.3']&&d.g[1].cst.length===1&&d.g[1].cst[0].l==='g1:4.1'&&d.f.g1_nbPP===4&&d.f.g0_trav==='t'&&!d.num)
+  (degVersImm({bien:'mi',num:'DEG-1',f:{nbPP:4,g0_trav:'t'},it:{'g0:5.3':{note:'x'},facade:{ph:[]}},
+    g:[{id:'g0',k:'mi',n:{'2.4':{h:2,a:0.5},'5.2':{h:'SO'},'5.3':{h:3},'12':{h:'SO'}},pcs:[{id:'p1'}],cst:[{id:'c1',l:'g0:5.3'},{id:'c2',l:'g0:2.1'}]}]})),'ASSERT FAIL degVersImm');
 const ADMIN_DEG=[
   ['h','Opération et visite'],
   ['soliact','N° dossier SOLIACT','t'],
@@ -5369,7 +5391,7 @@ queueMicrotask(()=>{const v={f:{pNom:'',dateVis:''},sui:suiMigre({et:6,docs:{dp:
 
 
 // Version : date de construction, écrite par build.py.
-const APP_VER='2026.11.21-2035';
+const APP_VER='2026.11.23-1533';
 const IC={
  admin:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14 10h4M14 13.5h3"/>',
  logement:'<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/>',
@@ -5842,7 +5864,7 @@ function render(){
     const t=(b,l,d)=>`<button class="tile" data-act="newt" data-t="deg" data-b="${b}"><img class="ic" src="${ICO_DEG.deg}" alt=""><span class="lbl">${l}</span><span class="muted">${d}</span></button>`;
     app.innerHTML=`${topbar('Rapport de dégradation',degSrc?'Repris de la visite de décence : '+who(cur):'Quel bien évaluez-vous ?',degDe==='list'||degDe==='dash'?degDe:'choose')}
      <div class="tiles">${t('mi','Maison individuelle','1 grille de 35 éléments')}${t('imm','Immeuble collectif','1 grille pour les parties communes (32 éléments) et 1 grille par logement visité (24 éléments)')}</div>
-     <p class="muted">Le type de bien ne peut plus être changé ensuite.</p>`;
+     <p class="muted">Une maison pourra ensuite être copiée en immeuble depuis son tableau de bord.</p>`;
     return;
   }
   if(view==='carnet'){
@@ -6182,7 +6204,8 @@ function degView(app,bar,bi){
     bar.hidden=false;bi.innerHTML=`<button data-act="zipph">${svg('cam')}Photos (.zip)</button><button class="btn-primary" data-act="pdf">${svg('pdf')}${degFinal(cur)?'Générer le rapport PDF':'Générer un projet (PDF)'}</button>`;
     const trav=g=>{const t=cur.f[g.id+'_trav'],c=degTravCtrl(cur,g,t),n=String(t||'').split('\n').filter(l=>l.trim()).length;
       return `<button class="tile" data-act="go" data-v="trav" data-g="${g.id}"><img class="ic" src="${ICO_DEG.synthese}" alt=""><span class="num">SYNTHÈSE</span><span class="lbl">Synthèse des travaux</span>${pills([[n?n+' ligne'+(n>1?'s':''):'À faire',n?'info':''],...(c.manque.length+c.zero.length?[['À vérifier','danger']]:[])])}</button>`};
-    if(cur.bien!=='imm'){const g=cur.g[0];app.innerHTML=`<div class="degtop">${topbar(who(cur),kind(cur),'list')}${degScore(cur,g)}</div>${progHtml(cur,1)}${pcBtn(g)}<div class="tiles">${adm}${chap(g)}${trav(g)}</div>`;return true}
+    if(cur.bien!=='imm'){const g=cur.g[0];app.innerHTML=`<div class="degtop">${topbar(who(cur),kind(cur),'list')}${degScore(cur,g)}</div>${progHtml(cur,1)}${pcBtn(g)}<div class="tiles">${adm}${chap(g)}${trav(g)}</div>
+     <div class="row"><button data-act="deg2imm">Copier en immeuble collectif</button></div><p class="muted">Crée un nouveau rapport (parties communes + 1 logement) avec les notes, commentaires et photos. Ce rapport-ci ne change pas.</p>`;return true}
     const [bc,...L]=cur.g;
     app.innerHTML=`${topbar(who(cur),kind(cur),'list')}${progHtml(cur,1)}<div class="tiles">${adm}</div>
      <h2 class="sec">Parties communes</h2>
@@ -6849,6 +6872,8 @@ document.addEventListener('click',async e=>{
     const m=degFusion(cur.f[g.id+'_trav'],L);cur.f[g.id+'_trav']=m.txt;save();keep();toast(m.added?`${m.added} ligne${m.added>1?'s':''} ajoutée${m.added>1?'s':''}`:'Liste déjà à jour');return}
   if(a==='degia'){try{await navigator.clipboard.writeText(texteRelectureDeg(cur,gOf(b.dataset.g)));toast('Texte copié : collez-le dans Copilot')}catch(err){toast('Copie impossible : '+err.message);return}
     open('https://copilot.microsoft.com/','_blank','noopener');return}
+  if(a==='deg2imm'){await save(true);cur=Object.assign(degVersImm(cur),{id:newVisit().id,created:Date.now(),done:{},sig:''});if(numDos(cur))saveP();
+    visits.push(cur);await save(true);view='dash';toast('Copie en immeuble créée : revérifiez chaque note, les coefficients changent');return go()}
   if(a==='addlgt'){const id=newGid();cur.g.push({id,k:'lc',n:{}});cur.f[id+'_nom']='Logement '+(cur.g.length-1);gId=id;view='lgt';save();return go()}
   if(a==='duplgt'){const src=gOf(b.dataset.g),id=newGid();cur.g.push({...structuredClone(src),id,pcs:undefined,cst:undefined,cstN:undefined,pcN:undefined});
     for(const [k,x] of Object.entries(cur.f))if(k.startsWith(src.id+'_'))cur.f[id+k.slice(src.id.length)]=x;
